@@ -69,6 +69,27 @@ struct AnalyticsView: View {
     @State private var showingProcedureFilter = false
     @State private var selectedProcedureIds: Set<String> = []  // Empty = all procedures
     @State private var selectedCategoryPresets: Set<CategoryPreset> = []  // Multiple presets allowed
+    @State private var selectedAnalyticsCaseType: CaseType? = nil  // nil = all, for cardiology programs
+
+    // Check if this is a cardiology program that should show the case type filter
+    private var shouldShowAnalyticsCaseTypeFilter: Bool {
+        appState.shouldShowCaseTypeToggle
+    }
+
+    // Cardiac imaging categories for noninvasive filtering
+    private var cardiacImagingCategories: [ProcedureCategory] {
+        [.echo, .nuclear, .cardiacCT, .cardiacMRI, .vascularUltrasound]
+    }
+
+    // Available category presets based on case type selection
+    private var availableCategoryPresets: [CategoryPreset] {
+        if selectedAnalyticsCaseType == .noninvasive {
+            // Only show All for noninvasive (specific categories handled separately)
+            return [.all]
+        }
+        // For invasive or all, show standard presets
+        return CategoryPreset.allCases
+    }
 
     private var unreadNotificationCount: Int {
         guard let userId = currentUserId else { return 0 }
@@ -118,6 +139,9 @@ struct AnalyticsView: View {
             // Academic year starts July 1
             let startOfAcademicYear = academicYearStartDate(for: now)
             cases = userCases.filter { $0.createdAt >= startOfAcademicYear }
+        case .pgy:
+            // PGY shows all cases - grouping is done by academic year in chart
+            cases = userCases
         case .allTime:
             cases = userCases
         case .custom:
@@ -132,6 +156,23 @@ struct AnalyticsView: View {
         // CRITICAL PER SPEC: Rejected cases do NOT count toward analytics
         // "Rejected cases do NOT count toward: Procedure totals, Analytics, Reports, Exports"
         cases = cases.filter { $0.attestationStatus != .rejected }
+
+        // Apply case type filter if selected (for cardiology programs)
+        if let caseTypeFilter = selectedAnalyticsCaseType {
+            cases = cases.filter { caseEntry in
+                // Check stored case type first
+                if let storedCaseType = caseEntry.caseType {
+                    return storedCaseType == caseTypeFilter
+                }
+                // For legacy cases without case type, infer from procedures
+                let hasCardiacImagingOnly = caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("ci-") }
+                if caseTypeFilter == .noninvasive {
+                    return hasCardiacImagingOnly
+                } else {
+                    return !hasCardiacImagingOnly
+                }
+            }
+        }
 
         return cases
     }
@@ -242,6 +283,11 @@ struct AnalyticsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // Case type filter for cardiology programs
+                if shouldShowAnalyticsCaseTypeFilter {
+                    analyticsCaseTypeSection
+                }
+
                 rangeSection
                 facilityFilterSection
 
@@ -252,7 +298,12 @@ struct AnalyticsView: View {
                 summarySection
                 chartSection
                 countsSection
-                accessSiteSection
+
+                // Hide access site section for noninvasive mode
+                if selectedAnalyticsCaseType != .noninvasive {
+                    accessSiteSection
+                }
+
                 notesSection
             }
             .listStyle(.insetGrouped)
@@ -275,8 +326,85 @@ struct AnalyticsView: View {
         }
     }
     
+    // MARK: - Case Type Filter Section (Cardiology)
+
+    private var analyticsCaseTypeSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                // All cases button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedAnalyticsCaseType = nil
+                        selectedCategoryPresets.removeAll()
+                    }
+                } label: {
+                    Text("All")
+                        .font(.subheadline)
+                        .fontWeight(selectedAnalyticsCaseType == nil ? .semibold : .regular)
+                        .foregroundColor(selectedAnalyticsCaseType == nil ? .white : ProcedusTheme.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(selectedAnalyticsCaseType == nil ? ProcedusTheme.primary : Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                // Invasive button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedAnalyticsCaseType = .invasive
+                        selectedCategoryPresets.removeAll()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.system(size: 11))
+                        Text("Invasive")
+                            .font(.subheadline)
+                            .fontWeight(selectedAnalyticsCaseType == .invasive ? .semibold : .regular)
+                    }
+                    .foregroundColor(selectedAnalyticsCaseType == .invasive ? .white : ProcedusTheme.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(selectedAnalyticsCaseType == .invasive ? Color.red : Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                // Noninvasive button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedAnalyticsCaseType = .noninvasive
+                        selectedCategoryPresets.removeAll()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 11))
+                        Text("Noninvasive")
+                            .font(.subheadline)
+                            .fontWeight(selectedAnalyticsCaseType == .noninvasive ? .semibold : .regular)
+                    }
+                    .foregroundColor(selectedAnalyticsCaseType == .noninvasive ? .white : ProcedusTheme.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(selectedAnalyticsCaseType == .noninvasive ? Color.blue : Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+            }
+        } header: {
+            Text("Case Type")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
     // MARK: - Range Section
-    
+
     private var rangeSection: some View {
         Section {
             HStack {

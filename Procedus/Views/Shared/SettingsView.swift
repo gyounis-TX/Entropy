@@ -316,7 +316,7 @@ struct SettingsView: View {
             SettingsPillRow(
                 icon: "arrow.triangle.merge",
                 iconColor: Color(red: 0.05, green: 0.35, blue: 0.65),
-                title: "Migrate to Program",
+                title: "Migrate to Institutional",
                 showChevron: true
             ) {
                 showingMigrationWizard = true

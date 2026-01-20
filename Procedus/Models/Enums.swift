@@ -441,6 +441,7 @@ enum ProcedusAnalyticsRange: String, CaseIterable, Identifiable {
     case monthToDate = "Month to Date"
     case yearToDate = "Year to Date"
     case academicYearToDate = "Academic Year"
+    case pgy = "PGY (By Year)"
     case allTime = "All Time"
     case custom = "Custom"
 
@@ -717,7 +718,7 @@ enum FellowshipSpecialty: String, Codable, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .cardiology: return "heart.fill"
-        case .gastroenterology: return "stomach"
+        case .gastroenterology: return "fork.knife"
         case .pulmonaryCriticalCare: return "lungs.fill"
         case .nephrology: return "drop.fill"
         case .painMedicine: return "cross.vial.fill"

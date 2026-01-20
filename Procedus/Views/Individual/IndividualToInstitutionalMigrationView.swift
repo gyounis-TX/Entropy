@@ -100,7 +100,7 @@ struct IndividualToInstitutionalMigrationView: View {
                 navigationButtons
             }
             .background(Color(UIColor.systemBackground))
-            .navigationTitle("Migrate to Program")
+            .navigationTitle("Migrate to Institutional")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

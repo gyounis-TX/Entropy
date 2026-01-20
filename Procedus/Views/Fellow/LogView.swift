@@ -90,6 +90,21 @@ struct LogView: View {
     @State private var caseToEdit: CaseEntry?
     @State private var weeks: [WeekOption] = []
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
+    @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
+
+    @Query private var programs: [Program]
+
+    // Check if this is a cardiology program with invasive/noninvasive distinction
+    private var currentProgram: Program? {
+        programs.first
+    }
+
+    private var shouldShowCaseTypeFilter: Bool {
+        guard let program = currentProgram else { return false }
+        let hasCardiacImaging = program.specialtyPackIds.contains("cardiac-imaging")
+        let hasOtherCardiology = program.specialtyPackIds.contains("interventional-cardiology") || program.specialtyPackIds.contains("electrophysiology")
+        return hasCardiacImaging && hasOtherCardiology
+    }
 
     private var casesForSelectedWeek: [CaseEntry] {
         myCases.filter { $0.weekBucket == selectedWeek }
@@ -99,27 +114,51 @@ struct LogView: View {
         let calendar = Calendar.current
         let now = Date()
 
+        var filteredCases: [CaseEntry]
+
         switch selectedRange {
         case .week:
             let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            return sortedCases.filter { $0.createdAt >= startOfWeek }
+            filteredCases = sortedCases.filter { $0.createdAt >= startOfWeek }
         case .last30Days:
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-            return sortedCases.filter { $0.createdAt >= thirtyDaysAgo }
+            filteredCases = sortedCases.filter { $0.createdAt >= thirtyDaysAgo }
         case .monthToDate:
             let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            return sortedCases.filter { $0.createdAt >= startOfMonth }
+            filteredCases = sortedCases.filter { $0.createdAt >= startOfMonth }
         case .yearToDate:
             let startOfYear = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            return sortedCases.filter { $0.createdAt >= startOfYear }
+            filteredCases = sortedCases.filter { $0.createdAt >= startOfYear }
         case .academicYearToDate:
             let startOfAcademicYear = academicYearStartDate(for: now)
-            return sortedCases.filter { $0.createdAt >= startOfAcademicYear }
+            filteredCases = sortedCases.filter { $0.createdAt >= startOfAcademicYear }
+        case .pgy:
+            // PGY shows all cases - useful for year-over-year comparison
+            filteredCases = sortedCases
         case .allTime:
-            return sortedCases
+            filteredCases = sortedCases
         case .custom:
-            return sortedCases
+            filteredCases = sortedCases
         }
+
+        // Apply case type filter if selected
+        if let caseTypeFilter = selectedCaseTypeFilter {
+            filteredCases = filteredCases.filter { caseEntry in
+                // Check stored case type first
+                if let storedCaseType = caseEntry.caseType {
+                    return storedCaseType == caseTypeFilter
+                }
+                // For legacy cases without case type, infer from procedures
+                let hasCardiacImagingOnly = caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("ci-") }
+                if caseTypeFilter == .noninvasive {
+                    return hasCardiacImagingOnly
+                } else {
+                    return !hasCardiacImagingOnly
+                }
+            }
+        }
+
+        return filteredCases
     }
 
     private func academicYearStartDate(for date: Date) -> Date {
@@ -172,7 +211,12 @@ struct LogView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.orange.opacity(0.1))
                 #endif
-                
+
+                // Case Type Filter (cardiology programs with both imaging and other packs)
+                if shouldShowCaseTypeFilter {
+                    caseTypeFilterSection
+                }
+
                 // Date Range Selector
                 dateRangeSelector
 
@@ -254,6 +298,67 @@ struct LogView: View {
         }
     }
     
+    // MARK: - Case Type Filter Section
+
+    private var caseTypeFilterSection: some View {
+        HStack(spacing: 0) {
+            // All cases button
+            Button {
+                selectedCaseTypeFilter = nil
+            } label: {
+                Text("All")
+                    .font(.subheadline)
+                    .fontWeight(selectedCaseTypeFilter == nil ? .semibold : .regular)
+                    .foregroundColor(selectedCaseTypeFilter == nil ? .white : Color(UIColor.label))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(selectedCaseTypeFilter == nil ? Color(red: 0.05, green: 0.35, blue: 0.65) : Color.clear)
+                    .cornerRadius(8)
+            }
+
+            // Invasive button
+            Button {
+                selectedCaseTypeFilter = .invasive
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.system(size: 12))
+                    Text("Invasive")
+                        .font(.subheadline)
+                        .fontWeight(selectedCaseTypeFilter == .invasive ? .semibold : .regular)
+                }
+                .foregroundColor(selectedCaseTypeFilter == .invasive ? .white : Color(UIColor.label))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(selectedCaseTypeFilter == .invasive ? Color.red : Color.clear)
+                .cornerRadius(8)
+            }
+
+            // Noninvasive button
+            Button {
+                selectedCaseTypeFilter = .noninvasive
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 12))
+                    Text("Noninvasive")
+                        .font(.subheadline)
+                        .fontWeight(selectedCaseTypeFilter == .noninvasive ? .semibold : .regular)
+                }
+                .foregroundColor(selectedCaseTypeFilter == .noninvasive ? .white : Color(UIColor.label))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(selectedCaseTypeFilter == .noninvasive ? Color.blue : Color.clear)
+                .cornerRadius(8)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
     // MARK: - Date Range Selector
 
     private var dateRangeSelector: some View {

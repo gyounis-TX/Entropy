@@ -310,6 +310,12 @@ class AppState {
                 savePersistedState()
             }
         }
+
+        // Dev mode defaults fellow name to a Simpson's character if not set
+        if individualFirstName.isEmpty && individualLastName.isEmpty {
+            individualFirstName = "Bart"
+            individualLastName = "Simpson"
+        }
         #endif
     }
     

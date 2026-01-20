@@ -64,6 +64,9 @@ struct AttendingAnalyticsView: View {
             // Academic year starts July 1
             let startOfAcademicYear = academicYearStartDate(for: now)
             cases = attestedCases.filter { ($0.attestedAt ?? $0.createdAt) >= startOfAcademicYear }
+        case .pgy:
+            // PGY shows all cases - useful for year-over-year comparison
+            cases = attestedCases
         case .allTime:
             cases = attestedCases
         case .custom:

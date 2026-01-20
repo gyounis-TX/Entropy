@@ -444,14 +444,20 @@ struct AddEditCaseView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .onChange(of: selectedCaseType) { _, _ in
+            .onChange(of: selectedCaseType) { _, newValue in
                 // Clear selected procedures when case type changes
                 selectedProcedures.removeAll()
                 selectedDevices.removeAll()
                 procedureSubOptions.removeAll()
                 // Clear operator position when switching to noninvasive
-                if selectedCaseType == .noninvasive {
+                if newValue == .noninvasive {
                     selectedOperatorPosition = nil
+                    // Auto-expand cardiac imaging categories for noninvasive cases
+                    if let cardiacImagingPack = SpecialtyPackCatalog.pack(for: "cardiac-imaging") {
+                        for category in cardiacImagingPack.categories {
+                            procedureSectionsExpanded.insert("\(cardiacImagingPack.id)-\(category.id)")
+                        }
+                    }
                 }
             }
         } header: {
