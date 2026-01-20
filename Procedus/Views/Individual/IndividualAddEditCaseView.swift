@@ -1,0 +1,1154 @@
+// IndividualAddEditCaseView.swift
+// Procedus - Unified
+// Add/Edit case with FACILITY REQUIRED, specialty pack name headers, collapsible packs
+
+import SwiftUI
+import SwiftData
+
+struct IndividualAddEditCaseView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    @Query(filter: #Predicate<Attending> { !$0.isArchived }, sort: \Attending.name)
+    private var attendings: [Attending]
+    
+    @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }, sort: \TrainingFacility.name)
+    private var facilities: [TrainingFacility]
+    
+    @Query(filter: #Predicate<CustomProcedure> { !$0.isArchived })
+    private var customProcedures: [CustomProcedure]
+    
+    @Query(filter: #Predicate<CustomAccessSite> { !$0.isArchived })
+    private var customAccessSites: [CustomAccessSite]
+    
+    @Query(filter: #Predicate<CustomComplication> { !$0.isArchived })
+    private var customComplications: [CustomComplication]
+
+    @Query private var allUsers: [User]
+
+    // Form state
+    @State private var selectedAttendingId: UUID?
+    @State private var selectedFacilityId: UUID?  // REQUIRED - no longer optional
+    @State private var selectedWeekBucket: String
+    @State private var selectedProcedureTagIds: Set<String> = []
+    @State private var selectedAccessSites: Set<String> = []
+    @State private var selectedOutcome: CaseOutcome = .success
+    @State private var selectedComplications: Set<String> = []
+    @State private var selectedDevices: [String: Set<String>] = [:]  // procedureId -> device names
+    @State private var caseNotes: String = ""
+    @State private var showingDeleteConfirmation = false
+
+    // Case type and operator position (cardiology-specific)
+    @State private var selectedCaseType: CaseType = .invasive
+    @State private var selectedOperatorPosition: OperatorPosition? = nil
+    
+    // Collapsible state - default ALL to COLLAPSED (closed)
+    // We track what's EXPANDED (empty = all closed by default)
+    @State private var expandedPackIds: Set<String> = []
+    @State private var expandedCategoryIds: Set<String> = []
+    
+    private let existingCase: CaseEntry?
+    private var isEditing: Bool { existingCase != nil }
+    
+    // Check if all selected procedures are from cardiac imaging pack (noninvasive)
+    private var isCardiacImagingOnly: Bool {
+        guard !selectedProcedureTagIds.isEmpty else { return false }
+        return selectedProcedureTagIds.allSatisfy { tagId in
+            tagId.hasPrefix("ci-")  // All cardiac imaging procedures start with "ci-"
+        }
+    }
+
+    // MARK: - Cardiology-Specific Logic
+
+    /// Whether to show the invasive/noninvasive toggle at top of form
+    private var shouldShowCaseTypeToggle: Bool {
+        appState.shouldShowCaseTypeToggle
+    }
+
+    /// Whether to show the operator position field (cardiology invasive procedures only)
+    private var shouldShowOperatorPosition: Bool {
+        appState.isCardiologyFellowship && selectedCaseType == .invasive
+    }
+
+    /// Whether to use simplified noninvasive form (no attending, access, outcome, complications)
+    private var isSimplifiedNoninvasiveForm: Bool {
+        // If cardiac imaging only mode (no IC or EP enabled) - always simplified
+        if appState.isCardiacImagingOnlyMode {
+            return true
+        }
+        // If toggle is showing and noninvasive selected
+        if shouldShowCaseTypeToggle && selectedCaseType == .noninvasive {
+            return true
+        }
+        return false
+    }
+
+    /// Filter enabled packs based on current case type selection
+    private var filteredEnabledPacks: [SpecialtyPack] {
+        let allEnabled = enabledPacks
+
+        // If cardiac imaging only mode, show only cardiac imaging pack
+        if appState.isCardiacImagingOnlyMode {
+            return allEnabled.filter { $0.id == "cardiac-imaging" }
+        }
+
+        // If toggle is showing, filter based on selection
+        if shouldShowCaseTypeToggle {
+            if selectedCaseType == .noninvasive {
+                // Noninvasive: only cardiac imaging
+                return allEnabled.filter { $0.id == "cardiac-imaging" }
+            } else {
+                // Invasive: all packs EXCEPT cardiac imaging
+                return allEnabled.filter { $0.id != "cardiac-imaging" }
+            }
+        }
+
+        // No toggle - show all enabled packs
+        return allEnabled
+    }
+
+    // FACILITY IS REQUIRED - must have facility AND at least one procedure
+    // Attending is required UNLESS using simplified noninvasive form
+    // In institutional mode, also require identity selection
+    private var canSave: Bool {
+        let hasRequiredFields = selectedFacilityId != nil && !selectedProcedureTagIds.isEmpty
+        // Attending not required for simplified noninvasive form or cardiac imaging only procedures
+        let hasAttendingOrNoninvasive = selectedAttendingId != nil || isSimplifiedNoninvasiveForm || isCardiacImagingOnly
+
+        let baseRequirements = hasRequiredFields && hasAttendingOrNoninvasive
+
+        if appState.isIndividualMode {
+            return baseRequirements
+        } else {
+            // In institutional mode, require identity selection
+            return baseRequirements && hasValidIdentity
+        }
+    }
+
+    // Check if we have a valid identity in institutional mode
+    private var hasValidIdentity: Bool {
+        appState.selectedFellowId != nil || appState.currentUser?.id != nil
+    }
+
+    // Fellow display name for notifications
+    private var fellowDisplayName: String {
+        if appState.isIndividualMode {
+            return appState.individualDisplayName
+        } else {
+            // In institutional mode, get name from selected fellow or current user
+            if let fellowId = appState.selectedFellowId,
+               let fellow = allUsers.first(where: { $0.id == fellowId }) {
+                return fellow.displayName
+            }
+            return appState.currentUser?.displayName ?? appState.individualDisplayName
+        }
+    }
+
+    private var availableWeekBuckets: [String] {
+        generateWeekBuckets(count: 52)
+    }
+    
+    // Complications filtered by enabled specialty packs + custom
+    private var allComplications: [(id: String, title: String, isCustom: Bool)] {
+        var result: [(id: String, title: String, isCustom: Bool)] = []
+        var seenComplications = Set<String>()
+
+        // Only show complications from ENABLED specialty packs
+        for pack in enabledPacks {
+            for complication in pack.defaultComplications {
+                if !seenComplications.contains(complication.rawValue) {
+                    seenComplications.insert(complication.rawValue)
+                    result.append((id: complication.rawValue, title: complication.rawValue, isCustom: false))
+                }
+            }
+        }
+
+        // Add custom complications
+        for custom in customComplications {
+            result.append((id: custom.id.uuidString, title: custom.title, isCustom: true))
+        }
+
+        // Sort alphabetically
+        return result.sorted { $0.title < $1.title }
+    }
+    
+    // Get enabled specialty packs
+    private var enabledPacks: [SpecialtyPack] {
+        appState.enabledSpecialtyPackIds.compactMap { packId in
+            SpecialtyPackCatalog.allPacks.first { $0.id == packId }
+        }
+    }
+    
+    // MARK: - Initializers
+    
+    init(weekBucket: String? = nil) {
+        self.existingCase = nil
+        self._selectedWeekBucket = State(initialValue: weekBucket ?? CaseEntry.makeWeekBucket(for: Date()))
+    }
+    
+    init(existingCase: CaseEntry) {
+        self.existingCase = existingCase
+        self._selectedWeekBucket = State(initialValue: existingCase.weekBucket)
+        self._selectedAttendingId = State(initialValue: existingCase.supervisorId)
+        self._selectedFacilityId = State(initialValue: existingCase.hospitalId)
+        self._selectedProcedureTagIds = State(initialValue: Set(existingCase.procedureTagIds))
+        self._selectedAccessSites = State(initialValue: Set(existingCase.accessSiteIds))
+        self._selectedOutcome = State(initialValue: existingCase.outcome)
+        self._selectedComplications = State(initialValue: Set(existingCase.complicationIds))
+        self._caseNotes = State(initialValue: existingCase.notes ?? "")
+        // Load existing device selections
+        var devices: [String: Set<String>] = [:]
+        for (procedureId, deviceList) in existingCase.procedureDevices {
+            devices[procedureId] = Set(deviceList)
+        }
+        self._selectedDevices = State(initialValue: devices)
+        // Load case type and operator position
+        self._selectedCaseType = State(initialValue: existingCase.caseType ?? .invasive)
+        self._selectedOperatorPosition = State(initialValue: existingCase.operatorPosition)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                // Show warning if no identity selected in institutional mode
+                if !appState.isIndividualMode && !hasValidIdentity {
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Identity Not Selected")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                Text("Go to Settings > Identity to select your fellow profile before adding cases.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                // Case type toggle (cardiology with both imaging and other packs)
+                if shouldShowCaseTypeToggle {
+                    caseTypeToggleSection
+                }
+
+                // Attending section (hidden for simplified noninvasive form)
+                if !isSimplifiedNoninvasiveForm {
+                    attendingSection
+                }
+
+                facilitySection      // REQUIRED - always shown
+                timeframeSection     // Always shown
+
+                // Access sites section (hidden for simplified noninvasive form)
+                if !isSimplifiedNoninvasiveForm {
+                    accessSitesSection
+                }
+
+                // Operator position section (cardiology invasive only)
+                if shouldShowOperatorPosition {
+                    operatorPositionSection
+                }
+
+                proceduresSection    // Uses filteredEnabledPacks based on case type
+
+                // Outcome and complications (hidden for simplified noninvasive form)
+                if !isSimplifiedNoninvasiveForm {
+                    outcomeSection
+                    complicationsSection
+                }
+
+                notesSection
+
+                if isEditing {
+                    deleteSection
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color(UIColor.systemGroupedBackground))
+            .navigationTitle(isEditing ? "Edit Case" : "New Case")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveCase() }
+                        .fontWeight(.semibold)
+                        .foregroundStyle(canSave ? ProcedusTheme.primary : ProcedusTheme.textTertiary)
+                        .disabled(!canSave)
+                }
+            }
+            .alert("Delete Case", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) { deleteCase() }
+            } message: {
+                Text("Are you sure you want to delete this case? This action cannot be undone.")
+            }
+            .onAppear {
+                // Pre-populate default facility for new cases
+                if !isEditing && selectedFacilityId == nil {
+                    if let defaultFacility = appState.defaultFacilityId {
+                        selectedFacilityId = defaultFacility
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Attending Section
+    
+    private var attendingSection: some View {
+        Section {
+            HStack {
+                Text("Supervising Attending")
+                    .font(.clinicalBody)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+                
+                Spacer()
+                
+                if attendings.isEmpty {
+                    Text("Add in Settings")
+                        .font(.clinicalCaption)
+                        .foregroundStyle(ProcedusTheme.textTertiary)
+                } else {
+                    Picker("Attending", selection: $selectedAttendingId) {
+                        Text("Select...").tag(nil as UUID?)
+                        ForEach(attendings) { attending in
+                            Text(attending.name).tag(attending.id as UUID?)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .tint(ProcedusTheme.primary)
+                }
+            }
+        } header: {
+            HStack(spacing: 2) {
+                Text("Attending")
+                Text("*").foregroundStyle(ProcedusTheme.error)
+            }
+            .font(.clinicalFootnote)
+            .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    // MARK: - Facility Section (REQUIRED)
+    
+    private var facilitySection: some View {
+        Section {
+            HStack {
+                Text("Training Facility")
+                    .font(.clinicalBody)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+                
+                Spacer()
+                
+                if facilities.isEmpty {
+                    Text("Add in Settings")
+                        .font(.clinicalCaption)
+                        .foregroundStyle(ProcedusTheme.textTertiary)
+                } else {
+                    Picker("Facility", selection: $selectedFacilityId) {
+                        // NO "None" option - facility is REQUIRED
+                        Text("Select...").tag(nil as UUID?)
+                        ForEach(facilities) { facility in
+                            Text(facility.name).tag(facility.id as UUID?)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .tint(ProcedusTheme.primary)
+                }
+            }
+            
+            // Warning when facility not selected
+            if selectedFacilityId == nil && !facilities.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.warning)
+                    Text("Facility is required")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.warning)
+                }
+            }
+        } header: {
+            HStack(spacing: 2) {
+                Text("Facility")
+                Text("*").foregroundStyle(ProcedusTheme.error)
+            }
+            .font(.clinicalFootnote)
+            .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    // MARK: - Timeframe Section
+    
+    private var timeframeSection: some View {
+        Section {
+            HStack {
+                Text("Procedure Timeframe")
+                    .font(.clinicalBody)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+                
+                Spacer()
+                
+                Picker("Timeframe", selection: $selectedWeekBucket) {
+                    ForEach(availableWeekBuckets, id: \.self) { bucket in
+                        Text(bucket.toWeekTimeframeLabel()).tag(bucket)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .tint(ProcedusTheme.primary)
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Case Type Toggle Section (Cardiology with both imaging and other packs)
+
+    private var caseTypeToggleSection: some View {
+        Section {
+            Picker("Case Type", selection: $selectedCaseType) {
+                ForEach(CaseType.allCases) { caseType in
+                    Text(caseType.rawValue).tag(caseType)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedCaseType) { _, _ in
+                // Clear selected procedures when case type changes
+                selectedProcedureTagIds.removeAll()
+                selectedDevices.removeAll()
+                // Clear operator position when switching to noninvasive
+                if selectedCaseType == .noninvasive {
+                    selectedOperatorPosition = nil
+                }
+            }
+        } header: {
+            Text("Case Type")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        } footer: {
+            if selectedCaseType == .invasive {
+                Text("Invasive procedures requiring sterile access (cath lab, EP lab)")
+            } else {
+                Text("Noninvasive imaging studies (echo, CT, MRI, nuclear)")
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Operator Position Section (Cardiology Invasive Only)
+
+    private var operatorPositionSection: some View {
+        Section {
+            HStack(spacing: 16) {
+                ForEach(OperatorPosition.allCases) { position in
+                    Button {
+                        selectedOperatorPosition = position
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: selectedOperatorPosition == position ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedOperatorPosition == position ? ProcedusTheme.primary : ProcedusTheme.textTertiary)
+                                .font(.title3)
+                            Text(position.rawValue)
+                                .font(.clinicalBody)
+                                .foregroundStyle(ProcedusTheme.textPrimary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+            }
+        } header: {
+            Text("Operator Position")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        } footer: {
+            Text("Your role during the procedure")
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Access Sites Section
+
+    private var accessSitesSection: some View {
+        Section {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), alignment: .leading),
+                GridItem(.flexible(), alignment: .leading)
+            ], spacing: 12) {
+                accessSiteCheckbox(id: "Radial", title: "Radial")
+                accessSiteCheckbox(id: "Femoral", title: "Femoral")
+                accessSiteCheckbox(id: "Brachial", title: "Brachial")
+                accessSiteCheckbox(id: "Pedal", title: "Pedal")
+                accessSiteCheckbox(id: "Jugular", title: "Jugular")
+                accessSiteCheckbox(id: "Antegrade", title: "Antegrade")
+                
+                ForEach(customAccessSites) { site in
+                    customAccessSiteCheckbox(site: site)
+                }
+            }
+        } header: {
+            Text("Access Sites")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    private func accessSiteCheckbox(id: String, title: String) -> some View {
+        Button {
+            toggleAccessSite(id)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: selectedAccessSites.contains(id) ? "checkmark.square.fill" : "square")
+                    .font(.title3)
+                    .foregroundStyle(selectedAccessSites.contains(id) ? ProcedusTheme.info : Color(UIColor.tertiaryLabel))
+                Text(title)
+                    .font(.clinicalBody)
+                    .foregroundStyle(Color(UIColor.label))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func customAccessSiteCheckbox(site: CustomAccessSite) -> some View {
+        let isSelected = selectedAccessSites.contains(site.id.uuidString)
+        return Button {
+            toggleAccessSite(site.id.uuidString)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? ProcedusTheme.accent : Color(UIColor.tertiaryLabel))
+                Text(site.title)
+                    .font(.clinicalBody)
+                    .foregroundStyle(Color(UIColor.label))
+                Text("•")
+                    .font(.caption2)
+                    .foregroundStyle(ProcedusTheme.accent)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func toggleAccessSite(_ id: String) {
+        if selectedAccessSites.contains(id) {
+            selectedAccessSites.remove(id)
+        } else {
+            selectedAccessSites.insert(id)
+        }
+    }
+    
+    // MARK: - Procedures Section (SPECIALTY PACK NAME as header, COLLAPSIBLE packs)
+    
+    private var proceduresSection: some View {
+        Section {
+            if filteredEnabledPacks.isEmpty {
+                if shouldShowCaseTypeToggle && selectedCaseType == .noninvasive && !enabledPacks.contains(where: { $0.id == "cardiac-imaging" }) {
+                    Text("Cardiac Imaging pack not enabled. Go to Settings to add it.")
+                        .font(.clinicalBody)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                        .italic()
+                } else {
+                    Text("No specialty packs enabled. Go to Settings to add one.")
+                        .font(.clinicalBody)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                        .italic()
+                }
+            } else {
+                // Each specialty pack is COLLAPSIBLE with pack name as header
+                // Filtered based on case type (invasive excludes cardiac imaging, noninvasive only cardiac imaging)
+                ForEach(filteredEnabledPacks) { pack in
+                    collapsiblePackSection(for: pack)
+                }
+            }
+            
+            // Custom procedures (if any)
+            if !customProcedures.isEmpty {
+                customProceduresSection
+            }
+        } header: {
+            HStack(spacing: 2) {
+                Text("Procedures")
+                Text("*").foregroundStyle(ProcedusTheme.error)
+            }
+            .font(.clinicalFootnote)
+            .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    // MARK: - Collapsible Specialty Pack Section
+    
+    @ViewBuilder
+    private func collapsiblePackSection(for pack: SpecialtyPack) -> some View {
+        // Default to COLLAPSED - only expanded if in expandedPackIds
+        let isExpanded = expandedPackIds.contains(pack.id)
+        let selectedCountForPack = countSelectedInPack(pack)
+
+        // PACK HEADER - Tappable to expand/collapse entire pack
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if isExpanded {
+                    expandedPackIds.remove(pack.id)
+                } else {
+                    expandedPackIds.insert(pack.id)
+                }
+            }
+        } label: {
+            HStack {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                    .frame(width: 16)
+
+                // SPECIALTY PACK NAME as the header
+                Text(pack.name)
+                    .font(.clinicalBody)
+                    .fontWeight(.bold)
+                    .foregroundStyle(ProcedusTheme.primary)
+
+                Spacer()
+
+                if selectedCountForPack > 0 {
+                    Text("\(selectedCountForPack)")
+                        .font(.clinicalFootnote)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(ProcedusTheme.primary)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+
+        // PACK CONTENTS - Categories within the pack (only if expanded)
+        if isExpanded {
+            ForEach(pack.categories) { categoryData in
+                collapsibleCategorySection(for: categoryData, in: pack)
+            }
+            .padding(.leading, 12)
+        }
+    }
+    
+    // MARK: - Collapsible Category Section (within a pack)
+    
+    @ViewBuilder
+    private func collapsibleCategorySection(for categoryData: PackCategory, in pack: SpecialtyPack) -> some View {
+        let categoryKey = "\(pack.id)-\(categoryData.category.rawValue)"
+        // Default to COLLAPSED - only expanded if in expandedCategoryIds
+        let isExpanded = expandedCategoryIds.contains(categoryKey)
+        let selectedCountForCategory = selectedCount(for: categoryData.category)
+
+        // Category header
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if isExpanded {
+                    expandedCategoryIds.remove(categoryKey)
+                } else {
+                    expandedCategoryIds.insert(categoryKey)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(ProcedusTheme.textTertiary)
+                    .frame(width: 12)
+
+                Text(categoryData.category.rawValue)
+                    .font(.clinicalBody)
+                    .fontWeight(.medium)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+
+                CategoryBubble(category: categoryData.category, size: 18)
+
+                Spacer()
+
+                if selectedCountForCategory > 0 {
+                    Text("\(selectedCountForCategory)")
+                        .font(.clinicalFootnote)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(categoryData.category.color)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+
+        // Procedures within category (only if expanded)
+        if isExpanded {
+            ForEach(categoryData.procedures) { procedure in
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(isOn: procedureBinding(for: procedure.id)) {
+                        Text(procedure.title)
+                            .font(.clinicalBody)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+                    }
+                    .toggleStyle(ClinicalCheckboxToggleStyle())
+
+                    // Show device selection if this is a PE/DVT procedure AND it's selected
+                    if ThrombectomyDevice.isEligible(procedureId: procedure.id) && selectedProcedureTagIds.contains(procedure.id) {
+                        deviceSelectionView(for: procedure.id)
+                    }
+                }
+                .padding(.leading, 24)
+            }
+        }
+    }
+
+    // MARK: - Device Selection View (for PE/DVT procedures)
+
+    @ViewBuilder
+    private func deviceSelectionView(for procedureId: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Devices Used:")
+                .font(.clinicalCaption)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+                .padding(.leading, 24)
+
+            LazyVGrid(columns: [
+                GridItem(.flexible(), alignment: .leading),
+                GridItem(.flexible(), alignment: .leading)
+            ], spacing: 8) {
+                ForEach(ThrombectomyDevice.allCases) { device in
+                    deviceCheckbox(device: device, procedureId: procedureId)
+                }
+            }
+            .padding(.leading, 24)
+        }
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .background(Color(UIColor.tertiarySystemGroupedBackground).opacity(0.5))
+        .cornerRadius(8)
+        .padding(.leading, 4)
+    }
+
+    private func deviceCheckbox(device: ThrombectomyDevice, procedureId: String) -> some View {
+        let isSelected = selectedDevices[procedureId]?.contains(device.rawValue) ?? false
+        return Button {
+            toggleDevice(device: device, for: procedureId)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isSelected ? ProcedusTheme.info : Color(UIColor.tertiaryLabel))
+                Text(device.rawValue)
+                    .font(.clinicalCaption)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleDevice(device: ThrombectomyDevice, for procedureId: String) {
+        var devices = selectedDevices[procedureId] ?? Set<String>()
+        if devices.contains(device.rawValue) {
+            devices.remove(device.rawValue)
+        } else {
+            devices.insert(device.rawValue)
+        }
+        selectedDevices[procedureId] = devices
+    }
+    
+    // MARK: - Custom Procedures Section
+    
+    private var customProceduresSection: some View {
+        let customCategoryKey = "custom-procedures"
+        // Default to COLLAPSED - only expanded if in expandedCategoryIds
+        let isExpanded = expandedCategoryIds.contains(customCategoryKey)
+        let customSelectedCount = customProcedures.filter { selectedProcedureTagIds.contains($0.tagId) }.count
+
+        return Group {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedCategoryIds.remove(customCategoryKey)
+                    } else {
+                        expandedCategoryIds.insert(customCategoryKey)
+                    }
+                }
+            } label: {
+                HStack {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                        .frame(width: 16)
+
+                    Text("Custom Procedures")
+                        .font(.clinicalBody)
+                        .fontWeight(.medium)
+                        .foregroundStyle(ProcedusTheme.accent)
+
+                    Spacer()
+
+                    if customSelectedCount > 0 {
+                        Text("\(customSelectedCount)")
+                            .font(.clinicalFootnote)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(ProcedusTheme.accent)
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+
+            // Only show if expanded
+            if isExpanded {
+                ForEach(customProcedures) { procedure in
+                    Toggle(isOn: procedureBinding(for: procedure.tagId)) {
+                        HStack {
+                            Text(procedure.title)
+                                .font(.clinicalBody)
+                                .foregroundStyle(ProcedusTheme.textPrimary)
+                            CategoryBubble(category: procedure.category, size: 16)
+                        }
+                    }
+                    .toggleStyle(ClinicalCheckboxToggleStyle())
+                    .padding(.leading, 24)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func countSelectedInPack(_ pack: SpecialtyPack) -> Int {
+        var count = 0
+        for categoryData in pack.categories {
+            for procedure in categoryData.procedures {
+                if selectedProcedureTagIds.contains(procedure.id) {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+    
+    private func selectedCount(for category: ProcedureCategory) -> Int {
+        var count = 0
+        for tagId in selectedProcedureTagIds {
+            if let foundCategory = SpecialtyPackCatalog.findCategory(for: tagId), foundCategory == category {
+                count += 1
+            }
+        }
+        return count
+    }
+    
+    private func procedureBinding(for tagId: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedProcedureTagIds.contains(tagId) },
+            set: { isSelected in
+                if isSelected { selectedProcedureTagIds.insert(tagId) }
+                else { selectedProcedureTagIds.remove(tagId) }
+            }
+        )
+    }
+    
+    // MARK: - Outcome Section
+    
+    private var outcomeSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                OutcomeButton(outcome: .success, isSelected: selectedOutcome == .success) {
+                    selectedOutcome = .success
+                }
+                OutcomeButton(outcome: .complication, isSelected: selectedOutcome == .complication) {
+                    selectedOutcome = .complication
+                }
+                OutcomeButton(outcome: .death, isSelected: selectedOutcome == .death) {
+                    selectedOutcome = .death
+                }
+            }
+            .padding(.vertical, 4)
+        } header: {
+            Text("Outcome")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    // MARK: - Complications Section
+    
+    private var complicationsSection: some View {
+        Section {
+            DisclosureGroup {
+                ForEach(allComplications, id: \.id) { complication in
+                    Toggle(isOn: complicationBinding(for: complication.id)) {
+                        HStack {
+                            Text(complication.title)
+                                .font(.clinicalBody)
+                                .foregroundStyle(ProcedusTheme.textPrimary)
+                            if complication.isCustom {
+                                Text("•")
+                                    .font(.caption2)
+                                    .foregroundStyle(ProcedusTheme.accent)
+                            }
+                        }
+                    }
+                    .toggleStyle(ClinicalCheckboxToggleStyle())
+                }
+            } label: {
+                HStack {
+                    Text("Complications")
+                        .font(.clinicalBody)
+                        .fontWeight(.medium)
+                        .foregroundStyle(ProcedusTheme.textPrimary)
+                    
+                    Spacer()
+                    
+                    if !selectedComplications.isEmpty {
+                        Text("\(selectedComplications.count)")
+                            .font(.clinicalFootnote)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(ProcedusTheme.warning)
+                            .clipShape(Capsule())
+                    } else {
+                        Text("None")
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textTertiary)
+                    }
+                }
+            }
+        } header: {
+            Text("Complications")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    private func complicationBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedComplications.contains(id) },
+            set: { isSelected in
+                if isSelected { selectedComplications.insert(id) }
+                else { selectedComplications.remove(id) }
+            }
+        )
+    }
+
+    // MARK: - Notes Section
+
+    private var notesSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Do not include any Protected Health Information (PHI)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .padding(.bottom, 4)
+
+                TextEditor(text: $caseNotes)
+                    .frame(minHeight: 80)
+                    .font(.clinicalBody)
+                    .scrollContentBackground(.hidden)
+                    .background(Color(UIColor.tertiarySystemGroupedBackground))
+                    .cornerRadius(8)
+            }
+        } header: {
+            Text("Notes (Optional)")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        } footer: {
+            Text("Add personal notes about techniques, lessons learned, or case details. No patient identifiers.")
+                .font(.caption2)
+                .foregroundStyle(ProcedusTheme.textTertiary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Delete Section
+    
+    private var deleteSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showingDeleteConfirmation = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Image(systemName: "trash")
+                    Text("Delete Case")
+                        .font(.clinicalBody)
+                        .fontWeight(.medium)
+                    Spacer()
+                }
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+    
+    // MARK: - Actions
+    
+    private func saveCase() {
+        // FACILITY IS REQUIRED
+        guard let facilityId = selectedFacilityId else { return }
+
+        // Attending is optional for cardiac imaging (noninvasive) procedures
+        let attendingId = selectedAttendingId
+
+        // In individual mode, use a stored UUID or generate one
+        // In institutional mode, use the selected fellow ID (from identity picker)
+        // Otherwise use the current user ID or fallback to individual mode UUID
+        let userId: UUID
+        if !appState.isIndividualMode {
+            // Institutional mode - use selected fellow identity
+            if let selectedFellowId = appState.selectedFellowId {
+                userId = selectedFellowId
+            } else if let currentUserId = appState.currentUser?.id {
+                userId = currentUserId
+            } else {
+                // Fallback - shouldn't happen in institutional mode
+                userId = getOrCreateIndividualUserId()
+            }
+        } else {
+            // Individual mode
+            userId = getOrCreateIndividualUserId()
+        }
+
+        // Convert device selections to storage format
+        var deviceStorage: [String: [String]] = [:]
+        for (procedureId, devices) in selectedDevices {
+            if !devices.isEmpty && selectedProcedureTagIds.contains(procedureId) {
+                deviceStorage[procedureId] = Array(devices)
+            }
+        }
+
+        if let existingCase = existingCase {
+            existingCase.supervisorId = attendingId
+            existingCase.hospitalId = facilityId
+            existingCase.weekBucket = selectedWeekBucket
+            existingCase.procedureTagIds = Array(selectedProcedureTagIds)
+            existingCase.procedureDevices = deviceStorage
+            existingCase.accessSiteIds = Array(selectedAccessSites)
+            existingCase.outcomeRaw = selectedOutcome.rawValue
+            existingCase.complicationIds = Array(selectedComplications)
+            existingCase.notes = caseNotes.isEmpty ? nil : caseNotes
+            existingCase.updatedAt = Date()
+
+            // Save case type and operator position (cardiology-specific)
+            existingCase.caseType = shouldShowCaseTypeToggle ? selectedCaseType : nil
+            existingCase.operatorPosition = shouldShowOperatorPosition ? selectedOperatorPosition : nil
+
+            // Update attestation status if changed to/from cardiac imaging only or noninvasive
+            if isCardiacImagingOnly || isSimplifiedNoninvasiveForm {
+                existingCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
+            }
+        } else {
+            let newCase = CaseEntry(
+                fellowId: appState.isIndividualMode ? nil : userId,
+                ownerId: userId,
+                attendingId: attendingId,
+                weekBucket: selectedWeekBucket,
+                facilityId: facilityId
+            )
+            newCase.procedureTagIds = Array(selectedProcedureTagIds)
+            newCase.procedureDevices = deviceStorage
+            newCase.accessSiteIds = Array(selectedAccessSites)
+            newCase.outcomeRaw = selectedOutcome.rawValue
+            newCase.complicationIds = Array(selectedComplications)
+            newCase.notes = caseNotes.isEmpty ? nil : caseNotes
+
+            // Save case type and operator position (cardiology-specific)
+            newCase.caseType = shouldShowCaseTypeToggle ? selectedCaseType : nil
+            newCase.operatorPosition = shouldShowOperatorPosition ? selectedOperatorPosition : nil
+
+            // Set attestation status based on mode and procedure type
+            if appState.isIndividualMode || isCardiacImagingOnly || isSimplifiedNoninvasiveForm {
+                // Individual mode or cardiac imaging = no attestation required
+                newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
+            } else {
+                newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+
+                // Notify attending about new attestation request
+                if let attendingId = attendingId {
+                    NotificationManager.shared.notifyAttestationRequested(
+                        toAttendingId: attendingId,
+                        fellowName: fellowDisplayName,
+                        caseId: newCase.id,
+                        procedureCount: selectedProcedureTagIds.count,
+                        programId: nil
+                    )
+                }
+            }
+
+            modelContext.insert(newCase)
+        }
+
+        try? modelContext.save()
+        dismiss()
+    }
+    
+    /// Get or create a persistent user ID for individual mode
+    private func getOrCreateIndividualUserId() -> UUID {
+        let key = "individualUserUUID"
+        if let uuidString = UserDefaults.standard.string(forKey: key),
+           let uuid = UUID(uuidString: uuidString) {
+            return uuid
+        }
+        let newUUID = UUID()
+        UserDefaults.standard.set(newUUID.uuidString, forKey: key)
+        return newUUID
+    }
+    
+    private func deleteCase() {
+        if let existingCase = existingCase {
+            modelContext.delete(existingCase)
+            try? modelContext.save()
+        }
+        dismiss()
+    }
+}
+
+// MARK: - Helper Function
+
+func generateWeekBuckets(count: Int) -> [String] {
+    var buckets: [String] = []
+    let calendar = Calendar(identifier: .iso8601)
+    var currentDate = Date()
+    
+    for _ in 0..<count {
+        let bucket = CaseEntry.makeWeekBucket(for: currentDate)
+        buckets.append(bucket)
+        currentDate = calendar.date(byAdding: .weekOfYear, value: -1, to: currentDate) ?? currentDate
+    }
+    
+    return buckets
+}
+
+// MARK: - Preview
+
+#Preview {
+    IndividualAddEditCaseView()
+        .environment(AppState())
+        .modelContainer(for: [CaseEntry.self, Attending.self, TrainingFacility.self, CustomProcedure.self, CustomAccessSite.self, CustomComplication.self], inMemory: true)
+}

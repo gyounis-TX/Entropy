@@ -1,32 +1,63 @@
-//
-//  ProcedusApp.swift
-//  Procedus
-//
-//  Created by George Younis on 1/17/26.
-//
+// ProcedusApp.swift
+// Procedus - Unified
+// Main app entry point with SwiftData configuration
 
 import SwiftUI
 import SwiftData
 
 @main
 struct ProcedusApp: App {
-    var sharedModelContainer: ModelContainer = {
+    @State private var appState = AppState()
+    @State private var appLockService = AppLockService()
+    
+    let modelContainer: ModelContainer
+    
+    init() {
         let schema = Schema([
-            Item.self,
+            User.self,
+            CaseEntry.self,
+            Program.self,
+            Attending.self,
+            TrainingFacility.self,
+            CustomProcedure.self,
+            CustomCategory.self,
+            CustomAccessSite.self,
+            CustomComplication.self,
+            Attestation.self,
+            EvaluationField.self,
+            ProgramEvaluationSettings.self,
+            Notification.self,
+            AuditEntry.self,
+            FellowProcedureGroup.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
+        
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false
+        )
+        
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            modelContainer = try ModelContainer(
+                for: schema,
+                configurations: [modelConfiguration]
+            )
+            
+            let context = modelContainer.mainContext
+            AuditService.shared.configure(with: context)
+            NotificationManager.shared.configure(with: context)
+            UserDeletionService.shared.configure(with: context)
+            
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Failed to create ModelContainer: \(error)")
         }
-    }()
-
+    }
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environment(appState)
+                .environment(appLockService)
+                .modelContainer(modelContainer)
         }
-        .modelContainer(sharedModelContainer)
     }
 }
