@@ -14,6 +14,7 @@ struct SettingsView: View {
     @Query private var notifications: [Procedus.Notification]
     @Query private var allUsers: [User]
     @Query private var procedureGroups: [FellowProcedureGroup]
+    @Query private var customProcedureDetails: [CustomProcedureDetail]
 
     @AppStorage("isPasscodeSet") private var isPasscodeSet = false
     @AppStorage("isBiometricsEnabled") private var isBiometricsEnabled = false
@@ -90,6 +91,10 @@ struct SettingsView: View {
 
     private var activeCustomComplicationsCount: Int {
         customComplications.filter { !$0.isArchived }.count
+    }
+
+    private var activeCustomProcedureDetailsCount: Int {
+        customProcedureDetails.filter { !$0.isArchived }.count
     }
 
     #if DEBUG
@@ -304,6 +309,7 @@ struct SettingsView: View {
                 icon: "slider.horizontal.3",
                 iconColor: .cyan,
                 title: "Procedure Details",
+                badge: activeCustomProcedureDetailsCount > 0 ? .count(activeCustomProcedureDetailsCount) : nil,
                 showChevron: true
             ) {
                 showingCustomProcedureDetails = true
@@ -648,22 +654,24 @@ struct SettingsView: View {
 
     private var institutionalModeContent: some View {
         VStack(spacing: 12) {
-            SectionHeader(title: "PROFILE")
-
-            // Show role-based profile - NOW TAPPABLE
-            SettingsPillRowWithRole(
-                icon: roleIcon,
-                iconColor: roleColor,
-                title: appState.currentUser?.displayName ?? "User",
-                roleBadge: appState.userRole.displayName,
-                roleBadgeColor: roleColor,
-                showChevron: true
-            ) {
-                showingInstitutionalProfileEdit = true
-            }
-
-            // Identity Selection for Fellows
+            // FELLOW-SPECIFIC SETTINGS (mirroring individual mode)
             if appState.userRole == .fellow {
+                // FELLOW PROFILE Section
+                SectionHeader(title: "FELLOW PROFILE")
+
+                // Profile Row with role badge
+                SettingsPillRowWithRole(
+                    icon: "person.fill",
+                    iconColor: .blue,
+                    title: appState.currentUser?.displayName ?? "User",
+                    roleBadge: "Fellow",
+                    roleBadgeColor: .blue,
+                    showChevron: true
+                ) {
+                    showingInstitutionalProfileEdit = true
+                }
+
+                // Identity Row
                 SettingsPillRow(
                     icon: "person.crop.circle.badge.checkmark",
                     iconColor: .blue,
@@ -674,68 +682,126 @@ struct SettingsView: View {
                     showingFellowIdentityPicker = true
                 }
 
-                // Default Facility for Fellows
+                // Security Row
+                SettingsPillRow(
+                    icon: "lock.fill",
+                    iconColor: Color(red: 0.3, green: 0.5, blue: 0.7),
+                    title: "Security",
+                    badge: isPasscodeSet ? .checkmark : nil,
+                    showChevron: true
+                ) {
+                    showingSecuritySettings = true
+                }
+
+                // Cloud Backup Row
+                SettingsPillRow(
+                    icon: "cloud.fill",
+                    iconColor: .blue,
+                    title: "Cloud Backup",
+                    badge: cloudBackupEnabled ? .checkmark : nil,
+                    showChevron: true
+                ) {
+                    showingCloudBackup = true
+                }
+
+                // TRAINING PROGRAM Section
+                SectionHeader(title: "TRAINING PROGRAM")
+
+                // Program Specialty Row (read-only for fellows, set by admin)
+                SettingsPillRow(
+                    icon: "heart.text.square.fill",
+                    iconColor: ProcedusTheme.accent,
+                    title: "Program Specialty",
+                    subtitle: "Set by Program Admin",
+                    showChevron: false
+                ) {
+                    // Read-only - no action
+                }
+
+                // Specialty Packs Row
+                SettingsPillRow(
+                    icon: "square.stack.3d.up.fill",
+                    iconColor: .purple,
+                    title: "Specialty Packs",
+                    badge: enabledPacksCount > 0 ? .count(enabledPacksCount) : nil,
+                    showChevron: true
+                ) {
+                    showingSpecialtyPacks = true
+                }
+
+                // Attendings Row
+                SettingsPillRow(
+                    icon: "stethoscope",
+                    iconColor: .green,
+                    title: "Attendings",
+                    badge: activeAttendingsCount > 0 ? .count(activeAttendingsCount) : nil,
+                    showChevron: true
+                ) {
+                    showingAttendingsList = true
+                }
+
+                // Hospitals Row
                 SettingsPillRow(
                     icon: "building.2.fill",
                     iconColor: Color(red: 0.2, green: 0.4, blue: 0.8),
-                    title: "Default Facility",
-                    subtitle: defaultFacilityName,
+                    title: "Hospitals",
+                    badge: activeFacilitiesCount > 0 ? .count(activeFacilitiesCount) : nil,
                     showChevron: true
                 ) {
-                    showingDefaultFacilityPicker = true
+                    showingFacilitiesList = true
                 }
-            }
 
-            // Identity Selection for Attendings
-            if appState.userRole == .attending {
-                SettingsPillRow(
-                    icon: "person.crop.circle.badge.checkmark",
-                    iconColor: .green,
-                    title: "Identity",
-                    subtitle: selectedAttendingName,
-                    showChevron: true
-                ) {
-                    showingAttendingIdentityPicker = true
-                }
-            }
+                // PROCEDURES Section
+                SectionHeader(title: "PROCEDURES")
 
-            // Security
-            SettingsPillRow(
-                icon: "lock.fill",
-                iconColor: Color(red: 0.3, green: 0.5, blue: 0.7),
-                title: "Security",
-                badge: isPasscodeSet ? .checkmark : nil,
-                showChevron: true
-            ) {
-                showingSecuritySettings = true
-            }
-
-            // Custom Procedures for Fellows in Institutional Mode
-            if appState.userRole == .fellow {
-                SectionHeader(title: "CUSTOMIZATION")
-
+                // Custom Procedures Row
                 SettingsPillRow(
                     icon: "list.clipboard.fill",
                     iconColor: Color(red: 0.9, green: 0.4, blue: 0.5),
-                    title: "My Custom Procedures",
+                    title: "Custom Procedures",
                     badge: activeCustomProceduresCount > 0 ? .count(activeCustomProceduresCount) : nil,
                     showChevron: true
                 ) {
                     showingCustomProcedures = true
                 }
 
+                // Custom Access Sites Row
                 SettingsPillRow(
-                    icon: "folder.fill",
-                    iconColor: .teal,
-                    title: "Procedure Groups",
-                    badge: procedureGroupsCount > 0 ? .count(procedureGroupsCount) : nil,
+                    icon: "arrow.triangle.branch",
+                    iconColor: .gray,
+                    title: "Custom Access Sites",
+                    badge: activeCustomAccessSitesCount > 0 ? .count(activeCustomAccessSitesCount) : nil,
                     showChevron: true
                 ) {
-                    showingProcedureGroups = true
+                    showingCustomAccessSites = true
                 }
 
-                SectionHeader(title: "IMPORT / EXPORT")
+                // Custom Complications Row
+                SettingsPillRow(
+                    icon: "exclamationmark.triangle.fill",
+                    iconColor: .yellow,
+                    title: "Custom Complications",
+                    badge: activeCustomComplicationsCount > 0 ? .count(activeCustomComplicationsCount) : nil,
+                    showChevron: true
+                ) {
+                    showingCustomComplications = true
+                }
 
+                // Procedure Details Row
+                SettingsPillRow(
+                    icon: "slider.horizontal.3",
+                    iconColor: .cyan,
+                    title: "Procedure Details",
+                    badge: activeCustomProcedureDetailsCount > 0 ? .count(activeCustomProcedureDetailsCount) : nil,
+                    showChevron: true
+                ) {
+                    showingCustomProcedureDetails = true
+                }
+
+                // IMPORT/EXPORT Section
+                SectionHeader(title: "IMPORT/EXPORT")
+
+                // Import Row
                 SettingsPillRow(
                     icon: "square.and.arrow.down.fill",
                     iconColor: .orange,
@@ -745,6 +811,7 @@ struct SettingsView: View {
                     showingImportLog = true
                 }
 
+                // Export Row
                 SettingsPillRow(
                     icon: "square.and.arrow.up.fill",
                     iconColor: .green,
@@ -753,10 +820,57 @@ struct SettingsView: View {
                 ) {
                     showingExportOptions = true
                 }
-            }
 
-            // Push Notifications Section (for admin/attending)
-            if appState.userRole == .admin || appState.userRole == .attending {
+                // About Row
+                SettingsPillRow(
+                    icon: "info.circle.fill",
+                    iconColor: .blue,
+                    title: "About",
+                    showChevron: true
+                ) {
+                    showingAbout = true
+                }
+            } else {
+                // ADMIN/ATTENDING SETTINGS (original structure)
+                SectionHeader(title: "PROFILE")
+
+                // Show role-based profile
+                SettingsPillRowWithRole(
+                    icon: roleIcon,
+                    iconColor: roleColor,
+                    title: appState.currentUser?.displayName ?? "User",
+                    roleBadge: appState.userRole.displayName,
+                    roleBadgeColor: roleColor,
+                    showChevron: true
+                ) {
+                    showingInstitutionalProfileEdit = true
+                }
+
+                // Identity Selection for Attendings
+                if appState.userRole == .attending {
+                    SettingsPillRow(
+                        icon: "person.crop.circle.badge.checkmark",
+                        iconColor: .green,
+                        title: "Identity",
+                        subtitle: selectedAttendingName,
+                        showChevron: true
+                    ) {
+                        showingAttendingIdentityPicker = true
+                    }
+                }
+
+                // Security
+                SettingsPillRow(
+                    icon: "lock.fill",
+                    iconColor: Color(red: 0.3, green: 0.5, blue: 0.7),
+                    title: "Security",
+                    badge: isPasscodeSet ? .checkmark : nil,
+                    showChevron: true
+                ) {
+                    showingSecuritySettings = true
+                }
+
+                // Push Notifications Section (for admin/attending)
                 SectionHeader(title: "NOTIFICATIONS")
 
                 // Push Notifications Toggle
@@ -785,19 +899,19 @@ struct SettingsView: View {
                     )
                     .padding(.leading, 20)
                 }
+
+                // About
+                SettingsPillRow(
+                    icon: "info.circle.fill",
+                    iconColor: .blue,
+                    title: "About",
+                    showChevron: true
+                ) {
+                    showingAbout = true
+                }
             }
 
-            // About
-            SettingsPillRow(
-                icon: "info.circle.fill",
-                iconColor: .blue,
-                title: "About",
-                showChevron: true
-            ) {
-                showingAbout = true
-            }
-
-            // Sign Out
+            // Sign Out (for all roles)
             Button {
                 appState.signOut()
             } label: {
@@ -836,6 +950,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showingSecuritySettings) {
             SecuritySettingsSheet(isPasscodeSet: $isPasscodeSet, isBiometricsEnabled: $isBiometricsEnabled)
         }
+        .sheet(isPresented: $showingCloudBackup) {
+            CloudBackupSheet(isEnabled: $cloudBackupEnabled)
+        }
         .sheet(isPresented: $showingAbout) {
             AboutSheet()
         }
@@ -845,14 +962,32 @@ struct SettingsView: View {
         .sheet(isPresented: $showingAttendingIdentityPicker) {
             AttendingIdentityPickerSheet(attendings: activeAttendingsForSelection)
         }
-        .sheet(isPresented: $showingDefaultFacilityPicker) {
-            DefaultFacilityPickerSheet(facilities: activeFacilities)
+        .sheet(isPresented: $showingSpecialtyPacks) {
+            SpecialtyPacksSheet()
+        }
+        .sheet(isPresented: $showingAttendingsList) {
+            AttendingsListSheet()
+        }
+        .sheet(isPresented: $showingFacilitiesList) {
+            FacilitiesListSheet()
         }
         .sheet(isPresented: $showingCustomProcedures) {
-            FellowCustomProceduresListSheet()
+            CustomProceduresListSheet()
         }
-        .sheet(isPresented: $showingProcedureGroups) {
-            FellowProcedureGroupsListSheet()
+        .sheet(isPresented: $showingCustomAccessSites) {
+            CustomAccessSitesListSheet()
+        }
+        .sheet(isPresented: $showingCustomComplications) {
+            CustomComplicationsListSheet()
+        }
+        .sheet(isPresented: $showingCustomProcedureDetails) {
+            CustomProcedureDetailsListSheet()
+        }
+        .sheet(isPresented: $showingImportLog) {
+            ImportProcedureLogView()
+        }
+        .sheet(isPresented: $showingExportOptions) {
+            ExportSheet()
         }
         #if DEBUG
         .sheet(isPresented: $showingDevInstitutional) {
