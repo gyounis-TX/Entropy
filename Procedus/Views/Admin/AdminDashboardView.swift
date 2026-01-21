@@ -19,6 +19,9 @@ struct AdminDashboardView: View {
     @Query private var notifications: [Procedus.Notification]
     @Query private var customCategories: [CustomCategory]
     @Query private var customProcedures: [CustomProcedure]
+    @Query private var customAccessSites: [CustomAccessSite]
+    @Query private var customComplications: [CustomComplication]
+    @Query private var customProcedureDetails: [CustomProcedureDetail]
     @Query private var evaluationFields: [EvaluationField]
 
     @AppStorage("adminName") private var adminNameStorage = ""
@@ -28,6 +31,12 @@ struct AdminDashboardView: View {
     @State private var showingClearDataConfirmation = false
     @State private var showingPopulateDevConfirmation = false
     @State private var devDataPopulated = false
+    @State private var showingSpecialtyPacks = false
+    @State private var showingCustomProcedures = false
+    @State private var showingCustomAccessSites = false
+    @State private var showingCustomComplications = false
+    @State private var showingCustomProcedureDetails = false
+    @State private var showingExportSheet = false
 
     private var currentProgram: Program? { programs.first }
 
@@ -45,6 +54,26 @@ struct AdminDashboardView: View {
 
     private var facilityCount: Int {
         facilities.filter { !$0.isArchived }.count
+    }
+
+    private var customProcedureCount: Int {
+        customProcedures.filter { !$0.isArchived }.count
+    }
+
+    private var customAccessSiteCount: Int {
+        customAccessSites.filter { !$0.isArchived }.count
+    }
+
+    private var customComplicationCount: Int {
+        customComplications.filter { !$0.isArchived }.count
+    }
+
+    private var customProcedureDetailCount: Int {
+        customProcedureDetails.filter { !$0.isArchived }.count
+    }
+
+    private var enabledPacksCount: Int {
+        currentProgram?.specialtyPackIds.count ?? 0
     }
 
     private var totalCases: Int { allCases.count }
@@ -114,6 +143,24 @@ struct AdminDashboardView: View {
             } message: {
                 Text("This will permanently delete ALL cases and attestations. This cannot be undone.")
             }
+            .sheet(isPresented: $showingSpecialtyPacks) {
+                SpecialtyPackPickerSheet()
+            }
+            .sheet(isPresented: $showingCustomProcedures) {
+                CustomProceduresListSheet()
+            }
+            .sheet(isPresented: $showingCustomAccessSites) {
+                CustomAccessSitesListSheet()
+            }
+            .sheet(isPresented: $showingCustomComplications) {
+                CustomComplicationsListSheet()
+            }
+            .sheet(isPresented: $showingCustomProcedureDetails) {
+                CustomProcedureDetailsListSheet()
+            }
+            .sheet(isPresented: $showingExportSheet) {
+                ExportSheet()
+            }
         }
     }
 
@@ -173,51 +220,100 @@ struct AdminDashboardView: View {
     // MARK: - Management Section
 
     private var managementSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Management")
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .padding(.leading, 4)
-                .padding(.top, 8)
+        VStack(spacing: 12) {
+            // TRAINING PROGRAM Section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Training Program")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 4)
+                    .padding(.top, 8)
 
-            VStack(spacing: 0) {
-                NavigationLink { ManageProgramView() } label: {
-                    AdminMenuRow(icon: "gearshape.fill", iconColor: .gray, title: "Manage Program")
+                VStack(spacing: 0) {
+                    NavigationLink { ManageProgramView() } label: {
+                        AdminMenuRow(icon: "gearshape.fill", iconColor: .gray, title: "Program Settings")
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    Button { showingSpecialtyPacks = true } label: {
+                        AdminMenuRow(icon: "square.stack.3d.up.fill", iconColor: .purple, title: "Specialty Packs", badge: enabledPacksCount > 0 ? "\(enabledPacksCount)" : nil, showChevron: true)
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    NavigationLink { AttendingManagementView() } label: {
+                        AdminMenuRow(icon: "stethoscope", iconColor: .green, title: "Attendings", badge: "\(attendingCount)")
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    NavigationLink { FacilityManagementView() } label: {
+                        AdminMenuRow(icon: "building.2.fill", iconColor: Color(red: 0.2, green: 0.4, blue: 0.8), title: "Hospitals", badge: "\(facilityCount)")
+                    }
                 }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { FellowManagementView() } label: {
-                    AdminMenuRow(icon: "person.2.fill", iconColor: .blue, title: "Manage Fellows", badge: "\(fellowCount)")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { AttendingManagementView() } label: {
-                    AdminMenuRow(icon: "stethoscope", iconColor: .green, title: "Manage Attendings", badge: "\(attendingCount)")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { FacilityManagementView() } label: {
-                    AdminMenuRow(icon: "building.2.fill", iconColor: .blue, title: "Manage Facilities")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { ManageProceduresView() } label: {
-                    AdminMenuRow(icon: "list.clipboard.fill", iconColor: .orange, title: "Manage Procedures")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { ManageEvaluationsView() } label: {
-                    AdminMenuRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Manage Evaluations", badge: currentProgram?.evaluationsEnabled == true ? "On" : nil, badgeColor: .green)
-                }
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(12)
             }
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
+
+            // FELLOWS Section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Fellows")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 4)
+
+                VStack(spacing: 0) {
+                    NavigationLink { FellowManagementView() } label: {
+                        AdminMenuRow(icon: "person.2.fill", iconColor: .blue, title: "Manage Fellows", badge: "\(fellowCount)")
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    NavigationLink { ManageEvaluationsView() } label: {
+                        AdminMenuRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Manage Evaluations", badge: currentProgram?.evaluationsEnabled == true ? "On" : nil, badgeColor: .green)
+                    }
+                }
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(12)
+            }
+
+            // PROCEDURES Section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Procedures")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 4)
+
+                VStack(spacing: 0) {
+                    Button { showingCustomProcedures = true } label: {
+                        AdminMenuRow(icon: "list.clipboard.fill", iconColor: Color(red: 0.9, green: 0.4, blue: 0.5), title: "Custom Procedures", badge: customProcedureCount > 0 ? "\(customProcedureCount)" : nil, showChevron: true)
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    Button { showingCustomAccessSites = true } label: {
+                        AdminMenuRow(icon: "arrow.triangle.branch", iconColor: .gray, title: "Custom Access Sites", badge: customAccessSiteCount > 0 ? "\(customAccessSiteCount)" : nil, showChevron: true)
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    Button { showingCustomComplications = true } label: {
+                        AdminMenuRow(icon: "exclamationmark.triangle.fill", iconColor: .yellow, title: "Custom Complications", badge: customComplicationCount > 0 ? "\(customComplicationCount)" : nil, showChevron: true)
+                    }
+
+                    Divider().padding(.leading, 52)
+
+                    Button { showingCustomProcedureDetails = true } label: {
+                        AdminMenuRow(icon: "slider.horizontal.3", iconColor: .cyan, title: "Procedure Details", badge: customProcedureDetailCount > 0 ? "\(customProcedureDetailCount)" : nil, showChevron: true)
+                    }
+                }
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(12)
+            }
         }
     }
 
@@ -565,6 +661,105 @@ struct AdminDashboardView: View {
             }
         }
 
+        // Get created fellow IDs
+        let createdFellowIds = allUsers.filter { $0.role == .fellow && $0.programId == program.id }.map { $0.id }
+        let createdAttendingIds = attendings.filter { $0.programId == program.id }.map { $0.id }
+        let createdFacilityIds = facilities.filter { $0.programId == program.id }.map { $0.id }
+
+        // Create 20 sample cases (10 invasive + 10 noninvasive)
+        let calendar = Calendar.current
+        let icPack = SpecialtyPackCatalog.pack(for: "interventional-cardiology")
+        let invasiveProcedures = icPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
+        let ciPack = SpecialtyPackCatalog.pack(for: "cardiac-imaging")
+        let noninvasiveProcedures = ciPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
+
+        // Access sites for IC procedures
+        let icAccessSites: [AccessSite] = [.femoral, .radial, .brachial, .pedal]
+        let operatorPositions: [OperatorPosition] = [.primary, .secondary]
+
+        // Sample case notes
+        let sampleNotes = [
+            "Successful PCI to mid-LAD with DES. Patient tolerated well. No complications.",
+            "Diagnostic cath showed severe 3VD. Referred to CT surgery for CABG evaluation.",
+            "Right heart cath for pulmonary HTN workup. Mean PA pressure 38mmHg.",
+            "Elective PCI to RCA. Used radial access with 6Fr guide. Good angiographic result.",
+            "Complex bifurcation lesion. Used 2-stent technique with good final result.",
+            "Chronic total occlusion attempt. Achieved antegrade crossing after 90 mins.",
+            "Impella-supported high-risk PCI in patient with EF 20%. No hemodynamic issues.",
+            "STEMI activation - door to balloon 45 minutes. Culprit LAD, good flow restored.",
+            "Structural case - TAVR workup. Anatomy suitable for transfemoral approach.",
+            "EP study for syncope workup. No inducible arrhythmias. Plan for ILR."
+        ]
+
+        let noninvasiveNotes = [
+            "TTE showing preserved EF at 60%. No significant valvular disease.",
+            "Stress echo with borderline ischemia in inferior wall. Correlation needed.",
+            "TEE for afib cardioversion. No LAA thrombus identified. Cleared for DCCV.",
+            "Carotid ultrasound showing 50-69% stenosis on right. Medical management.",
+            "Lower extremity venous duplex negative for DVT bilaterally.",
+            "Renal artery duplex showing no significant stenosis. RAS excluded.",
+            "AAA surveillance - stable at 4.2cm. Continue annual monitoring.",
+            "Bubble study positive. PFO identified. Consider closure if cryptogenic stroke.",
+            "Dobutamine stress echo - no inducible ischemia at peak dose.",
+            "Right heart catheterization and TTE correlation for MR quantification."
+        ]
+
+        if !createdFellowIds.isEmpty && !createdAttendingIds.isEmpty && !createdFacilityIds.isEmpty && !invasiveProcedures.isEmpty {
+            // Create 10 invasive cases
+            for i in 0..<10 {
+                let weeksAgo = Int.random(in: 0...12)
+                let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+                let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+
+                let newCase = CaseEntry(
+                    ownerId: createdFellowIds.randomElement()!,
+                    attendingId: createdAttendingIds.randomElement(),
+                    weekBucket: weekBucket,
+                    facilityId: createdFacilityIds.randomElement()
+                )
+                newCase.programId = program.id
+
+                let numProcedures = Int.random(in: 1...3)
+                newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
+                newCase.createdAt = caseDate
+                newCase.caseTypeRaw = CaseType.invasive.rawValue
+
+                let numAccessSites = Int.random(in: 1...2)
+                newCase.accessSiteIds = Array(icAccessSites.shuffled().prefix(numAccessSites)).map { $0.rawValue }
+                newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
+                newCase.notes = sampleNotes[i]
+                newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+
+                modelContext.insert(newCase)
+            }
+
+            // Create 10 noninvasive cases
+            if !noninvasiveProcedures.isEmpty {
+                for i in 0..<10 {
+                    let weeksAgo = Int.random(in: 0...12)
+                    let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+                    let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+
+                    let newCase = CaseEntry(
+                        ownerId: createdFellowIds.randomElement()!,
+                        attendingId: nil,
+                        weekBucket: weekBucket,
+                        facilityId: createdFacilityIds.randomElement()
+                    )
+                    newCase.programId = program.id
+
+                    let numProcedures = Int.random(in: 1...2)
+                    newCase.procedureTagIds = Array(noninvasiveProcedures.shuffled().prefix(numProcedures))
+                    newCase.createdAt = caseDate
+                    newCase.caseTypeRaw = CaseType.noninvasive.rawValue
+                    newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
+                    newCase.notes = noninvasiveNotes[i]
+
+                    modelContext.insert(newCase)
+                }
+            }
+        }
+
         try? modelContext.save()
         devDataPopulated = true
     }
@@ -781,9 +976,6 @@ struct ManageProgramView: View {
 
                 // Settings Section
                 settingsSection
-
-                // Statistics Section
-                statisticsSection
 
                 // Installed Specialty Packs Section (READ-ONLY)
                 installedPacksSection
