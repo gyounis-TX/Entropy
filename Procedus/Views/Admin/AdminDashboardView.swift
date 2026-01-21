@@ -775,12 +775,13 @@ struct AdminMenuRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(iconColor)
                 .frame(width: 28, height: 28)
 
             Text(title)
                 .font(.body)
+                .fontWeight(.medium)
                 .foregroundColor(Color(UIColor.label))
 
             Spacer()
@@ -788,17 +789,22 @@ struct AdminMenuRow: View {
             if let badge = badge {
                 Text(badge)
                     .font(.subheadline)
-                    .foregroundColor(badgeColor)
+                    .fontWeight(.semibold)
+                    .foregroundColor(badgeColor == .secondary ? .secondary : badgeColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(badgeColor == .secondary ? Color(UIColor.tertiarySystemFill) : badgeColor.opacity(0.15))
+                    .clipShape(Capsule())
             }
 
             if showChevron {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(Color(UIColor.tertiaryLabel))
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
         .contentShape(Rectangle())
     }
 }

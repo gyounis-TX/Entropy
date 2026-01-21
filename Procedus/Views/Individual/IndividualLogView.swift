@@ -396,7 +396,12 @@ struct IndividualCaseRowView: View {
             return firstProcedureName
         }
         guard let id = attendingId else { return "Unknown" }
-        return attendings.first { $0.id == id }?.lastName ?? "Unknown"
+        guard let attending = attendings.first(where: { $0.id == id }) else { return "Unknown" }
+        // Use lastName if available, otherwise fall back to name or fullName
+        if !attending.lastName.isEmpty {
+            return attending.lastName
+        }
+        return attending.name.isEmpty ? attending.fullName : attending.name
     }
 
     var body: some View {

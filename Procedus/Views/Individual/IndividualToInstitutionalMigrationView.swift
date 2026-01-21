@@ -468,15 +468,15 @@ struct IndividualToInstitutionalMigrationView: View {
                 Text("Migration Complete!")
                     .font(.title.bold())
 
-                Text("Your data has been successfully transferred to the institutional system. You can now sign in as a fellow to access your cases.")
+                Text("Your data has been successfully transferred to the institutional system. You are now signed in as a fellow.")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
 
                 VStack(spacing: 8) {
-                    Text("What's Next?")
+                    Text("Ready to Go!")
                         .font(.headline)
-                    Text("Sign out and sign back in with your institutional credentials to see your migrated cases.")
+                    Text("Tap Done to view your migrated cases in the fellow case log.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -659,8 +659,13 @@ struct IndividualToInstitutionalMigrationView: View {
             // 4. Save all changes
             try modelContext.save()
 
-            // 5. Update app state
+            // 5. Update app state - set fellow ID and switch to institutional mode
             UserDefaults.standard.set(fellowId.uuidString, forKey: "selectedFellowId")
+            appState.accountMode = .institutional
+            // Set current user to the selected fellow
+            if let fellowUser = users.first(where: { $0.id == fellowId }) {
+                appState.currentUser = fellowUser
+            }
 
             withAnimation {
                 migrationComplete = true

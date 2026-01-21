@@ -15,6 +15,9 @@ struct SettingsView: View {
     @Query private var allUsers: [User]
     @Query private var procedureGroups: [FellowProcedureGroup]
     @Query private var customProcedureDetails: [CustomProcedureDetail]
+    @Query private var programs: [Program]
+
+    private var currentProgram: Program? { programs.first }
 
     @AppStorage("isPasscodeSet") private var isPasscodeSet = false
     @AppStorage("isBiometricsEnabled") private var isBiometricsEnabled = false
@@ -737,10 +740,10 @@ struct SettingsView: View {
 
                 // Program Specialty Row (read-only for fellows, set by admin)
                 SettingsPillRow(
-                    icon: "heart.text.square.fill",
+                    icon: currentProgram?.fellowshipSpecialty?.iconName ?? "graduationcap.fill",
                     iconColor: ProcedusTheme.accent,
                     title: "Program Specialty",
-                    subtitle: "Set by Program Admin",
+                    subtitle: currentProgram?.fellowshipSpecialty?.displayName ?? "Not Set",
                     showChevron: false
                 ) {
                     // Read-only - no action
@@ -3011,6 +3014,17 @@ struct AboutSheet: View {
 struct DevInstitutionalSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var modelContext
+    @Query private var fellows: [User]
+    @Query private var attendings: [Attending]
+
+    private var availableFellows: [User] {
+        fellows.filter { $0.role == .fellow && !$0.isArchived }
+    }
+
+    private var availableAttendings: [Attending] {
+        attendings.filter { !$0.isArchived }
+    }
 
     var body: some View {
         NavigationStack {
@@ -3019,6 +3033,10 @@ struct DevInstitutionalSheet: View {
                     Button {
                         appState.devSignIn(role: .fellow)
                         appState.hasCompletedOnboarding = true
+                        // Auto-select first fellow if none selected
+                        if appState.selectedFellowId == nil, let firstFellow = availableFellows.first {
+                            appState.selectedFellowId = firstFellow.id
+                        }
                         dismiss()
                     } label: {
                         HStack {
@@ -3032,6 +3050,10 @@ struct DevInstitutionalSheet: View {
                     Button {
                         appState.devSignIn(role: .attending)
                         appState.hasCompletedOnboarding = true
+                        // Auto-select first attending if none selected
+                        if appState.selectedAttendingId == nil, let firstAttending = availableAttendings.first {
+                            appState.selectedAttendingId = firstAttending.id
+                        }
                         dismiss()
                     } label: {
                         HStack {
@@ -3072,6 +3094,16 @@ struct DevInstitutionalSheet: View {
 struct DevRoleSwitcherSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
+    @Query private var fellows: [User]
+    @Query private var attendings: [Attending]
+
+    private var availableFellows: [User] {
+        fellows.filter { $0.role == .fellow && !$0.isArchived }
+    }
+
+    private var availableAttendings: [Attending] {
+        attendings.filter { !$0.isArchived }
+    }
 
     var body: some View {
         NavigationStack {
@@ -3079,6 +3111,10 @@ struct DevRoleSwitcherSheet: View {
                 Section("Switch to Role") {
                     Button {
                         appState.devSignIn(role: .fellow)
+                        // Auto-select first fellow if none selected
+                        if appState.selectedFellowId == nil, let firstFellow = availableFellows.first {
+                            appState.selectedFellowId = firstFellow.id
+                        }
                         dismiss()
                     } label: {
                         HStack {
@@ -3095,6 +3131,10 @@ struct DevRoleSwitcherSheet: View {
 
                     Button {
                         appState.devSignIn(role: .attending)
+                        // Auto-select first attending if none selected
+                        if appState.selectedAttendingId == nil, let firstAttending = availableAttendings.first {
+                            appState.selectedAttendingId = firstAttending.id
+                        }
                         dismiss()
                     } label: {
                         HStack {
@@ -3154,14 +3194,16 @@ struct AddEditAttendingSheet: View {
     @Environment(\.modelContext) private var modelContext
 
     let attending: Attending?
-    @State private var name: String = ""
+    @State private var firstName: String = ""
+    @State private var lastName: String = ""
     @State private var phoneNumber: String = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Name", text: $name)
+                    TextField("First Name", text: $firstName)
+                    TextField("Last Name", text: $lastName)
                     TextField("Phone (optional)", text: $phoneNumber)
                         .keyboardType(.phonePad)
                 }
@@ -3170,7 +3212,8 @@ struct AddEditAttendingSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if let attending = attending {
-                    name = attending.name
+                    firstName = attending.firstName
+                    lastName = attending.lastName
                     phoneNumber = attending.phoneNumber ?? ""
                 }
             }
@@ -3183,7 +3226,7 @@ struct AddEditAttendingSheet: View {
                         saveAttending()
                     }
                     .fontWeight(.semibold)
-                    .disabled(name.isEmpty)
+                    .disabled(firstName.isEmpty)
                 }
             }
         }
@@ -3191,10 +3234,12 @@ struct AddEditAttendingSheet: View {
 
     private func saveAttending() {
         if let existing = attending {
-            existing.name = name
+            existing.firstName = firstName
+            existing.lastName = lastName
+            existing.name = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces)
             existing.phoneNumber = phoneNumber.isEmpty ? nil : phoneNumber
         } else {
-            let newAttending = Attending(name: name)
+            let newAttending = Attending(firstName: firstName, lastName: lastName)
             newAttending.phoneNumber = phoneNumber.isEmpty ? nil : phoneNumber
             modelContext.insert(newAttending)
         }
