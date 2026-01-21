@@ -5825,7 +5825,7 @@ struct ExportEvaluationSheet: View {
 
     private var filteredCases: [CaseEntry] {
         cases.filter { caseEntry in
-            caseEntry.procedureDate >= startDate && caseEntry.procedureDate <= endDate
+            caseEntry.createdAt >= startDate && caseEntry.createdAt <= endDate
         }
     }
 
@@ -5991,8 +5991,8 @@ struct ExportEvaluationSheet: View {
                 comments.append(ExportService.EvaluationExportData.CommentEntry(
                     comment: comment,
                     attendingName: attendingName,
-                    date: caseEntry.procedureDate,
-                    formattedDate: dateFormatter.string(from: caseEntry.procedureDate)
+                    date: caseEntry.createdAt,
+                    formattedDate: dateFormatter.string(from: caseEntry.createdAt)
                 ))
             }
         }
