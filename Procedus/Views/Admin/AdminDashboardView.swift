@@ -237,6 +237,12 @@ struct AdminDashboardView: View {
 
                     Divider().padding(.leading, 52)
 
+                    NavigationLink { FellowManagementView() } label: {
+                        AdminMenuRow(icon: "person.2.fill", iconColor: .blue, title: "Fellows", badge: "\(fellowCount)")
+                    }
+
+                    Divider().padding(.leading, 52)
+
                     Button { showingSpecialtyPacks = true } label: {
                         AdminMenuRow(icon: "square.stack.3d.up.fill", iconColor: .purple, title: "Specialty Packs", badge: enabledPacksCount > 0 ? "\(enabledPacksCount)" : nil, showChevron: true)
                     }
@@ -252,28 +258,11 @@ struct AdminDashboardView: View {
                     NavigationLink { FacilityManagementView() } label: {
                         AdminMenuRow(icon: "building.2.fill", iconColor: Color(red: 0.2, green: 0.4, blue: 0.8), title: "Hospitals", badge: "\(facilityCount)")
                     }
-                }
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(12)
-            }
-
-            // FELLOWS Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Fellows")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 4)
-
-                VStack(spacing: 0) {
-                    NavigationLink { FellowManagementView() } label: {
-                        AdminMenuRow(icon: "person.2.fill", iconColor: .blue, title: "Manage Fellows", badge: "\(fellowCount)")
-                    }
 
                     Divider().padding(.leading, 52)
 
                     NavigationLink { ManageEvaluationsView() } label: {
-                        AdminMenuRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Manage Evaluations", badge: currentProgram?.evaluationsEnabled == true ? "On" : nil, badgeColor: .green)
+                        AdminMenuRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Evaluations", badge: currentProgram?.evaluationsEnabled == true ? "On" : nil, badgeColor: .green)
                     }
                 }
                 .background(Color(UIColor.secondarySystemBackground))
@@ -1555,6 +1544,7 @@ struct EditProgramSheet: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .tint(Color(UIColor.label))
                 } header: {
                     Text("Specialty")
                 } footer: {
@@ -1650,6 +1640,7 @@ struct CreateProgramSheet: View {
                         }
                     }
                     .pickerStyle(.navigationLink)
+                    .tint(Color(UIColor.label))
                 } header: {
                     Text("Specialty")
                 } footer: {
@@ -1799,7 +1790,7 @@ private struct CategoryLabelRow: View {
 
     var body: some View {
         HStack {
-            CategoryBubble(category: packCategory.category, size: 28)
+            CategoryBubble(category: packCategory.category, size: 24)
             Text(packCategory.category.rawValue)
                 .font(.subheadline)
             Spacer()
@@ -3368,7 +3359,7 @@ struct ManageProceduresView: View {
                             selectedCategory = category
                         } label: {
                             HStack {
-                                CustomCategoryBubble(category: category, size: 28)
+                                CustomCategoryBubble(category: category, size: 24)
                                 Text(category.name)
                                     .font(.body)
                                     .foregroundColor(Color(UIColor.label))
@@ -3385,7 +3376,7 @@ struct ManageProceduresView: View {
                         }
 
                         if index < activeCategories.count - 1 {
-                            Divider().padding(.leading, 60)
+                            Divider().padding(.leading, 56)
                         }
                     }
 

@@ -338,6 +338,34 @@ struct SettingsView: View {
                 showingExportOptions = true
             }
 
+            // NOTIFICATIONS Section
+            SectionHeader(title: "NOTIFICATIONS")
+
+            SettingsPillToggle(
+                icon: "bell.fill",
+                iconColor: .red,
+                title: "Push Notifications",
+                isOn: $pushNotificationsEnabled
+            )
+
+            if pushNotificationsEnabled {
+                SettingsPillToggle(
+                    icon: "checkmark.seal.fill",
+                    iconColor: .green,
+                    title: "Attestation Alerts",
+                    isOn: $attestationAlertsEnabled
+                )
+                .padding(.leading, 20)
+
+                SettingsPillToggle(
+                    icon: "xmark.seal.fill",
+                    iconColor: .orange,
+                    title: "Rejected Cases",
+                    isOn: $rejectedCasesAlertsEnabled
+                )
+                .padding(.leading, 20)
+            }
+
             // About Row
             SettingsPillRow(
                 icon: "info.circle.fill",
@@ -819,6 +847,34 @@ struct SettingsView: View {
                     showChevron: true
                 ) {
                     showingExportOptions = true
+                }
+
+                // NOTIFICATIONS Section
+                SectionHeader(title: "NOTIFICATIONS")
+
+                SettingsPillToggle(
+                    icon: "bell.fill",
+                    iconColor: .red,
+                    title: "Push Notifications",
+                    isOn: $pushNotificationsEnabled
+                )
+
+                if pushNotificationsEnabled {
+                    SettingsPillToggle(
+                        icon: "checkmark.seal.fill",
+                        iconColor: .green,
+                        title: "Attestation Alerts",
+                        isOn: $attestationAlertsEnabled
+                    )
+                    .padding(.leading, 20)
+
+                    SettingsPillToggle(
+                        icon: "xmark.seal.fill",
+                        iconColor: .orange,
+                        title: "Rejected Cases",
+                        isOn: $rejectedCasesAlertsEnabled
+                    )
+                    .padding(.leading, 20)
                 }
 
                 // About Row
