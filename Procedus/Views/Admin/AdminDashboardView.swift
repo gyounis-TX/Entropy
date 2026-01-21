@@ -555,28 +555,35 @@ struct AdminDashboardView: View {
         program.evaluationsEnabled = true
         program.updatedAt = Date()
 
-        // Create facilities
+        // Create facilities - track IDs as we create
+        var createdFacilityIds: [UUID] = []
         let facilityNames = [
             ("University Hospital", "UH"),
             ("Outpatient Lab", "OPL")
         ]
         for (name, shortName) in facilityNames {
-            if !facilities.contains(where: { $0.name == name }) {
+            if let existing = facilities.first(where: { $0.name == name }) {
+                createdFacilityIds.append(existing.id)
+            } else {
                 let facility = TrainingFacility(name: name)
                 facility.shortName = shortName
                 facility.programId = program.id
                 modelContext.insert(facility)
+                createdFacilityIds.append(facility.id)
             }
         }
 
-        // Create fellows (Simpsons)
+        // Create fellows (Simpsons) - track IDs as we create
+        var createdFellowIds: [UUID] = []
         let fellowData = [
             ("Homer", "Simpson", "homer@springfield.com", 3),
             ("Marge", "Simpson", "marge@springfield.com", 2),
             ("Bart", "Simpson", "bart@springfield.com", 1)
         ]
         for (first, last, email, year) in fellowData {
-            if !allUsers.contains(where: { $0.email == email }) {
+            if let existing = allUsers.first(where: { $0.email == email }) {
+                createdFellowIds.append(existing.id)
+            } else {
                 let fellow = User(
                     email: email,
                     firstName: first,
@@ -587,21 +594,26 @@ struct AdminDashboardView: View {
                     trainingYear: year
                 )
                 modelContext.insert(fellow)
+                createdFellowIds.append(fellow.id)
             }
         }
 
-        // Create attendings
+        // Create attendings - track IDs as we create
+        var createdAttendingIds: [UUID] = []
         let attendingData = [
             ("Ned", "Flanders", "ned@springfield.com"),
             ("Moe", "Szyslak", "moe@springfield.com"),
             ("Apu", "Nahasapeemapetilon", "apu@springfield.com")
         ]
         for (first, last, email) in attendingData {
-            if !attendings.contains(where: { $0.firstName == first && $0.lastName == last }) {
+            if let existing = attendings.first(where: { $0.firstName == first && $0.lastName == last }) {
+                createdAttendingIds.append(existing.id)
+            } else {
                 // Create Attending record
                 let attending = Attending(firstName: first, lastName: last)
                 attending.programId = program.id
                 modelContext.insert(attending)
+                createdAttendingIds.append(attending.id)
 
                 // Create linked User for login
                 if !allUsers.contains(where: { $0.email == email }) {
@@ -660,11 +672,6 @@ struct AdminDashboardView: View {
                 modelContext.insert(field)
             }
         }
-
-        // Get created fellow IDs
-        let createdFellowIds = allUsers.filter { $0.role == .fellow && $0.programId == program.id }.map { $0.id }
-        let createdAttendingIds = attendings.filter { $0.programId == program.id }.map { $0.id }
-        let createdFacilityIds = facilities.filter { $0.programId == program.id }.map { $0.id }
 
         // Create 20 sample cases (10 invasive + 10 noninvasive)
         let calendar = Calendar.current
