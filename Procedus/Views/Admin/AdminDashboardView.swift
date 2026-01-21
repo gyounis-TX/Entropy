@@ -5621,7 +5621,7 @@ struct FellowEvaluationDetailView: View {
     let fellow: User
     let cases: [CaseEntry]
     let evaluationFields: [EvaluationField]
-    let attendings: [User]
+    let attendings: [Attending]
 
     @State private var showingExport = false
     @State private var selectedTab = 0
@@ -5657,7 +5657,7 @@ struct FellowEvaluationDetailView: View {
 
     /// All comments with attending attribution
     private var commentsWithContext: [(comment: String, attendingName: String, date: Date)] {
-        cases.compactMap { caseEntry in
+        cases.compactMap { caseEntry -> (comment: String, attendingName: String, date: Date)? in
             guard let comment = caseEntry.evaluationComment, !comment.isEmpty else { return nil }
             let attendingName = attendings.first { $0.id == caseEntry.attestorId }?.name ?? "Unknown"
             return (comment, attendingName, caseEntry.attestedAt ?? caseEntry.createdAt)
@@ -5815,7 +5815,7 @@ struct ExportEvaluationSheet: View {
     let fellow: User
     let cases: [CaseEntry]
     let evaluationFields: [EvaluationField]
-    let attendings: [User]
+    let attendings: [Attending]
 
     @State private var startDate = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
     @State private var endDate = Date()
@@ -5991,7 +5991,7 @@ struct ExportEvaluationSheet: View {
 
         for caseEntry in filteredCases.sorted(by: { $0.createdAt > $1.createdAt }) {
             if let comment = caseEntry.evaluationComment, !comment.isEmpty {
-                let attendingName = attendings.first(where: { $0.id == caseEntry.attestedById })?.displayName ?? "Unknown"
+                let attendingName = attendings.first(where: { $0.id == caseEntry.attestorId })?.name ?? "Unknown"
                 comments.append(ExportService.EvaluationExportData.CommentEntry(
                     comment: comment,
                     attendingName: attendingName,
