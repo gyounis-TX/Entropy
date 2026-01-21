@@ -47,6 +47,9 @@ struct ProcedusApp: App {
             AuditService.shared.configure(with: context)
             NotificationManager.shared.configure(with: context)
             UserDeletionService.shared.configure(with: context)
+
+            // Run evaluation system migration
+            EvaluationMigrationService.migrateIfNeeded(context: context)
             
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")

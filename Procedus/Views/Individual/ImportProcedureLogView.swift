@@ -111,55 +111,107 @@ struct ImportProcedureLogView: View {
     }
     
     // MARK: - Step 1: Select File
-    
+
     private var selectFileView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            Image(systemName: "doc.badge.arrow.up")
-                .font(.system(size: 64))
-                .foregroundStyle(ProcedusTheme.primary)
-            
-            Text("Import Your Procedure Log")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Select an Excel or CSV file containing your existing procedure log data.")
-                .font(.subheadline)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-                .multilineTextAlignment(.center)
+        ScrollView {
+            VStack(spacing: 24) {
+                Image(systemName: "doc.badge.arrow.up")
+                    .font(.system(size: 64))
+                    .foregroundStyle(ProcedusTheme.primary)
+                    .padding(.top, 32)
+
+                Text("Import Your Procedure Log")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text("Select an Excel or CSV file containing your existing procedure log data.")
+                    .font(.subheadline)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                // Procedus Classic Migration Info
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "arrow.triangle.merge")
+                            .foregroundStyle(ProcedusTheme.accent)
+                        Text("Migrating from Procedus Classic?")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+
+                    Text("Your procedures will be automatically mapped to the new format. The system recognizes procedures from the original Procedus app and matches them to the updated procedure catalog.")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+
+                    HStack(spacing: 16) {
+                        Label("Auto-mapping", systemImage: "checkmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(ProcedusTheme.success)
+                        Label("Manual review", systemImage: "hand.point.up.fill")
+                            .font(.caption2)
+                            .foregroundStyle(ProcedusTheme.accent)
+                    }
+                }
+                .padding()
+                .background(ProcedusTheme.accent.opacity(0.1))
+                .cornerRadius(12)
                 .padding(.horizontal, 32)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Supported formats:")
+
+                // Supported formats
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Supported formats:")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+
+                    HStack {
+                        Label("CSV", systemImage: "doc.text")
+                        Label("Excel (.xlsx)", systemImage: "tablecells")
+                        Label("Excel (.xls)", systemImage: "tablecells")
+                    }
                     .font(.caption)
                     .foregroundStyle(ProcedusTheme.textSecondary)
-                
-                HStack {
-                    Label("CSV", systemImage: "doc.text")
-                    Label("Excel (.xlsx)", systemImage: "tablecells")
-                    Label("Excel (.xls)", systemImage: "tablecells")
                 }
-                .font(.caption)
-                .foregroundStyle(ProcedusTheme.textSecondary)
+                .padding()
+                .background(ProcedusTheme.cardBackground)
+                .cornerRadius(12)
+                .padding(.horizontal, 32)
+
+                Button {
+                    showingFilePicker = true
+                } label: {
+                    Label("Select File", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(ProcedusTheme.primary)
+                        .foregroundStyle(.white)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal, 32)
+
+                // How to export from Procedus Classic
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("How to export from Procedus Classic:")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("1. Open the original Procedus app")
+                        Text("2. Go to Settings > Export Data")
+                        Text("3. Choose CSV or Excel format")
+                        Text("4. Save or share the file to import here")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(ProcedusTheme.textTertiary)
+                }
+                .padding()
+                .background(ProcedusTheme.cardBackground)
+                .cornerRadius(12)
+                .padding(.horizontal, 32)
+
+                Spacer(minLength: 32)
             }
-            .padding()
-            .background(ProcedusTheme.cardBackground)
-            .cornerRadius(12)
-            
-            Button {
-                showingFilePicker = true
-            } label: {
-                Label("Select File", systemImage: "folder")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(ProcedusTheme.primary)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
-            }
-            .padding(.horizontal, 32)
-            
-            Spacer()
         }
     }
     
@@ -659,26 +711,50 @@ struct ImportedCaseRow: View {
 struct ProcedureMappingRow: View {
     @Binding var mappedProcedure: MappedProcedure
     @State private var showingCategoryPicker = false
+    @State private var showingManualSearch = false
     @State private var selectedCategory: ProcedureCategory = .other
-    
+    @State private var searchText = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Original name
+            // Original name with status
             HStack {
-                Text(mappedProcedure.originalName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mappedProcedure.originalName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    if mappedProcedure.status == .mapped, let title = mappedProcedure.matchedTitle {
+                        Text("→ \(title)")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.success)
+                    }
+                }
                 Spacer()
                 statusBadge
             }
-            
+
+            // Confidence indicator for mapped items
+            if mappedProcedure.status == .mapped && mappedProcedure.matchConfidence < 1.0 {
+                HStack(spacing: 4) {
+                    confidenceIndicator(mappedProcedure.matchConfidence)
+                    Text("Confidence: \(Int(mappedProcedure.matchConfidence * 100))%")
+                        .font(.caption2)
+                        .foregroundStyle(confidenceColor(mappedProcedure.matchConfidence))
+                    if mappedProcedure.matchConfidence < 0.8 {
+                        Text("- Please verify")
+                            .font(.caption2)
+                            .foregroundStyle(ProcedusTheme.warning)
+                    }
+                }
+            }
+
             // Suggestions
-            if !mappedProcedure.suggestedMatches.isEmpty {
+            if mappedProcedure.status == .unmapped && !mappedProcedure.suggestedMatches.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Suggested matches:")
                         .font(.caption)
                         .foregroundStyle(ProcedusTheme.textSecondary)
-                    
+
                     ForEach(mappedProcedure.suggestedMatches) { suggestion in
                         Button {
                             selectSuggestion(suggestion)
@@ -688,9 +764,10 @@ struct ProcedureMappingRow: View {
                                 Text(suggestion.title)
                                     .font(.caption)
                                 Spacer()
+                                confidenceIndicator(suggestion.confidence)
                                 Text("\(Int(suggestion.confidence * 100))%")
                                     .font(.caption2)
-                                    .foregroundStyle(ProcedusTheme.textTertiary)
+                                    .foregroundStyle(confidenceColor(suggestion.confidence))
                             }
                             .padding(.vertical, 4)
                             .padding(.horizontal, 8)
@@ -701,18 +778,25 @@ struct ProcedureMappingRow: View {
                     }
                 }
             }
-            
+
             // Actions
             HStack {
+                Button {
+                    showingManualSearch = true
+                } label: {
+                    Label("Search Procedures", systemImage: "magnifyingglass")
+                        .font(.caption)
+                }
+
                 Button {
                     showingCategoryPicker = true
                 } label: {
                     Label("Create Custom", systemImage: "plus.circle")
                         .font(.caption)
                 }
-                
+
                 Spacer()
-                
+
                 Button {
                     mappedProcedure.status = .skipped
                 } label: {
@@ -726,8 +810,11 @@ struct ProcedureMappingRow: View {
         .sheet(isPresented: $showingCategoryPicker) {
             categoryPickerSheet
         }
+        .sheet(isPresented: $showingManualSearch) {
+            manualSearchSheet
+        }
     }
-    
+
     private var statusBadge: some View {
         Group {
             switch mappedProcedure.status {
@@ -747,14 +834,115 @@ struct ProcedureMappingRow: View {
         }
         .font(.caption2)
     }
-    
+
+    private func confidenceIndicator(_ confidence: Double) -> some View {
+        Circle()
+            .fill(confidenceColor(confidence))
+            .frame(width: 8, height: 8)
+    }
+
+    private func confidenceColor(_ confidence: Double) -> Color {
+        if confidence >= 0.9 { return ProcedusTheme.success }
+        if confidence >= 0.7 { return .orange }
+        if confidence >= 0.5 { return .yellow }
+        return ProcedusTheme.error
+    }
+
     private func selectSuggestion(_ suggestion: ProcedureSuggestion) {
         mappedProcedure.matchedTagId = suggestion.tagId
         mappedProcedure.matchedTitle = suggestion.title
         mappedProcedure.matchConfidence = suggestion.confidence
         mappedProcedure.status = .mapped
     }
-    
+
+    // MARK: - Manual Search Sheet
+
+    private var manualSearchSheet: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                    TextField("Search procedures...", text: $searchText)
+                        .textFieldStyle(.plain)
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(ProcedusTheme.textTertiary)
+                        }
+                    }
+                }
+                .padding()
+                .background(ProcedusTheme.cardBackground)
+
+                // Results
+                List {
+                    ForEach(filteredProcedures, id: \.id) { procedure in
+                        Button {
+                            selectProcedure(procedure)
+                        } label: {
+                            HStack {
+                                CategoryBubble(category: procedure.category, size: 24)
+                                VStack(alignment: .leading) {
+                                    Text(procedure.title)
+                                        .font(.subheadline)
+                                    Text(procedure.packName)
+                                        .font(.caption)
+                                        .foregroundStyle(ProcedusTheme.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(ProcedusTheme.textTertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .listStyle(.plain)
+            }
+            .navigationTitle("Select Procedure")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingManualSearch = false }
+                }
+            }
+        }
+    }
+
+    private var filteredProcedures: [SearchableProcedure] {
+        var results: [SearchableProcedure] = []
+        let searchLower = searchText.lowercased()
+
+        for pack in SpecialtyPackCatalog.allPacks {
+            for category in pack.categories {
+                for procedure in category.procedures {
+                    if searchText.isEmpty || procedure.title.lowercased().contains(searchLower) {
+                        results.append(SearchableProcedure(
+                            id: procedure.id,
+                            title: procedure.title,
+                            category: category.category,
+                            packName: pack.name
+                        ))
+                    }
+                }
+            }
+        }
+
+        return results.sorted { $0.title < $1.title }
+    }
+
+    private func selectProcedure(_ procedure: SearchableProcedure) {
+        mappedProcedure.matchedTagId = procedure.id
+        mappedProcedure.matchedTitle = procedure.title
+        mappedProcedure.matchConfidence = 1.0
+        mappedProcedure.status = .mapped
+        showingManualSearch = false
+    }
+
     private var categoryPickerSheet: some View {
         NavigationStack {
             Form {
@@ -762,7 +950,7 @@ struct ProcedureMappingRow: View {
                     Text("Create \"\(mappedProcedure.originalName)\" as a custom procedure")
                         .font(.subheadline)
                 }
-                
+
                 Section("Select Category") {
                     Picker("Category", selection: $selectedCategory) {
                         ForEach(ProcedureCategory.allCases) { category in
@@ -793,4 +981,12 @@ struct ProcedureMappingRow: View {
             }
         }
     }
+}
+
+// Helper struct for manual search
+struct SearchableProcedure: Identifiable {
+    let id: String
+    let title: String
+    let category: ProcedureCategory
+    let packName: String
 }

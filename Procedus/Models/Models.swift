@@ -456,7 +456,8 @@ final class CaseEntry {
     var attestationStatusRaw: String
     var attestedAt: Date?
     var attestationComment: String?
-    var evaluationChecks: [String]
+    var evaluationChecks: [String]  // DEPRECATED: Use evaluationResponsesJson instead
+    var evaluationResponsesJson: String?  // JSON: {"fieldId": "value"} - supports checkbox ("true"/"false") and rating ("1"-"5")
     var evaluationComment: String?
     var fellowComment: String?
     var isProxyAttestation: Bool
@@ -495,7 +496,28 @@ final class CaseEntry {
         get { operatorPositionRaw.flatMap { OperatorPosition(rawValue: $0) } }
         set { operatorPositionRaw = newValue?.rawValue }
     }
-    
+
+    /// Evaluation responses keyed by field ID (UUID string)
+    /// Values: "true"/"false" for checkboxes, "1"-"5" for ratings
+    @Transient var evaluationResponses: [String: String] {
+        get {
+            guard let json = evaluationResponsesJson,
+                  let data = json.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
+                return [:]
+            }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let json = String(data: data, encoding: .utf8) {
+                evaluationResponsesJson = json
+            } else {
+                evaluationResponsesJson = nil
+            }
+        }
+    }
+
     init(
         fellowId: UUID? = nil,
         ownerId: UUID? = nil,
@@ -523,6 +545,7 @@ final class CaseEntry {
         self.attestedAt = nil
         self.attestationComment = nil
         self.evaluationChecks = []
+        self.evaluationResponsesJson = nil
         self.evaluationComment = nil
         self.fellowComment = nil
         self.isProxyAttestation = false
@@ -667,16 +690,23 @@ extension String {
 final class EvaluationField {
     @Attribute(.unique) var id: UUID
     var title: String
+    var fieldTypeRaw: String  // "checkbox" or "rating"
     var isRequired: Bool
     var displayOrder: Int
     var programId: UUID?
     var isDefault: Bool
     var isArchived: Bool
     var createdAt: Date
-    
-    init(title: String, isRequired: Bool = false, displayOrder: Int = 0, programId: UUID? = nil, isDefault: Bool = false) {
+
+    @Transient var fieldType: EvaluationFieldType {
+        get { EvaluationFieldType(rawValue: fieldTypeRaw) ?? .checkbox }
+        set { fieldTypeRaw = newValue.rawValue }
+    }
+
+    init(title: String, fieldType: EvaluationFieldType = .checkbox, isRequired: Bool = false, displayOrder: Int = 0, programId: UUID? = nil, isDefault: Bool = false) {
         self.id = UUID()
         self.title = title
+        self.fieldTypeRaw = fieldType.rawValue
         self.isRequired = isRequired
         self.displayOrder = displayOrder
         self.programId = programId

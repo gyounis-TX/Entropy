@@ -160,11 +160,9 @@ struct AddEditCaseView: View {
     @State private var pendingProcedure: ProcedureTag? = nil
     @State private var customSubOption: String = ""
     
-    // Current fellow identity (from settings)
-    @AppStorage("selectedFellowId") private var selectedFellowIdString = ""
-    
+    // Current fellow identity (from appState - more reliable than @AppStorage)
     private var currentFellowId: UUID? {
-        UUID(uuidString: selectedFellowIdString)
+        appState.selectedFellowId
     }
     
     private var isEditing: Bool {
@@ -367,6 +365,34 @@ struct AddEditCaseView: View {
                     if isEditing {
                         deleteSection
                     }
+
+                    #if DEBUG
+                    // Debug section showing save requirements
+                    Section {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("DEBUG - Save Requirements:")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                            Text("• Fellow ID: \(currentFellowId != nil ? "✅" : "❌ MISSING")")
+                                .font(.caption2)
+                            Text("• Facility: \(selectedFacilityId != nil ? "✅" : "❌ MISSING")")
+                                .font(.caption2)
+                            Text("• Procedures: \(selectedProcedures.isEmpty ? "❌ NONE SELECTED" : "✅ \(selectedProcedures.count)")")
+                                .font(.caption2)
+                            Text("• Attending: \(selectedAttendingId != nil ? "✅" : (isCardiacImagingOnly || isSimplifiedNoninvasiveForm ? "✅ (not required)" : "❌ MISSING"))")
+                                .font(.caption2)
+                            Text("• Specialty Packs: \(hasSpecialtyPacks ? "✅" : "❌ MISSING")")
+                                .font(.caption2)
+                            Text("• canSave: \(canSave ? "✅ YES" : "❌ NO")")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(canSave ? .green : .red)
+                        }
+                        .foregroundColor(.orange)
+                    } header: {
+                        Text("Debug Info")
+                    }
+                    #endif
                 }
             }
             .navigationTitle(isEditing ? "Edit Case" : "New Case")
@@ -1268,7 +1294,18 @@ struct AddEditCaseView: View {
     // MARK: - Actions
     
     private func saveCase() {
-        guard let fellowId = currentFellowId else { return }
+        #if DEBUG
+        print("📝 saveCase() called")
+        print("   - currentFellowId: \(currentFellowId?.uuidString ?? "NIL")")
+        print("   - appState.selectedFellowId: \(appState.selectedFellowId?.uuidString ?? "NIL")")
+        #endif
+
+        guard let fellowId = currentFellowId else {
+            #if DEBUG
+            print("❌ saveCase() returning early - no fellowId!")
+            #endif
+            return
+        }
 
         // Cardiac imaging cases don't require an attending
         let attendingId = selectedAttendingId

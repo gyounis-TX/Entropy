@@ -44,7 +44,13 @@ struct SettingsView: View {
     @AppStorage("pushNotificationsEnabled") private var pushNotificationsEnabled = false
     @AppStorage("attestationAlertsEnabled") private var attestationAlertsEnabled = true
     @AppStorage("rejectedCasesAlertsEnabled") private var rejectedCasesAlertsEnabled = true
+    @AppStorage("notificationFrequency") private var notificationFrequencyRaw = NotificationFrequency.immediate.rawValue
     @State private var showingNotificationsSheet = false
+
+    private var notificationFrequency: NotificationFrequency {
+        get { NotificationFrequency(rawValue: notificationFrequencyRaw) ?? .immediate }
+        set { notificationFrequencyRaw = newValue.rawValue }
+    }
 
     // Identity selection sheets
     @State private var showingFellowIdentityPicker = false
@@ -352,19 +358,30 @@ struct SettingsView: View {
             )
 
             if pushNotificationsEnabled {
+                // Attested Cases (when attending attests your case)
                 SettingsPillToggle(
                     icon: "checkmark.seal.fill",
                     iconColor: .green,
-                    title: "Attestation Alerts",
+                    title: "Attested Cases",
                     isOn: $attestationAlertsEnabled
                 )
                 .padding(.leading, 20)
 
+                // Rejected Cases
                 SettingsPillToggle(
                     icon: "xmark.seal.fill",
                     iconColor: .orange,
                     title: "Rejected Cases",
                     isOn: $rejectedCasesAlertsEnabled
+                )
+                .padding(.leading, 20)
+
+                // Frequency picker
+                NotificationFrequencyPicker(
+                    selectedFrequency: Binding(
+                        get: { NotificationFrequency(rawValue: notificationFrequencyRaw) ?? .immediate },
+                        set: { notificationFrequencyRaw = $0.rawValue }
+                    )
                 )
                 .padding(.leading, 20)
             }
@@ -863,19 +880,30 @@ struct SettingsView: View {
                 )
 
                 if pushNotificationsEnabled {
+                    // Attested Cases (when attending attests your case)
                     SettingsPillToggle(
                         icon: "checkmark.seal.fill",
                         iconColor: .green,
-                        title: "Attestation Alerts",
+                        title: "Attested Cases",
                         isOn: $attestationAlertsEnabled
                     )
                     .padding(.leading, 20)
 
+                    // Rejected Cases
                     SettingsPillToggle(
                         icon: "xmark.seal.fill",
                         iconColor: .orange,
                         title: "Rejected Cases",
                         isOn: $rejectedCasesAlertsEnabled
+                    )
+                    .padding(.leading, 20)
+
+                    // Frequency picker
+                    NotificationFrequencyPicker(
+                        selectedFrequency: Binding(
+                            get: { NotificationFrequency(rawValue: notificationFrequencyRaw) ?? .immediate },
+                            set: { notificationFrequencyRaw = $0.rawValue }
+                        )
                     )
                     .padding(.leading, 20)
                 }
@@ -894,10 +922,11 @@ struct SettingsView: View {
                 SectionHeader(title: "PROFILE")
 
                 // Show role-based profile
+                // For attendings, use selectedAttendingName since they may not have a User object
                 SettingsPillRowWithRole(
                     icon: roleIcon,
                     iconColor: roleColor,
-                    title: appState.currentUser?.displayName ?? "User",
+                    title: appState.userRole == .attending ? selectedAttendingName : (appState.currentUser?.displayName ?? "User"),
                     roleBadge: appState.userRole.displayName,
                     roleBadgeColor: roleColor,
                     showChevron: true
@@ -940,21 +969,34 @@ struct SettingsView: View {
                     isOn: $pushNotificationsEnabled
                 )
 
-                // Conditional notification options
+                // Role-specific notification options
                 if pushNotificationsEnabled {
-                    SettingsPillToggle(
-                        icon: "checkmark.seal.fill",
-                        iconColor: .green,
-                        title: "Attestation Alerts",
-                        isOn: $attestationAlertsEnabled
-                    )
-                    .padding(.leading, 20)
+                    if appState.userRole == .attending {
+                        // Attending: Pending Attestation Requests (no rejected cases option)
+                        SettingsPillToggle(
+                            icon: "paperplane.fill",
+                            iconColor: .blue,
+                            title: "Pending Attestations",
+                            isOn: $attestationAlertsEnabled
+                        )
+                        .padding(.leading, 20)
+                    } else if appState.userRole == .admin {
+                        // Admin: Program Updates (no attestation alerts option)
+                        SettingsPillToggle(
+                            icon: "bell.badge.fill",
+                            iconColor: .purple,
+                            title: "Program Updates",
+                            isOn: $rejectedCasesAlertsEnabled
+                        )
+                        .padding(.leading, 20)
+                    }
 
-                    SettingsPillToggle(
-                        icon: "xmark.seal.fill",
-                        iconColor: .orange,
-                        title: "Rejected Cases",
-                        isOn: $rejectedCasesAlertsEnabled
+                    // Frequency picker for both roles
+                    NotificationFrequencyPicker(
+                        selectedFrequency: Binding(
+                            get: { NotificationFrequency(rawValue: notificationFrequencyRaw) ?? .immediate },
+                            set: { notificationFrequencyRaw = $0.rawValue }
+                        )
                     )
                     .padding(.leading, 20)
                 }
@@ -1251,6 +1293,60 @@ struct SettingsPillToggle: View {
             // Toggle
             Toggle("", isOn: $isOn)
                 .labelsHidden()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Notification Frequency Picker
+
+struct NotificationFrequencyPicker: View {
+    @Binding var selectedFrequency: NotificationFrequency
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: selectedFrequency.icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.indigo)
+                .frame(width: 28, height: 28)
+
+            // Title
+            Text("Frequency")
+                .font(.body)
+                .fontWeight(.medium)
+                .foregroundColor(Color(UIColor.label))
+
+            Spacer()
+
+            // Picker
+            Menu {
+                ForEach(NotificationFrequency.allCases) { frequency in
+                    Button {
+                        selectedFrequency = frequency
+                    } label: {
+                        HStack {
+                            Image(systemName: frequency.icon)
+                            Text(frequency.displayName)
+                            if selectedFrequency == frequency {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedFrequency.displayName)
+                        .font(.subheadline)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundColor(Color(UIColor.tertiaryLabel))
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -3111,9 +3207,13 @@ struct DevRoleSwitcherSheet: View {
                 Section("Switch to Role") {
                     Button {
                         appState.devSignIn(role: .fellow)
-                        // Auto-select first fellow if none selected
+                        // Auto-select first fellow if none selected and set currentUser
                         if appState.selectedFellowId == nil, let firstFellow = availableFellows.first {
                             appState.selectedFellowId = firstFellow.id
+                            appState.currentUser = firstFellow
+                        } else if let selectedId = appState.selectedFellowId,
+                                  let selectedFellow = availableFellows.first(where: { $0.id == selectedId }) {
+                            appState.currentUser = selectedFellow
                         }
                         dismiss()
                     } label: {
@@ -3696,6 +3796,7 @@ struct FellowIdentityPickerSheet: View {
                         ForEach(fellows) { fellow in
                             Button {
                                 appState.selectedFellowId = fellow.id
+                                appState.currentUser = fellow  // Also set currentUser for profile display
                                 dismiss()
                             } label: {
                                 HStack {

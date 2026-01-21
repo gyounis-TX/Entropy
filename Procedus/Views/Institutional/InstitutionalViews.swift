@@ -309,8 +309,10 @@ struct AttestationDetailSheet: View {
     private func attest() {
         guard let attestorId = UUID(uuidString: UserDefaults.standard.string(forKey: "selectedAttendingId") ?? "") else { return }
 
-        // Save evaluation responses as array of strings
-        caseEntry.evaluationChecks = evaluationResponses.map { "\($0.key.uuidString):\($0.value)" }
+        // Save evaluation responses using new JSON format
+        caseEntry.evaluationResponses = evaluationResponses.reduce(into: [String: String]()) { result, pair in
+            result[pair.key.uuidString] = pair.value
+        }
 
         // Attest the case
         caseEntry.attestationStatus = .attested
@@ -332,6 +334,17 @@ struct EvaluationFieldView: View {
     @Binding var response: String
 
     var body: some View {
+        switch field.fieldType {
+        case .checkbox:
+            checkboxView
+        case .rating:
+            ratingView
+        default:
+            checkboxView
+        }
+    }
+
+    private var checkboxView: some View {
         Toggle(isOn: Binding(
             get: { response == "true" },
             set: { response = $0 ? "true" : "false" }
@@ -345,6 +358,41 @@ struct EvaluationFieldView: View {
             }
         }
         .toggleStyle(SwitchToggleStyle(tint: ProcedusTheme.primary))
+    }
+
+    private var ratingView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(field.title)
+                    .font(.subheadline)
+                if field.isRequired {
+                    Text("*").foregroundStyle(ProcedusTheme.error)
+                }
+            }
+
+            Picker("Rating", selection: Binding(
+                get: { response.isEmpty ? 0 : (Int(response) ?? 0) },
+                set: { response = $0 == 0 ? "" : String($0) }
+            )) {
+                Text("Not rated").tag(0)
+                ForEach(1...5, id: \.self) { rating in
+                    Text(ratingLabel(for: rating)).tag(rating)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(ProcedusTheme.primary)
+        }
+    }
+
+    private func ratingLabel(for rating: Int) -> String {
+        switch rating {
+        case 1: return "1 - Needs significant improvement"
+        case 2: return "2 - Needs improvement"
+        case 3: return "3 - Meets expectations"
+        case 4: return "4 - Exceeds expectations"
+        case 5: return "5 - Exceptional"
+        default: return "\(rating)"
+        }
     }
 }
 
@@ -545,9 +593,16 @@ struct AdminCaseDetailView: View {
                 }
             }
             
-            // Show evaluation responses
-            if !caseEntry.evaluationChecks.isEmpty {
+            // Show evaluation responses (supports both new and legacy format)
+            if !caseEntry.evaluationResponses.isEmpty || !caseEntry.evaluationChecks.isEmpty {
                 Section("Evaluation") {
+                    // New format: evaluationResponses dictionary
+                    ForEach(Array(caseEntry.evaluationResponses.keys.sorted()), id: \.self) { fieldId in
+                        if let value = caseEntry.evaluationResponses[fieldId] {
+                            EvaluationResponseDisplayRow(fieldId: fieldId, value: value)
+                        }
+                    }
+                    // Legacy format: evaluationChecks array
                     ForEach(caseEntry.evaluationChecks, id: \.self) { check in
                         Text("• \(check)")
                             .font(.subheadline)
@@ -557,5 +612,47 @@ struct AdminCaseDetailView: View {
         }
         .navigationTitle("Case Details")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Evaluation Response Display Row
+
+struct EvaluationResponseDisplayRow: View {
+    @Query private var evaluationFields: [EvaluationField]
+    let fieldId: String
+    let value: String
+
+    private var field: EvaluationField? {
+        if let uuid = UUID(uuidString: fieldId) {
+            return evaluationFields.first { $0.id == uuid }
+        }
+        return nil
+    }
+
+    var body: some View {
+        HStack {
+            if let field = field {
+                Text(field.title)
+                    .font(.subheadline)
+                Spacer()
+                if field.fieldType == .rating, let rating = Int(value) {
+                    HStack(spacing: 2) {
+                        ForEach(1...5, id: \.self) { star in
+                            Image(systemName: star <= rating ? "star.fill" : "star")
+                                .foregroundColor(star <= rating ? .orange : Color(UIColor.tertiaryLabel))
+                                .font(.caption)
+                        }
+                    }
+                } else {
+                    Image(systemName: value == "true" ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(value == "true" ? .green : Color(UIColor.tertiaryLabel))
+                }
+            } else {
+                // Fallback for unknown field ID
+                Text("• \(fieldId): \(value)")
+                    .font(.subheadline)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
+            }
+        }
     }
 }

@@ -101,8 +101,7 @@ struct AttestationQueueView: View {
                     evaluationFields: activeEvaluationFields,
                     evaluationsEnabled: currentProgram?.evaluationsEnabled ?? false,
                     evaluationsRequired: evaluationsRequired,
-                    freeTextEnabled: currentProgram?.evaluationFreeTextEnabled ?? true,
-                    evaluationItems: currentProgram?.evaluationItems ?? []
+                    freeTextEnabled: currentProgram?.evaluationFreeTextEnabled ?? true
                 )
             }
             .alert("Attest All Cases", isPresented: $showingBulkAttestConfirm) {
@@ -368,11 +367,19 @@ struct AttendingAttestationDetailSheet: View {
     let evaluationsEnabled: Bool
     let evaluationsRequired: Bool
     let freeTextEnabled: Bool
-    let evaluationItems: [String]
 
-    @State private var selectedEvaluations: Set<String> = []
+    /// Evaluation responses keyed by field ID
+    /// Values: "true"/"false" for checkboxes, "1"-"5" for ratings
+    @State private var evaluationResponses: [UUID: String] = [:]
     @State private var evaluationComment = ""
     @State private var showingRejectSheet = false
+
+    /// Active (non-archived) evaluation fields, sorted by display order
+    private var activeEvaluationFields: [EvaluationField] {
+        evaluationFields
+            .filter { !$0.isArchived }
+            .sorted { $0.displayOrder < $1.displayOrder }
+    }
 
     private var fellowName: String {
         users.first { $0.id == caseEntry.fellowId || $0.id == caseEntry.ownerId }?.displayName ?? "Unknown"
@@ -394,7 +401,17 @@ struct AttendingAttestationDetailSheet: View {
 
     private var canAttest: Bool {
         if evaluationsRequired {
-            return !selectedEvaluations.isEmpty
+            // Check that all required fields have valid responses
+            let requiredFields = activeEvaluationFields.filter { $0.isRequired }
+            for field in requiredFields {
+                let value = evaluationResponses[field.id] ?? ""
+                if field.fieldType == .checkbox && value != "true" { return false }
+                if field.fieldType == .rating && (value.isEmpty || value == "0") { return false }
+            }
+            // If no required fields but evaluations required, need at least one response
+            if requiredFields.isEmpty && evaluationResponses.isEmpty {
+                return false
+            }
         }
         return true
     }
@@ -504,52 +521,115 @@ struct AttendingAttestationDetailSheet: View {
                 }
             }
 
-            ForEach(evaluationItems, id: \.self) { item in
-                Button {
-                    if selectedEvaluations.contains(item) {
-                        selectedEvaluations.remove(item)
-                    } else {
-                        selectedEvaluations.insert(item)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: selectedEvaluations.contains(item) ? "checkmark.square.fill" : "square")
-                            .foregroundColor(selectedEvaluations.contains(item) ? .blue : Color(UIColor.tertiaryLabel))
-                        Text(item)
-                            .font(.subheadline)
-                            .foregroundColor(Color(UIColor.label))
-                        Spacer()
-                    }
+            if activeEvaluationFields.isEmpty {
+                Text("No evaluation criteria configured")
+                    .font(.subheadline)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
+                    .italic()
+            } else {
+                ForEach(activeEvaluationFields) { field in
+                    EvaluationFieldInputView(
+                        field: field,
+                        value: Binding(
+                            get: { evaluationResponses[field.id] ?? "" },
+                            set: { evaluationResponses[field.id] = $0 }
+                        )
+                    )
                 }
-                .buttonStyle(.plain)
-            }
-
-            // Custom evaluation fields
-            ForEach(evaluationFields) { field in
-                Button {
-                    if selectedEvaluations.contains(field.title) {
-                        selectedEvaluations.remove(field.title)
-                    } else {
-                        selectedEvaluations.insert(field.title)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: selectedEvaluations.contains(field.title) ? "checkmark.square.fill" : "square")
-                            .foregroundColor(selectedEvaluations.contains(field.title) ? .blue : Color(UIColor.tertiaryLabel))
-                        Text(field.title)
-                            .font(.subheadline)
-                            .foregroundColor(Color(UIColor.label))
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
             }
         }
     }
+}
 
+// MARK: - Evaluation Field Input View
+
+/// Renders different UI based on evaluation field type
+struct EvaluationFieldInputView: View {
+    let field: EvaluationField
+    @Binding var value: String
+
+    var body: some View {
+        switch field.fieldType {
+        case .checkbox:
+            checkboxView
+        case .rating:
+            ratingView
+        default:
+            checkboxView  // Fallback for future field types
+        }
+    }
+
+    private var checkboxView: some View {
+        Button {
+            value = (value == "true") ? "false" : "true"
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: value == "true" ? "checkmark.square.fill" : "square")
+                    .foregroundColor(value == "true" ? .blue : Color(UIColor.tertiaryLabel))
+                    .font(.title3)
+                Text(field.title)
+                    .font(.subheadline)
+                    .foregroundColor(Color(UIColor.label))
+                if field.isRequired {
+                    Text("*")
+                        .foregroundColor(.red)
+                        .font(.subheadline)
+                }
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var ratingView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(field.title)
+                    .font(.subheadline)
+                if field.isRequired {
+                    Text("*")
+                        .foregroundColor(.red)
+                        .font(.subheadline)
+                }
+            }
+
+            // Rating picker with descriptive labels
+            Picker("Rating", selection: Binding(
+                get: { Int(value) ?? 0 },
+                set: { value = String($0) }
+            )) {
+                Text("Select rating...").tag(0)
+                ForEach(1...5, id: \.self) { rating in
+                    Text("\(rating) - \(ratingLabel(rating))").tag(rating)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(.blue)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 12)
+            .background(Color(UIColor.tertiarySystemFill))
+            .cornerRadius(8)
+        }
+    }
+
+    private func ratingLabel(_ rating: Int) -> String {
+        switch rating {
+        case 1: return "Needs significant improvement"
+        case 2: return "Needs improvement"
+        case 3: return "Meets expectations"
+        case 4: return "Exceeds expectations"
+        case 5: return "Exceptional"
+        default: return ""
+        }
+    }
+}
+
+// MARK: - Attending Attestation Detail Sheet Extensions
+
+extension AttendingAttestationDetailSheet {
     // MARK: - Comments Section
 
-    private var commentsSection: some View {
+    var commentsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Feedback for Fellow")
                 .font(.headline)
@@ -568,7 +648,7 @@ struct AttendingAttestationDetailSheet: View {
 
     // MARK: - Action Buttons
 
-    private var actionButtonsSection: some View {
+    var actionButtonsSection: some View {
         VStack(spacing: 12) {
             Button {
                 attestCase()
@@ -605,11 +685,17 @@ struct AttendingAttestationDetailSheet: View {
         .padding(.top, 8)
     }
 
-    private func attestCase() {
+    func attestCase() {
         caseEntry.attestationStatus = .attested
         caseEntry.attestedAt = Date()
         caseEntry.attestorId = attestorId
-        caseEntry.evaluationChecks = Array(selectedEvaluations)
+
+        // Store evaluation responses in new JSON format
+        var responses: [String: String] = [:]
+        for (fieldId, value) in evaluationResponses {
+            responses[fieldId.uuidString] = value
+        }
+        caseEntry.evaluationResponses = responses
         caseEntry.evaluationComment = evaluationComment.isEmpty ? nil : evaluationComment
 
         do {

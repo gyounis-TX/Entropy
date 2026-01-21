@@ -393,7 +393,7 @@ class ProcedureLogImporter {
     
     func mapProcedure(name: String) -> MappedProcedure {
         let searchName = name.uppercased().trimmingCharacters(in: .whitespaces)
-        
+
         // Check aliases first
         if let expanded = procedureAliases[searchName] {
             return MappedProcedure(
@@ -405,17 +405,30 @@ class ProcedureLogImporter {
                 suggestedMatches: []
             )
         }
-        
+
+        // Check legacy Procedus mappings
+        let legacyResult = LegacyProcedusMigrationService.mapProcedureWithDetails(name)
+        if legacyResult.isSuccessfullyMapped, let mappedId = legacyResult.mappedId {
+            return MappedProcedure(
+                originalName: name,
+                status: MappingStatus.mapped,
+                matchedTagId: mappedId,
+                matchedTitle: legacyResult.mappedTitle ?? name,
+                matchConfidence: legacyResult.confidence,
+                suggestedMatches: []
+            )
+        }
+
         // Search specialty pack procedures
         var suggestions: [ProcedureSuggestion] = []
         let searchLower = name.lowercased()
-        
+
         for pack in SpecialtyPackCatalog.allPacks {
             for category in pack.categories {
                 for procedure in category.procedures {
                     let procLower = procedure.title.lowercased()
                     let confidence = calculateConfidence(search: searchLower, target: procLower)
-                    
+
                     if confidence > 0.3 {
                         suggestions.append(ProcedureSuggestion(
                             tagId: procedure.id,
@@ -427,11 +440,11 @@ class ProcedureLogImporter {
                 }
             }
         }
-        
+
         // Sort by confidence
         suggestions.sort { $0.confidence > $1.confidence }
         suggestions = Array(suggestions.prefix(5))
-        
+
         // Determine status
         if let best = suggestions.first, best.confidence > 0.8 {
             return MappedProcedure(

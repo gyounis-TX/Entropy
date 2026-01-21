@@ -21,6 +21,8 @@ struct IndividualLogView: View {
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
     @State private var selectedPGYLevelFilter: Int? = nil  // For PGY year filtering
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
+    @State private var caseToDelete: CaseEntry? = nil
+    @State private var showingDeleteConfirmation = false
 
     // Check if we should show case type filter (cardiology with both imaging and other packs)
     private var shouldShowCaseTypeFilter: Bool {
@@ -192,11 +194,28 @@ struct IndividualLogView: View {
                                 .onTapGesture { caseToEdit = caseEntry }
                         }
                         .onDelete { offsets in
-                            for i in offsets { modelContext.delete(casesForSelectedRange[i]) }
-                            try? modelContext.save()
+                            // Show confirmation before deleting
+                            if let firstIndex = offsets.first {
+                                caseToDelete = casesForSelectedRange[firstIndex]
+                                showingDeleteConfirmation = true
+                            }
                         }
                     }
                     .listStyle(.insetGrouped)
+                    .alert("Delete Case?", isPresented: $showingDeleteConfirmation) {
+                        Button("Cancel", role: .cancel) {
+                            caseToDelete = nil
+                        }
+                        Button("Delete", role: .destructive) {
+                            if let caseEntry = caseToDelete {
+                                modelContext.delete(caseEntry)
+                                try? modelContext.save()
+                            }
+                            caseToDelete = nil
+                        }
+                    } message: {
+                        Text("This action cannot be undone. The case and all its procedures will be permanently removed.")
+                    }
                 }
             }
             .background(ProcedusTheme.background)

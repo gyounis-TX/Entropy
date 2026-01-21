@@ -248,40 +248,67 @@ enum ProcedureCategory: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     
     /// Bubble letter for category visualization
+    /// Letters should be the first letter of the category name where possible
+    /// Where conflicts exist, use distinct colors to differentiate
     var bubbleLetter: String? {
         switch self {
-        case .cardiacDiagnostic: return "D"
-        case .coronaryIntervention: return "C"
-        case .peripheralArterial: return "P"
-        case .venousPE: return "V"
-        case .structuralValve: return "S"
-        case .aortic: return "A"
-        case .mcs: return "M"
-        case .ep, .epDiagnostic: return "E"
-        case .ablation: return "B"
-        case .implants: return "I"
-        case .closureDevices: return nil
-        case .bedside: return "B"
+        // Interventional Cardiology categories
+        case .cardiacDiagnostic: return "D"   // Diagnostic
+        case .coronaryIntervention: return "C" // Coronary
+        case .peripheralArterial: return "P"   // Peripheral
+        case .venousPE: return "V"             // Venous
+        case .structuralValve: return "S"      // Structural
+        case .aortic: return "A"               // Aortic
+        case .mcs: return "M"                  // MCS
+        case .bedside: return "B"              // Bedside
+        case .closureDevices: return nil       // No bubble for closure devices
+
+        // Electrophysiology categories
+        case .ep, .epDiagnostic: return "E"   // EP
+        case .ablation: return "A"             // Ablation (blue to distinguish from Aortic)
+        case .implants: return "I"             // Implants
+
+        // Cardiac Imaging categories (unique letters to avoid conflicts)
+        case .echo: return "E"                 // Echo (cyan to distinguish from EP green)
+        case .nuclear: return "N"              // Nuclear
+        case .cardiacCT: return "T"            // CT (T for CT scan)
+        case .cardiacMRI: return "R"           // MRI (R for MRI)
+        case .vascularUltrasound: return "U"   // Ultrasound
+
+        // General categories
         case .other: return "O"
         default: return String(rawValue.prefix(1))
         }
     }
     
     /// Color for category bubble
+    /// Each letter+color combination should be unique within a user's enabled packs
     var bubbleColor: Color {
         switch self {
-        case .cardiacDiagnostic: return Color(red: 0.30, green: 0.60, blue: 0.85)
-        case .coronaryIntervention: return Color(red: 0.85, green: 0.35, blue: 0.35)
-        case .peripheralArterial: return Color(red: 0.55, green: 0.40, blue: 0.75)
-        case .venousPE: return Color(red: 0.35, green: 0.45, blue: 0.75)
-        case .structuralValve: return Color(red: 0.95, green: 0.60, blue: 0.25)
-        case .aortic: return Color(red: 0.85, green: 0.45, blue: 0.55)
-        case .mcs: return Color(red: 0.25, green: 0.65, blue: 0.65)
-        case .ep, .epDiagnostic: return Color(red: 0.35, green: 0.65, blue: 0.45)
-        case .ablation: return Color(red: 0.80, green: 0.40, blue: 0.60)
-        case .implants: return Color(red: 0.50, green: 0.50, blue: 0.80)
+        // Interventional Cardiology categories
+        case .cardiacDiagnostic: return Color(red: 0.30, green: 0.60, blue: 0.85)  // Light blue
+        case .coronaryIntervention: return Color(red: 0.85, green: 0.35, blue: 0.35)  // Red
+        case .peripheralArterial: return Color(red: 0.55, green: 0.40, blue: 0.75)  // Purple
+        case .venousPE: return Color(red: 0.35, green: 0.45, blue: 0.75)  // Dark blue
+        case .structuralValve: return Color(red: 0.95, green: 0.60, blue: 0.25)  // Orange
+        case .aortic: return Color(red: 0.85, green: 0.45, blue: 0.55)  // Pink/Rose
+        case .mcs: return Color(red: 0.25, green: 0.65, blue: 0.65)  // Teal
+        case .bedside: return Color(red: 0.55, green: 0.55, blue: 0.55)  // Gray
         case .closureDevices: return .clear
-        case .bedside: return Color(red: 0.55, green: 0.55, blue: 0.55)  // Gray for bedside
+
+        // Electrophysiology categories
+        case .ep, .epDiagnostic: return Color(red: 0.35, green: 0.65, blue: 0.45)  // Green
+        case .ablation: return Color(red: 0.30, green: 0.50, blue: 0.85)  // Blue (distinct from Aortic pink)
+        case .implants: return Color(red: 0.50, green: 0.50, blue: 0.80)  // Purple-blue
+
+        // Cardiac Imaging categories (distinct from cardiology)
+        case .echo: return Color(red: 0.00, green: 0.75, blue: 0.75)  // Cyan (distinct from EP green)
+        case .nuclear: return Color(red: 0.75, green: 0.55, blue: 0.00)  // Gold/Amber
+        case .cardiacCT: return Color(red: 0.60, green: 0.30, blue: 0.60)  // Magenta
+        case .cardiacMRI: return Color(red: 0.20, green: 0.50, blue: 0.70)  // Steel blue
+        case .vascularUltrasound: return Color(red: 0.45, green: 0.70, blue: 0.50)  // Sage green
+
+        // General categories
         case .other: return Color(red: 0.50, green: 0.55, blue: 0.60)
         default: return Color(red: 0.45, green: 0.55, blue: 0.65)
         }
@@ -785,6 +812,44 @@ enum OperatorPosition: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .primary: return "1.circle.fill"
         case .secondary: return "2.circle.fill"
+        }
+    }
+}
+
+// MARK: - Notification Frequency
+
+enum NotificationFrequency: String, Codable, CaseIterable, Identifiable {
+    case immediate = "immediate"
+    case daily = "daily"
+    case weekly = "weekly"
+    case monthly = "monthly"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .immediate: return "Immediate"
+        case .daily: return "Daily Digest"
+        case .weekly: return "Weekly Digest"
+        case .monthly: return "Monthly Digest"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .immediate: return "Get notified right away"
+        case .daily: return "One summary each day"
+        case .weekly: return "One summary each week"
+        case .monthly: return "One summary each month"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .immediate: return "bolt.fill"
+        case .daily: return "sun.max.fill"
+        case .weekly: return "calendar.badge.clock"
+        case .monthly: return "calendar"
         }
     }
 }

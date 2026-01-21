@@ -133,10 +133,174 @@ class ExportService {
         return url
     }
     
+    // MARK: - Evaluation Summary Export
+
+    struct EvaluationExportData {
+        let fellowName: String
+        let dateRange: String
+        let totalEvaluations: Int
+        let fieldMetrics: [FieldMetric]
+        let comments: [CommentEntry]
+
+        struct FieldMetric {
+            let title: String
+            let fieldType: String  // "checkbox" or "rating"
+            let average: Double?   // nil for checkbox, 1-5 for rating
+            let count: Int
+            let total: Int         // total cases evaluated
+            let percentage: Double // for checkbox: % checked, for rating: average as %
+        }
+
+        struct CommentEntry {
+            let comment: String
+            let attendingName: String
+            let date: Date
+            let formattedDate: String
+        }
+    }
+
+    func exportEvaluationSummaryToCSV(_ data: EvaluationExportData, filename: String) -> URL? {
+        var csv = "EVALUATION SUMMARY REPORT\n"
+        csv += "Fellow,\(escape(data.fellowName))\n"
+        csv += "Date Range,\(data.dateRange)\n"
+        csv += "Total Evaluations,\(data.totalEvaluations)\n\n"
+
+        csv += "METRICS\n"
+        csv += "Field,Type,Value,Count\n"
+        for metric in data.fieldMetrics {
+            let value: String
+            if metric.fieldType == "rating", let avg = metric.average {
+                value = String(format: "%.1f/5.0", avg)
+            } else {
+                value = "\(metric.count)/\(metric.total) (\(Int(metric.percentage))%)"
+            }
+            csv += "\(escape(metric.title)),\(metric.fieldType),\(value),\(metric.count)\n"
+        }
+
+        csv += "\nCOMMENTS\n"
+        csv += "Date,Attending,Comment\n"
+        for comment in data.comments {
+            csv += "\(comment.formattedDate),\(escape(comment.attendingName)),\(escape(comment.comment))\n"
+        }
+
+        return saveFile(csv, filename: filename)
+    }
+
+    func exportEvaluationSummaryToExcel(_ data: EvaluationExportData, filename: String) -> URL? {
+        var content = "EVALUATION SUMMARY REPORT\n"
+        content += "Fellow:\t\(data.fellowName)\n"
+        content += "Date Range:\t\(data.dateRange)\n"
+        content += "Total Evaluations:\t\(data.totalEvaluations)\n\n"
+
+        content += "METRICS\n"
+        content += "Field\tType\tValue\tCount\n"
+        for metric in data.fieldMetrics {
+            let value: String
+            if metric.fieldType == "rating", let avg = metric.average {
+                value = String(format: "%.1f/5.0", avg)
+            } else {
+                value = "\(metric.count)/\(metric.total) (\(Int(metric.percentage))%)"
+            }
+            content += "\(metric.title)\t\(metric.fieldType)\t\(value)\t\(metric.count)\n"
+        }
+
+        content += "\nCOMMENTS\n"
+        content += "Date\tAttending\tComment\n"
+        for comment in data.comments {
+            content += "\(comment.formattedDate)\t\(comment.attendingName)\t\(comment.comment)\n"
+        }
+
+        return saveFile(content, filename: filename)
+    }
+
+    func exportEvaluationSummaryToPDF(_ data: EvaluationExportData, filename: String) -> URL? {
+        let format = UIGraphicsPDFRendererFormat()
+        let pageRect = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: format)
+
+        let data = renderer.pdfData { ctx in
+            ctx.beginPage()
+            var y: CGFloat = 40
+
+            let titleAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 18)]
+            let headerAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 14)]
+            let subAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 11)]
+            let smallAttrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 10)]
+
+            // Title
+            "Evaluation Summary Report".draw(at: CGPoint(x: 40, y: y), withAttributes: titleAttrs)
+            y += 30
+
+            // Fellow info
+            "Fellow: \(data.fellowName)".draw(at: CGPoint(x: 40, y: y), withAttributes: subAttrs)
+            y += 18
+            "Date Range: \(data.dateRange)".draw(at: CGPoint(x: 40, y: y), withAttributes: subAttrs)
+            y += 18
+            "Total Evaluations: \(data.totalEvaluations)".draw(at: CGPoint(x: 40, y: y), withAttributes: subAttrs)
+            y += 30
+
+            // Metrics section
+            "Performance Metrics".draw(at: CGPoint(x: 40, y: y), withAttributes: headerAttrs)
+            y += 22
+
+            for metric in data.fieldMetrics {
+                if y > 720 { ctx.beginPage(); y = 40 }
+                let value: String
+                if metric.fieldType == "rating", let avg = metric.average {
+                    value = String(format: "%.1f / 5.0 ★", avg)
+                } else {
+                    value = "\(metric.count) / \(metric.total) cases (\(Int(metric.percentage))%)"
+                }
+                "• \(metric.title): \(value)".draw(at: CGPoint(x: 50, y: y), withAttributes: subAttrs)
+                y += 16
+            }
+
+            y += 20
+
+            // Comments section
+            if !data.comments.isEmpty {
+                if y > 680 { ctx.beginPage(); y = 40 }
+                "Evaluation Comments".draw(at: CGPoint(x: 40, y: y), withAttributes: headerAttrs)
+                y += 22
+
+                for comment in data.comments {
+                    if y > 720 { ctx.beginPage(); y = 40 }
+                    "\(comment.formattedDate) - \(comment.attendingName):".draw(at: CGPoint(x: 50, y: y), withAttributes: smallAttrs)
+                    y += 14
+
+                    // Word wrap long comments
+                    let words = comment.comment.split(separator: " ")
+                    var line = ""
+                    for word in words {
+                        let testLine = line.isEmpty ? String(word) : "\(line) \(word)"
+                        if testLine.count > 80 {
+                            if y > 720 { ctx.beginPage(); y = 40 }
+                            "  \(line)".draw(at: CGPoint(x: 50, y: y), withAttributes: smallAttrs)
+                            y += 12
+                            line = String(word)
+                        } else {
+                            line = testLine
+                        }
+                    }
+                    if !line.isEmpty {
+                        if y > 720 { ctx.beginPage(); y = 40 }
+                        "  \(line)".draw(at: CGPoint(x: 50, y: y), withAttributes: smallAttrs)
+                        y += 12
+                    }
+                    y += 8
+                }
+            }
+        }
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try? data.write(to: url)
+        return url
+    }
+
     private func escape(_ s: String) -> String {
         s.contains(",") || s.contains("\"") ? "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\"" : s
     }
-    
+
     private func saveFile(_ content: String, filename: String) -> URL? {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         try? content.write(to: url, atomically: true, encoding: .utf8)

@@ -220,88 +220,51 @@ struct AdminDashboardView: View {
     // MARK: - Management Section
 
     private var managementSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             // TRAINING PROGRAM Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Training Program")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 4)
-                    .padding(.top, 8)
+            AdminSectionHeader(title: "TRAINING PROGRAM")
 
-                VStack(spacing: 0) {
-                    NavigationLink { ManageProgramView() } label: {
-                        AdminMenuRow(icon: "gearshape.fill", iconColor: .gray, title: "Program Settings")
-                    }
+            NavigationLink { ManageProgramView() } label: {
+                AdminPillRow(icon: "gearshape.fill", iconColor: .gray, title: "Program Settings")
+            }
 
-                    Divider().padding(.leading, 52)
+            NavigationLink { FellowManagementView() } label: {
+                AdminPillRow(icon: "person.2.fill", iconColor: .blue, title: "Fellows", badge: fellowCount > 0 ? "\(fellowCount)" : nil)
+            }
 
-                    NavigationLink { FellowManagementView() } label: {
-                        AdminMenuRow(icon: "person.2.fill", iconColor: .blue, title: "Fellows", badge: "\(fellowCount)")
-                    }
+            Button { showingSpecialtyPacks = true } label: {
+                AdminPillRow(icon: "square.stack.3d.up.fill", iconColor: .purple, title: "Specialty Packs", badge: enabledPacksCount > 0 ? "\(enabledPacksCount)" : nil)
+            }
 
-                    Divider().padding(.leading, 52)
+            NavigationLink { AttendingManagementView() } label: {
+                AdminPillRow(icon: "stethoscope", iconColor: .green, title: "Attendings", badge: attendingCount > 0 ? "\(attendingCount)" : nil)
+            }
 
-                    Button { showingSpecialtyPacks = true } label: {
-                        AdminMenuRow(icon: "square.stack.3d.up.fill", iconColor: .purple, title: "Specialty Packs", badge: enabledPacksCount > 0 ? "\(enabledPacksCount)" : nil, showChevron: true)
-                    }
+            NavigationLink { FacilityManagementView() } label: {
+                AdminPillRow(icon: "building.2.fill", iconColor: Color(red: 0.2, green: 0.4, blue: 0.8), title: "Hospitals", badge: facilityCount > 0 ? "\(facilityCount)" : nil)
+            }
 
-                    Divider().padding(.leading, 52)
-
-                    NavigationLink { AttendingManagementView() } label: {
-                        AdminMenuRow(icon: "stethoscope", iconColor: .green, title: "Attendings", badge: "\(attendingCount)")
-                    }
-
-                    Divider().padding(.leading, 52)
-
-                    NavigationLink { FacilityManagementView() } label: {
-                        AdminMenuRow(icon: "building.2.fill", iconColor: Color(red: 0.2, green: 0.4, blue: 0.8), title: "Hospitals", badge: "\(facilityCount)")
-                    }
-
-                    Divider().padding(.leading, 52)
-
-                    NavigationLink { ManageEvaluationsView() } label: {
-                        AdminMenuRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Evaluations", badge: currentProgram?.evaluationsEnabled == true ? "On" : nil, badgeColor: .green)
-                    }
-                }
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(12)
+            NavigationLink { ManageEvaluationsView() } label: {
+                AdminPillRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Evaluations", statusBadge: currentProgram?.evaluationsEnabled == true ? "On" : nil, statusColor: .green)
             }
 
             // PROCEDURES Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Procedures")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 4)
+            AdminSectionHeader(title: "PROCEDURES")
 
-                VStack(spacing: 0) {
-                    Button { showingCustomProcedures = true } label: {
-                        AdminMenuRow(icon: "list.clipboard.fill", iconColor: Color(red: 0.9, green: 0.4, blue: 0.5), title: "Custom Procedures", badge: customProcedureCount > 0 ? "\(customProcedureCount)" : nil, showChevron: true)
-                    }
+            Button { showingCustomProcedures = true } label: {
+                AdminPillRow(icon: "list.clipboard.fill", iconColor: Color(red: 0.9, green: 0.4, blue: 0.5), title: "Custom Procedures", badge: customProcedureCount > 0 ? "\(customProcedureCount)" : nil)
+            }
 
-                    Divider().padding(.leading, 52)
+            Button { showingCustomAccessSites = true } label: {
+                AdminPillRow(icon: "arrow.triangle.branch", iconColor: .gray, title: "Custom Access Sites", badge: customAccessSiteCount > 0 ? "\(customAccessSiteCount)" : nil)
+            }
 
-                    Button { showingCustomAccessSites = true } label: {
-                        AdminMenuRow(icon: "arrow.triangle.branch", iconColor: .gray, title: "Custom Access Sites", badge: customAccessSiteCount > 0 ? "\(customAccessSiteCount)" : nil, showChevron: true)
-                    }
+            Button { showingCustomComplications = true } label: {
+                AdminPillRow(icon: "exclamationmark.triangle.fill", iconColor: .yellow, title: "Custom Complications", badge: customComplicationCount > 0 ? "\(customComplicationCount)" : nil)
+            }
 
-                    Divider().padding(.leading, 52)
-
-                    Button { showingCustomComplications = true } label: {
-                        AdminMenuRow(icon: "exclamationmark.triangle.fill", iconColor: .yellow, title: "Custom Complications", badge: customComplicationCount > 0 ? "\(customComplicationCount)" : nil, showChevron: true)
-                    }
-
-                    Divider().padding(.leading, 52)
-
-                    Button { showingCustomProcedureDetails = true } label: {
-                        AdminMenuRow(icon: "slider.horizontal.3", iconColor: .cyan, title: "Procedure Details", badge: customProcedureDetailCount > 0 ? "\(customProcedureDetailCount)" : nil, showChevron: true)
-                    }
-                }
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(12)
+            Button { showingCustomProcedureDetails = true } label: {
+                AdminPillRow(icon: "slider.horizontal.3", iconColor: .cyan, title: "Procedure Details", badge: customProcedureDetailCount > 0 ? "\(customProcedureDetailCount)" : nil)
             }
         }
     }
@@ -309,70 +272,44 @@ struct AdminDashboardView: View {
     // MARK: - Reports Section
 
     private var reportsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Reports")
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .padding(.leading, 4)
-                .padding(.top, 8)
+        VStack(spacing: 8) {
+            AdminSectionHeader(title: "REPORTS")
 
-            VStack(spacing: 0) {
-                NavigationLink { AttestationDashboardView() } label: {
-                    AdminMenuRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Attestation Dashboard", badge: pendingCases > 0 ? "\(pendingCases) pending" : nil, badgeColor: .orange)
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { AdminCaseLogView() } label: {
-                    AdminMenuRow(icon: "doc.text.fill", iconColor: .blue, title: "Case Log", badge: "\(totalCases) cases")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { ProcedureCountsView() } label: {
-                    AdminMenuRow(icon: "number.circle.fill", iconColor: .green, title: "Procedure Counts")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { ReportsByFellowView() } label: {
-                    AdminMenuRow(icon: "person.2.fill", iconColor: .blue, title: "Reports by Fellow")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { EvaluationSummaryView() } label: {
-                    AdminMenuRow(icon: "star.fill", iconColor: .yellow, title: "Evaluation Summary")
-                }
-
-                Divider().padding(.leading, 52)
-
-                NavigationLink { ExportDataView() } label: {
-                    AdminMenuRow(icon: "square.and.arrow.up.fill", iconColor: .purple, title: "Export Data")
-                }
+            NavigationLink { AttestationDashboardView() } label: {
+                AdminPillRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Attestation Dashboard", statusBadge: pendingCases > 0 ? "\(pendingCases) pending" : nil, statusColor: .orange)
             }
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
+
+            NavigationLink { AdminCaseLogView() } label: {
+                AdminPillRow(icon: "doc.text.fill", iconColor: .blue, title: "Case Log", subtitle: "\(totalCases) cases")
+            }
+
+            NavigationLink { ProcedureCountsView() } label: {
+                AdminPillRow(icon: "number.circle.fill", iconColor: .green, title: "Procedure Counts")
+            }
+
+            NavigationLink { ReportsByFellowView() } label: {
+                AdminPillRow(icon: "person.2.fill", iconColor: .blue, title: "Reports by Fellow")
+            }
+
+            NavigationLink { EvaluationSummaryView() } label: {
+                AdminPillRow(icon: "star.fill", iconColor: .yellow, title: "Evaluation Summary")
+            }
+
+            NavigationLink { ExportDataView() } label: {
+                AdminPillRow(icon: "square.and.arrow.up.fill", iconColor: .purple, title: "Export Data")
+            }
         }
     }
 
     // MARK: - Access Section
 
     private var accessSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Access")
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .padding(.leading, 4)
-                .padding(.top, 8)
+        VStack(spacing: 8) {
+            AdminSectionHeader(title: "ACCESS")
 
             Button { showingInviteCodes = true } label: {
-                AdminMenuRow(icon: "qrcode", iconColor: .purple, title: "Manage Invite Codes", showChevron: true)
+                AdminPillRow(icon: "qrcode", iconColor: .purple, title: "Manage Invite Codes")
             }
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
         }
     }
 
@@ -382,59 +319,38 @@ struct AdminDashboardView: View {
     @State private var showingResetDevConfirmation = false
 
     private var developerToolsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Developer Tools")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+        VStack(spacing: 8) {
+            AdminSectionHeader(title: "DEVELOPER TOOLS", icon: "hammer.fill", iconColor: .orange)
 
-                Image(systemName: "hammer.fill")
-                    .font(.caption2)
-                    .foregroundColor(.orange)
+            // Populate Dev Program
+            Button { showingPopulateDevConfirmation = true } label: {
+                AdminPillRow(
+                    icon: "wand.and.stars",
+                    iconColor: .purple,
+                    title: "Populate Dev Program",
+                    statusBadge: devDataPopulated || currentProgram?.name == "My Great Fellowship" ? "Active" : nil,
+                    statusColor: .green,
+                    showChevron: false
+                )
             }
-            .padding(.leading, 4)
-            .padding(.top, 8)
+            .disabled(currentProgram?.name == "My Great Fellowship")
 
-            VStack(spacing: 0) {
-                // Populate Dev Program
-                Button { showingPopulateDevConfirmation = true } label: {
-                    AdminMenuRow(
-                        icon: "wand.and.stars",
-                        iconColor: .purple,
-                        title: "Populate Dev Program",
-                        badge: devDataPopulated || currentProgram?.name == "My Great Fellowship" ? "Active" : nil,
-                        badgeColor: .green,
+            // Reset Dev Program (only show if dev program is active)
+            if currentProgram?.name == "My Great Fellowship" {
+                Button { showingResetDevConfirmation = true } label: {
+                    AdminPillRow(
+                        icon: "arrow.counterclockwise",
+                        iconColor: .orange,
+                        title: "Reset Dev Program",
                         showChevron: false
                     )
                 }
-                .disabled(currentProgram?.name == "My Great Fellowship")
-
-                Divider().padding(.leading, 52)
-
-                // Reset Dev Program (only show if dev program is active)
-                if currentProgram?.name == "My Great Fellowship" {
-                    Button { showingResetDevConfirmation = true } label: {
-                        AdminMenuRow(
-                            icon: "arrow.counterclockwise",
-                            iconColor: .orange,
-                            title: "Reset Dev Program",
-                            badge: nil,
-                            badgeColor: .secondary,
-                            showChevron: false
-                        )
-                    }
-
-                    Divider().padding(.leading, 52)
-                }
-
-                // Clear All Cases
-                Button { showingClearDataConfirmation = true } label: {
-                    AdminMenuRow(icon: "trash.fill", iconColor: .red, title: "Clear All Cases & Attestations", badge: "\(totalCases) cases", badgeColor: .secondary, showChevron: false)
-                }
             }
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
+
+            // Clear All Cases
+            Button { showingClearDataConfirmation = true } label: {
+                AdminPillRow(icon: "trash.fill", iconColor: .red, title: "Clear All Cases & Attestations", subtitle: "\(totalCases) cases", showChevron: false)
+            }
 
             Text("Dev program includes: 3 cardiology packs, 3 fellows (Simpsons), 3 attendings, 2 facilities, evaluations enabled, and a custom procedure.")
                 .font(.caption2)
@@ -560,6 +476,19 @@ struct AdminDashboardView: View {
                 modelContext.insert(facility)
                 createdFacilityIds.append(facility.id)
             }
+        }
+
+        // Create admin user (Mrs. Krabappel)
+        if !allUsers.contains(where: { $0.email == "krabappel@springfield.com" }) {
+            let admin = User(
+                email: "krabappel@springfield.com",
+                firstName: "Edna",
+                lastName: "Krabappel",
+                role: .admin,
+                accountMode: .institutional,
+                programId: program.id
+            )
+            modelContext.insert(admin)
         }
 
         // Create fellows (Simpsons) - track IDs as we create
@@ -701,14 +630,19 @@ struct AdminDashboardView: View {
         ]
 
         if !createdFellowIds.isEmpty && !createdAttendingIds.isEmpty && !createdFacilityIds.isEmpty && !invasiveProcedures.isEmpty {
+            // Spread cases over 3 years (156 weeks) for realistic analytics data
+            let threeYearsInWeeks = 156
+
             // Create 10 invasive cases
             for i in 0..<10 {
-                let weeksAgo = Int.random(in: 0...12)
+                let weeksAgo = Int.random(in: 0...threeYearsInWeeks)
                 let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
                 let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
 
+                let randomFellowId = createdFellowIds.randomElement()!
                 let newCase = CaseEntry(
-                    ownerId: createdFellowIds.randomElement()!,
+                    fellowId: randomFellowId,
+                    ownerId: randomFellowId,
                     attendingId: createdAttendingIds.randomElement(),
                     weekBucket: weekBucket,
                     facilityId: createdFacilityIds.randomElement()
@@ -732,12 +666,14 @@ struct AdminDashboardView: View {
             // Create 10 noninvasive cases
             if !noninvasiveProcedures.isEmpty {
                 for i in 0..<10 {
-                    let weeksAgo = Int.random(in: 0...12)
+                    let weeksAgo = Int.random(in: 0...threeYearsInWeeks)
                     let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
                     let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
 
+                    let randomFellowId = createdFellowIds.randomElement()!
                     let newCase = CaseEntry(
-                        ownerId: createdFellowIds.randomElement()!,
+                        fellowId: randomFellowId,
+                        ownerId: randomFellowId,
                         attendingId: nil,
                         weekBucket: weekBucket,
                         facilityId: createdFacilityIds.randomElement()
@@ -762,7 +698,109 @@ struct AdminDashboardView: View {
     #endif
 }
 
-// MARK: - Admin Menu Row
+// MARK: - Admin Section Header
+
+struct AdminSectionHeader: View {
+    let title: String
+    var icon: String? = nil
+    var iconColor: Color = .secondary
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+
+            if let icon = icon {
+                Image(systemName: icon)
+                    .font(.caption2)
+                    .foregroundColor(iconColor)
+            }
+
+            Spacer()
+        }
+        .padding(.leading, 4)
+        .padding(.top, 8)
+    }
+}
+
+// MARK: - Admin Pill Row (matches SettingsPillRow)
+
+struct AdminPillRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    var subtitle: String? = nil
+    var badge: String? = nil
+    var statusBadge: String? = nil
+    var statusColor: Color = .green
+    var showChevron: Bool = true
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(iconColor)
+                .frame(width: 28, height: 28)
+
+            // Title & Subtitle
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(Color(UIColor.label))
+
+                if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Count badge (gray pill)
+            if let badge = badge {
+                Text(badge)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .clipShape(Capsule())
+            }
+
+            // Status badge (colored pill)
+            if let statusBadge = statusBadge {
+                Text(statusBadge)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(statusColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+
+            // Chevron
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(UIColor.tertiaryLabel))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(12)
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Admin Menu Row (legacy - kept for compatibility)
 
 struct AdminMenuRow: View {
     let icon: String
@@ -1982,6 +2020,13 @@ struct FellowManagementView: View {
         }
     }
 
+    private var fellowsByPGY: [(pgyYear: Int?, fellows: [User])] {
+        let fellows = allUsers.filter { $0.role == .fellow && !$0.hasGraduated }
+        let grouped = Dictionary(grouping: fellows) { $0.trainingYear }
+        return grouped.sorted { ($0.key ?? 99) < ($1.key ?? 99) }
+            .map { (pgyYear: $0.key, fellows: $0.value.sorted { $0.displayName < $1.displayName }) }
+    }
+
     private var graduatedFellows: [User] {
         allUsers.filter { $0.role == .fellow && $0.hasGraduated }.sorted { $0.displayName < $1.displayName }
     }
@@ -2016,7 +2061,59 @@ struct FellowManagementView: View {
                         // Active Fellows
                         if activeFellows.isEmpty {
                             emptyStateView(message: "No active fellows")
+                        } else if sortByPGY {
+                            // Grouped by PGY Year
+                            VStack(spacing: 16) {
+                                ForEach(fellowsByPGY, id: \.pgyYear) { group in
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        // PGY Header
+                                        Text(group.pgyYear != nil ? "PGY-\(group.pgyYear!)" : "Unassigned")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+
+                                        // Fellows in this PGY group
+                                        VStack(spacing: 0) {
+                                            ForEach(Array(group.fellows.enumerated()), id: \.element.id) { index, fellow in
+                                                Button {
+                                                    selectedFellow = fellow
+                                                } label: {
+                                                    FellowRowNew(
+                                                        fellow: fellow,
+                                                        procedureCount: procedureCount(for: fellow)
+                                                    )
+                                                }
+                                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                                    if canDelete(fellow: fellow) {
+                                                        Button(role: .destructive) {
+                                                            modelContext.delete(fellow)
+                                                            try? modelContext.save()
+                                                        } label: {
+                                                            Label("Delete", systemImage: "trash")
+                                                        }
+                                                    }
+                                                    Button {
+                                                        fellowToGraduate = fellow
+                                                        showingGraduateConfirm = true
+                                                    } label: {
+                                                        Label("Graduate", systemImage: "graduationcap")
+                                                    }
+                                                    .tint(.blue)
+                                                }
+
+                                                if index < group.fellows.count - 1 {
+                                                    Divider().padding(.leading, 16)
+                                                }
+                                            }
+                                        }
+                                        .background(Color(UIColor.secondarySystemBackground))
+                                        .cornerRadius(12)
+                                    }
+                                }
+                            }
                         } else {
+                            // Sorted by name (flat list)
                             ForEach(Array(activeFellows.enumerated()), id: \.element.id) { index, fellow in
                                 Button {
                                     selectedFellow = fellow
@@ -4269,22 +4366,20 @@ struct ManageEvaluationsView: View {
     @Query private var programs: [Program]
     @Query private var evaluationFields: [EvaluationField]
 
-    @State private var showingAddCustomItem = false
+    @State private var showingAddField = false
+    @State private var fieldToEdit: EvaluationField?
 
     private var program: Program? { programs.first }
 
-    private let defaultEvaluationItems = [
-        "Demonstrates appropriate preparation",
-        "Demonstrates appropriate knowledge",
-        "Demonstrates technical proficiency",
-        "Communicates effectively",
-        "Maintains situational awareness",
-        "Manages complications appropriately",
-        "Shows professional behavior"
-    ]
+    /// All active evaluation fields for this program, sorted by display order
+    private var activeFields: [EvaluationField] {
+        evaluationFields
+            .filter { !$0.isArchived && $0.programId == program?.id }
+            .sorted { $0.displayOrder < $1.displayOrder }
+    }
 
-    private var customFields: [EvaluationField] {
-        evaluationFields.filter { !$0.isDefault && !$0.isArchived }
+    private var maxDisplayOrder: Int {
+        activeFields.map { $0.displayOrder }.max() ?? 0
     }
 
     var body: some View {
@@ -4356,64 +4451,44 @@ struct ManageEvaluationsView: View {
                         Text("Evaluation Settings")
                     }
 
-                    // Default Evaluation Items
+                    // Evaluation Fields (unified list - no more dual source)
                     if program?.evaluationsEnabled == true {
                         Section {
-                            Button {
-                                selectAllDefaults()
-                            } label: {
-                                Label("Use All Default Items", systemImage: "checkmark.circle.fill")
-                                    .font(.subheadline)
-                                    .foregroundColor(.blue)
-                            }
-
-                            ForEach(defaultEvaluationItems, id: \.self) { item in
-                                let isSelected = program?.evaluationItems.contains(item) ?? false
-                                Button {
-                                    toggleDefaultItem(item)
-                                } label: {
-                                    HStack {
-                                        Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                                            .foregroundColor(isSelected ? .blue : Color(UIColor.tertiaryLabel))
-                                        Text(item)
-                                            .font(.subheadline)
-                                            .foregroundColor(Color(UIColor.label))
-                                    }
-                                }
-                            }
-                        } header: {
-                            Text("Default Evaluation Items")
-                        }
-
-                        // Custom Evaluation Items
-                        Section {
-                            if customFields.isEmpty {
-                                Text("No custom items")
+                            if activeFields.isEmpty {
+                                Text("No evaluation criteria configured")
                                     .font(.subheadline)
                                     .foregroundColor(Color(UIColor.secondaryLabel))
                                     .italic()
                             } else {
-                                ForEach(customFields) { field in
-                                    Text(field.title)
-                                        .font(.subheadline)
+                                ForEach(activeFields) { field in
+                                    EvaluationFieldRow(field: field)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            fieldToEdit = field
+                                        }
                                         .swipeActions(edge: .trailing) {
                                             Button(role: .destructive) {
-                                                modelContext.delete(field)
+                                                field.isArchived = true
                                                 try? modelContext.save()
                                             } label: {
-                                                Label("Delete", systemImage: "trash")
+                                                Label("Archive", systemImage: "archivebox")
                                             }
                                         }
                                 }
+                                .onMove { from, to in
+                                    reorderFields(from: from, to: to)
+                                }
                             }
 
-                            Button { showingAddCustomItem = true } label: {
-                                Label("Add Custom Item", systemImage: "plus.circle.fill")
+                            Button { showingAddField = true } label: {
+                                Label("Add Evaluation Criteria", systemImage: "plus.circle.fill")
                                     .font(.subheadline)
                                     .foregroundColor(.blue)
                             }
                         } header: {
-                            Text("Custom Evaluation Items")
+                            Text("Evaluation Criteria")
+                        } footer: {
+                            Text("Checkboxes are marked as met/not met. Ratings use a 1-5 scale.")
                         }
                     }
                 }
@@ -4421,38 +4496,84 @@ struct ManageEvaluationsView: View {
         }
         .navigationTitle("Manage Evaluations")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingAddCustomItem) {
-            AddCustomEvaluationItemSheet()
+        .toolbar {
+            if program?.evaluationsEnabled == true && !activeFields.isEmpty {
+                EditButton()
+            }
+        }
+        .sheet(isPresented: $showingAddField) {
+            AddEvaluationFieldSheet(programId: program?.id, nextDisplayOrder: maxDisplayOrder + 1)
+        }
+        .sheet(item: $fieldToEdit) { field in
+            EditEvaluationFieldSheet(field: field)
         }
     }
 
-    private func selectAllDefaults() {
-        guard let program = program else { return }
-        program.evaluationItems = defaultEvaluationItems
-        program.updatedAt = Date()
-        try? modelContext.save()
-    }
-
-    private func toggleDefaultItem(_ item: String) {
-        guard let program = program else { return }
-        if program.evaluationItems.contains(item) {
-            program.evaluationItems.removeAll { $0 == item }
-        } else {
-            program.evaluationItems.append(item)
+    private func reorderFields(from source: IndexSet, to destination: Int) {
+        var fields = activeFields
+        fields.move(fromOffsets: source, toOffset: destination)
+        for (index, field) in fields.enumerated() {
+            field.displayOrder = index
         }
-        program.updatedAt = Date()
         try? modelContext.save()
     }
 }
 
-// MARK: - Add Custom Evaluation Item Sheet
+// MARK: - Evaluation Field Row
 
-struct AddCustomEvaluationItemSheet: View {
+struct EvaluationFieldRow: View {
+    let field: EvaluationField
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(field.title)
+                    .font(.subheadline)
+
+                HStack(spacing: 8) {
+                    // Field type badge
+                    Text(field.fieldType.displayName)
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(field.fieldType == .rating ? Color.orange.opacity(0.15) : Color.blue.opacity(0.15))
+                        .foregroundColor(field.fieldType == .rating ? .orange : .blue)
+                        .cornerRadius(4)
+
+                    if field.isRequired {
+                        Text("Required")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundColor(.red)
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(Color(UIColor.tertiaryLabel))
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Add Evaluation Field Sheet
+
+struct AddEvaluationFieldSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var programs: [Program]
+
+    let programId: UUID?
+    let nextDisplayOrder: Int
 
     @State private var title = ""
+    @State private var fieldType: EvaluationFieldType = .checkbox
+    @State private var isRequired = false
 
     var body: some View {
         NavigationStack {
@@ -4460,10 +4581,30 @@ struct AddCustomEvaluationItemSheet: View {
                 Section {
                     TextField("Evaluation Criteria", text: $title)
                 } footer: {
-                    Text("Enter the evaluation criteria that attendings will assess.")
+                    Text("Enter the criteria that attendings will assess for each case.")
+                }
+
+                Section("Field Type") {
+                    Picker("Type", selection: $fieldType) {
+                        Text("Checkbox").tag(EvaluationFieldType.checkbox)
+                        Text("Rating (1-5)").tag(EvaluationFieldType.rating)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    if fieldType == .checkbox {
+                        Text("Attendings will check this box if the criteria is met.")
+                    } else {
+                        Text("Attendings will select a rating from 1 (needs improvement) to 5 (excellent).")
+                    }
+                }
+
+                Section {
+                    Toggle("Required for Attestation", isOn: $isRequired)
+                } footer: {
+                    Text("If enabled, attendings must complete this field before they can attest the case.")
                 }
             }
-            .navigationTitle("Add Evaluation Item")
+            .navigationTitle("Add Evaluation Criteria")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -4471,13 +4612,82 @@ struct AddCustomEvaluationItemSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        let field = EvaluationField(title: title, programId: programs.first?.id)
+                        let field = EvaluationField(
+                            title: title,
+                            fieldType: fieldType,
+                            isRequired: isRequired,
+                            displayOrder: nextDisplayOrder,
+                            programId: programId
+                        )
                         modelContext.insert(field)
                         try? modelContext.save()
                         dismiss()
                     }
                     .disabled(title.isEmpty)
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Edit Evaluation Field Sheet
+
+struct EditEvaluationFieldSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let field: EvaluationField
+
+    @State private var title: String = ""
+    @State private var fieldType: EvaluationFieldType = .checkbox
+    @State private var isRequired: Bool = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Evaluation Criteria", text: $title)
+                }
+
+                Section("Field Type") {
+                    Picker("Type", selection: $fieldType) {
+                        Text("Checkbox").tag(EvaluationFieldType.checkbox)
+                        Text("Rating (1-5)").tag(EvaluationFieldType.rating)
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    if fieldType == .checkbox {
+                        Text("Attendings will check this box if the criteria is met.")
+                    } else {
+                        Text("Attendings will select a rating from 1 (needs improvement) to 5 (excellent).")
+                    }
+                }
+
+                Section {
+                    Toggle("Required for Attestation", isOn: $isRequired)
+                }
+            }
+            .navigationTitle("Edit Evaluation Criteria")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        field.title = title
+                        field.fieldType = fieldType
+                        field.isRequired = isRequired
+                        try? modelContext.save()
+                        dismiss()
+                    }
+                    .disabled(title.isEmpty)
+                }
+            }
+            .onAppear {
+                title = field.title
+                fieldType = field.fieldType
+                isRequired = field.isRequired
             }
         }
     }
@@ -4729,6 +4939,36 @@ struct AdminAttestationCaseRow: View {
             Text("\(caseEntry.procedureTagIds.count) procedures")
                 .font(.caption)
                 .foregroundColor(Color(UIColor.tertiaryLabel))
+
+            // Show rejection reason if rejected
+            if caseEntry.attestationStatus == .rejected,
+               let reason = caseEntry.rejectionReason,
+               !reason.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.bubble.fill")
+                        .font(.caption2)
+                    Text(reason)
+                        .font(.caption)
+                        .lineLimit(2)
+                }
+                .foregroundColor(.red)
+                .padding(.top, 2)
+            }
+
+            // Show attestation comment if attested with comment
+            if (caseEntry.attestationStatus == .attested || caseEntry.attestationStatus == .proxyAttested),
+               let comment = caseEntry.attestationComment,
+               !comment.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.caption2)
+                    Text(comment)
+                        .font(.caption)
+                        .lineLimit(2)
+                }
+                .foregroundColor(.green)
+                .padding(.top, 2)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -5190,43 +5430,184 @@ struct FellowProcedureReportView: View {
 struct EvaluationSummaryView: View {
     @Query private var allUsers: [User]
     @Query private var allCases: [CaseEntry]
+    @Query private var evaluationFields: [EvaluationField]
+    @Query private var attendings: [Attending]
+
+    @State private var sortOption: EvaluationSortOption = .fellowName
+    @State private var filterPGY: Int? = nil
+    @State private var showingFilters = false
+
+    enum EvaluationSortOption: String, CaseIterable {
+        case fellowName = "Name"
+        case pgyYear = "PGY Year"
+        case evaluationCount = "Evaluations"
+        case averageRating = "Avg Rating"
+    }
 
     private var fellows: [User] {
-        allUsers.filter { $0.role == .fellow }.sorted { $0.displayName < $1.displayName }
+        var list = allUsers.filter { $0.role == .fellow && !$0.isArchived }
+        if let pgy = filterPGY {
+            list = list.filter { $0.trainingYear == pgy }
+        }
+        return list.sorted { sortComparison($0, $1) }
+    }
+
+    private func sortComparison(_ a: User, _ b: User) -> Bool {
+        switch sortOption {
+        case .fellowName:
+            return a.displayName < b.displayName
+        case .pgyYear:
+            return (a.trainingYear ?? 0) < (b.trainingYear ?? 0)
+        case .evaluationCount:
+            return casesWithEvaluations(for: a).count > casesWithEvaluations(for: b).count
+        case .averageRating:
+            return averageRating(for: a) > averageRating(for: b)
+        }
+    }
+
+    private func casesWithEvaluations(for fellow: User) -> [CaseEntry] {
+        allCases.filter {
+            ($0.fellowId == fellow.id || $0.ownerId == fellow.id) &&
+            (!$0.evaluationResponses.isEmpty || !$0.evaluationChecks.isEmpty)
+        }
+    }
+
+    private func averageRating(for fellow: User) -> Double {
+        let cases = casesWithEvaluations(for: fellow)
+        let ratingFields = evaluationFields.filter { $0.fieldType == .rating && !$0.isArchived }
+        var totalRating = 0.0
+        var ratingCount = 0
+
+        for caseEntry in cases {
+            let responses = caseEntry.evaluationResponses
+            for field in ratingFields {
+                if let valueStr = responses[field.id.uuidString],
+                   let value = Int(valueStr), value > 0 {
+                    totalRating += Double(value)
+                    ratingCount += 1
+                }
+            }
+        }
+
+        return ratingCount > 0 ? totalRating / Double(ratingCount) : 0
+    }
+
+    private var hasAnyEvaluations: Bool {
+        fellows.contains { !casesWithEvaluations(for: $0).isEmpty }
     }
 
     var body: some View {
         List {
-            ForEach(fellows) { fellow in
-                let fellowCases = allCases.filter { ($0.fellowId == fellow.id || $0.ownerId == fellow.id) && !$0.evaluationChecks.isEmpty }
+            // Sort/Filter Section
+            Section {
+                HStack {
+                    Text("Sort by")
+                        .font(.subheadline)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                    Spacer()
+                    Picker("Sort", selection: $sortOption) {
+                        ForEach(EvaluationSortOption.allCases, id: \.self) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
 
-                if !fellowCases.isEmpty {
-                    NavigationLink {
-                        FellowEvaluationDetailView(fellow: fellow, cases: fellowCases)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(fellow.displayName)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Text("\(fellowCases.count) evaluations")
-                                .font(.caption)
-                                .foregroundColor(Color(UIColor.secondaryLabel))
+                HStack {
+                    Text("Filter PGY")
+                        .font(.subheadline)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                    Spacer()
+                    Picker("PGY", selection: $filterPGY) {
+                        Text("All").tag(nil as Int?)
+                        ForEach(1...7, id: \.self) { year in
+                            Text("PGY-\(year)").tag(year as Int?)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+
+            // Fellows List
+            Section {
+                if !hasAnyEvaluations {
+                    Text("No evaluations recorded yet")
+                        .font(.subheadline)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                        .italic()
+                } else {
+                    ForEach(fellows) { fellow in
+                        let fellowCases = casesWithEvaluations(for: fellow)
+
+                        if !fellowCases.isEmpty {
+                            NavigationLink {
+                                FellowEvaluationDetailView(
+                                    fellow: fellow,
+                                    cases: fellowCases,
+                                    evaluationFields: Array(evaluationFields.filter { !$0.isArchived }),
+                                    attendings: Array(attendings)
+                                )
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(fellow.displayName)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        HStack(spacing: 8) {
+                                            if let pgy = fellow.trainingYear {
+                                                Text("PGY-\(pgy)")
+                                                    .font(.caption)
+                                                    .foregroundColor(Color(UIColor.secondaryLabel))
+                                            }
+                                            Text("\(fellowCases.count) evaluations")
+                                                .font(.caption)
+                                                .foregroundColor(Color(UIColor.secondaryLabel))
+                                        }
+                                    }
+                                    Spacer()
+                                    let avg = averageRating(for: fellow)
+                                    if avg > 0 {
+                                        RatingStarsView(rating: avg)
+                                        Text(String(format: "%.1f", avg))
+                                            .font(.caption)
+                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-
-            if fellows.allSatisfy({ fellow in
-                allCases.filter { ($0.fellowId == fellow.id || $0.ownerId == fellow.id) && !$0.evaluationChecks.isEmpty }.isEmpty
-            }) {
-                Text("No evaluations recorded yet")
-                    .font(.subheadline)
-                    .foregroundColor(Color(UIColor.secondaryLabel))
-                    .italic()
-            }
         }
         .navigationTitle("Evaluation Summary")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Rating Stars View
+
+struct RatingStarsView: View {
+    let rating: Double  // 0.0 to 5.0
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { star in
+                Image(systemName: starImage(for: star))
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+
+    private func starImage(for star: Int) -> String {
+        let threshold = Double(star)
+        if rating >= threshold {
+            return "star.fill"
+        } else if rating >= threshold - 0.5 {
+            return "star.leadinghalf.filled"
+        } else {
+            return "star"
+        }
     }
 }
 
@@ -5235,49 +5616,68 @@ struct EvaluationSummaryView: View {
 struct FellowEvaluationDetailView: View {
     let fellow: User
     let cases: [CaseEntry]
+    let evaluationFields: [EvaluationField]
+    let attendings: [Attending]
 
     @State private var showingExport = false
+    @State private var selectedTab = 0
 
-    private var evaluationCounts: [(String, Int)] {
-        var counts: [String: Int] = [:]
-        for caseEntry in cases {
-            for check in caseEntry.evaluationChecks {
-                counts[check, default: 0] += 1
-            }
-        }
-        return counts.sorted { $0.value > $1.value }
+    private var checkboxFields: [EvaluationField] {
+        evaluationFields.filter { $0.fieldType == .checkbox }
     }
 
-    private var comments: [String] {
-        cases.compactMap { $0.evaluationComment }.filter { !$0.isEmpty }
+    private var ratingFields: [EvaluationField] {
+        evaluationFields.filter { $0.fieldType == .rating }
+    }
+
+    /// Count how many cases have this checkbox field checked
+    private func checkboxCount(for field: EvaluationField) -> Int {
+        cases.filter { caseEntry in
+            caseEntry.evaluationResponses[field.id.uuidString] == "true"
+        }.count
+    }
+
+    /// Calculate average rating for a rating field
+    private func averageRating(for field: EvaluationField) -> Double {
+        var total = 0.0
+        var count = 0
+        for caseEntry in cases {
+            if let valueStr = caseEntry.evaluationResponses[field.id.uuidString],
+               let value = Int(valueStr), value > 0 {
+                total += Double(value)
+                count += 1
+            }
+        }
+        return count > 0 ? total / Double(count) : 0
+    }
+
+    /// All comments with attending attribution
+    private var commentsWithContext: [(comment: String, attendingName: String, date: Date)] {
+        cases.compactMap { caseEntry in
+            guard let comment = caseEntry.evaluationComment, !comment.isEmpty else { return nil }
+            let attendingName = attendings.first { $0.id == caseEntry.attestorId }?.name ?? "Unknown"
+            return (comment, attendingName, caseEntry.attestedAt ?? caseEntry.createdAt)
+        }.sorted { $0.date > $1.date }
     }
 
     var body: some View {
-        List {
-            Section {
-                ForEach(evaluationCounts, id: \.0) { (item, count) in
-                    HStack {
-                        Text(item)
-                            .font(.subheadline)
-                        Spacer()
-                        Text("\(count)/\(cases.count)")
-                            .font(.subheadline)
-                            .foregroundColor(Color(UIColor.secondaryLabel))
-                    }
-                }
-            } header: {
-                Text("Evaluation Metrics")
+        VStack(spacing: 0) {
+            // Tab selector
+            Picker("View", selection: $selectedTab) {
+                Text("Metrics").tag(0)
+                Text("Comments").tag(1)
             }
+            .pickerStyle(.segmented)
+            .padding()
 
-            if !comments.isEmpty {
-                Section {
-                    ForEach(comments, id: \.self) { comment in
-                        Text(comment)
-                            .font(.subheadline)
-                            .foregroundColor(Color(UIColor.secondaryLabel))
-                    }
-                } header: {
-                    Text("Comments (\(comments.count))")
+            List {
+                switch selectedTab {
+                case 0:
+                    metricsSection
+                case 1:
+                    commentsSection
+                default:
+                    metricsSection
                 }
             }
         }
@@ -5291,7 +5691,115 @@ struct FellowEvaluationDetailView: View {
             }
         }
         .sheet(isPresented: $showingExport) {
-            ExportEvaluationSheet(fellow: fellow, cases: cases)
+            ExportEvaluationSheet(
+                fellow: fellow,
+                cases: cases,
+                evaluationFields: evaluationFields,
+                attendings: attendings
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var metricsSection: some View {
+        // Checkbox metrics
+        if !checkboxFields.isEmpty {
+            Section("Competency Metrics") {
+                ForEach(checkboxFields) { field in
+                    let count = checkboxCount(for: field)
+                    HStack {
+                        Text(field.title)
+                            .font(.subheadline)
+                        Spacer()
+                        Text("\(count)/\(cases.count)")
+                            .font(.caption)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                        ProgressView(value: Double(count), total: Double(max(cases.count, 1)))
+                            .frame(width: 50)
+                            .tint(.blue)
+                    }
+                }
+            }
+        }
+
+        // Rating metrics
+        if !ratingFields.isEmpty {
+            Section("Rating Averages") {
+                ForEach(ratingFields) { field in
+                    let avg = averageRating(for: field)
+                    HStack {
+                        Text(field.title)
+                            .font(.subheadline)
+                        Spacer()
+                        if avg > 0 {
+                            RatingStarsView(rating: avg)
+                            Text(String(format: "%.1f", avg))
+                                .font(.caption)
+                                .foregroundColor(Color(UIColor.secondaryLabel))
+                        } else {
+                            Text("No ratings")
+                                .font(.caption)
+                                .foregroundColor(Color(UIColor.tertiaryLabel))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Legacy checkbox data (from old format)
+        let legacyCounts = legacyEvaluationCounts()
+        if !legacyCounts.isEmpty {
+            Section("Legacy Evaluations") {
+                ForEach(legacyCounts, id: \.0) { (item, count) in
+                    HStack {
+                        Text(item)
+                            .font(.subheadline)
+                        Spacer()
+                        Text("\(count)/\(cases.count)")
+                            .font(.caption)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                    }
+                }
+            }
+        }
+    }
+
+    private func legacyEvaluationCounts() -> [(String, Int)] {
+        var counts: [String: Int] = [:]
+        for caseEntry in cases {
+            for check in caseEntry.evaluationChecks {
+                counts[check, default: 0] += 1
+            }
+        }
+        return counts.sorted { $0.value > $1.value }
+    }
+
+    @ViewBuilder
+    private var commentsSection: some View {
+        if commentsWithContext.isEmpty {
+            Section {
+                Text("No comments recorded")
+                    .font(.subheadline)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
+                    .italic()
+            }
+        } else {
+            Section("Comments (\(commentsWithContext.count))") {
+                ForEach(commentsWithContext, id: \.comment) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.comment)
+                            .font(.subheadline)
+                        HStack {
+                            Text("— \(item.attendingName)")
+                            Spacer()
+                            Text(item.date.formatted(date: .abbreviated, time: .omitted))
+                        }
+                        .font(.caption)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
         }
     }
 }
@@ -5302,17 +5810,68 @@ struct ExportEvaluationSheet: View {
     @Environment(\.dismiss) private var dismiss
     let fellow: User
     let cases: [CaseEntry]
+    let evaluationFields: [EvaluationField]
+    let attendings: [User]
+
+    @State private var startDate = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+    @State private var endDate = Date()
+    @State private var exportFormat: ExportFormat = .csv
+
+    enum ExportFormat: String, CaseIterable {
+        case csv = "CSV"
+        case excel = "Excel"
+        case pdf = "PDF"
+    }
+
+    private var filteredCases: [CaseEntry] {
+        cases.filter { caseEntry in
+            caseEntry.procedureDate >= startDate && caseEntry.procedureDate <= endDate
+        }
+    }
+
+    private var dateRangeString: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return "\(formatter.string(from: startDate)) - \(formatter.string(from: endDate))"
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Button { exportToExcel() } label: {
-                        Label("Export to Excel", systemImage: "tablecells")
+                    DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
+                    DatePicker("End Date", selection: $endDate, displayedComponents: .date)
+                } header: {
+                    Text("Date Range")
+                } footer: {
+                    Text("\(filteredCases.count) evaluations in selected range")
+                }
+
+                Section {
+                    Picker("Format", selection: $exportFormat) {
+                        ForEach(ExportFormat.allCases, id: \.self) { format in
+                            Text(format.rawValue).tag(format)
+                        }
                     }
-                    Button { exportToPDF() } label: {
-                        Label("Export to PDF", systemImage: "doc.richtext")
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Export Format")
+                }
+
+                Section {
+                    previewSection
+                } header: {
+                    Text("Preview")
+                }
+
+                Section {
+                    Button {
+                        performExport()
+                    } label: {
+                        Label("Export Evaluation Summary", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
                     }
+                    .disabled(filteredCases.isEmpty)
                 }
             }
             .navigationTitle("Export Evaluations")
@@ -5325,13 +5884,146 @@ struct ExportEvaluationSheet: View {
         }
     }
 
-    private func exportToExcel() {
-        // Implementation would use ExportService
-        dismiss()
+    @ViewBuilder
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(fellow.displayName)
+                .font(.headline)
+            Text(dateRangeString)
+                .font(.caption)
+                .foregroundColor(Color(UIColor.secondaryLabel))
+
+            Divider()
+
+            let metrics = calculateMetrics()
+            if metrics.isEmpty {
+                Text("No evaluation fields configured")
+                    .font(.caption)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
+            } else {
+                ForEach(metrics.prefix(3), id: \.title) { metric in
+                    HStack {
+                        Text(metric.title)
+                            .font(.caption)
+                        Spacer()
+                        if metric.fieldType == "rating", let avg = metric.average {
+                            Text(String(format: "%.1f/5.0", avg))
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        } else {
+                            Text("\(metric.count)/\(metric.total)")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+                if metrics.count > 3 {
+                    Text("+ \(metrics.count - 3) more fields...")
+                        .font(.caption)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                }
+            }
+
+            let comments = collectComments()
+            if !comments.isEmpty {
+                Divider()
+                Text("\(comments.count) comments")
+                    .font(.caption)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
+            }
+        }
+        .padding(.vertical, 4)
     }
 
-    private func exportToPDF() {
-        // Implementation would use ExportService
+    private func calculateMetrics() -> [ExportService.EvaluationExportData.FieldMetric] {
+        var metrics: [ExportService.EvaluationExportData.FieldMetric] = []
+
+        for field in evaluationFields.sorted(by: { $0.displayOrder < $1.displayOrder }) {
+            var count = 0
+            var ratingSum = 0.0
+            var ratingCount = 0
+
+            for caseEntry in filteredCases {
+                let responses = caseEntry.evaluationResponses
+                if let value = responses[field.id.uuidString] {
+                    if field.fieldType == .rating {
+                        if let rating = Double(value) {
+                            ratingSum += rating
+                            ratingCount += 1
+                        }
+                    } else {
+                        if value == "true" {
+                            count += 1
+                        }
+                    }
+                }
+            }
+
+            let average: Double? = field.fieldType == .rating && ratingCount > 0 ? ratingSum / Double(ratingCount) : nil
+            let percentage: Double
+            if field.fieldType == .rating {
+                percentage = average != nil ? (average! / 5.0) * 100 : 0
+            } else {
+                percentage = filteredCases.isEmpty ? 0 : (Double(count) / Double(filteredCases.count)) * 100
+            }
+
+            metrics.append(ExportService.EvaluationExportData.FieldMetric(
+                title: field.title,
+                fieldType: field.fieldType == .rating ? "rating" : "checkbox",
+                average: average,
+                count: field.fieldType == .rating ? ratingCount : count,
+                total: filteredCases.count,
+                percentage: percentage
+            ))
+        }
+
+        return metrics
+    }
+
+    private func collectComments() -> [ExportService.EvaluationExportData.CommentEntry] {
+        var comments: [ExportService.EvaluationExportData.CommentEntry] = []
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+
+        for caseEntry in filteredCases.sorted(by: { $0.procedureDate > $1.procedureDate }) {
+            if let comment = caseEntry.evaluationComment, !comment.isEmpty {
+                let attendingName = attendings.first(where: { $0.id == caseEntry.attestedById })?.displayName ?? "Unknown"
+                comments.append(ExportService.EvaluationExportData.CommentEntry(
+                    comment: comment,
+                    attendingName: attendingName,
+                    date: caseEntry.procedureDate,
+                    formattedDate: dateFormatter.string(from: caseEntry.procedureDate)
+                ))
+            }
+        }
+
+        return comments
+    }
+
+    private func performExport() {
+        let exportData = ExportService.EvaluationExportData(
+            fellowName: fellow.displayName,
+            dateRange: dateRangeString,
+            totalEvaluations: filteredCases.count,
+            fieldMetrics: calculateMetrics(),
+            comments: collectComments()
+        )
+
+        let safeName = fellow.displayName.replacingOccurrences(of: " ", with: "_")
+        let url: URL?
+
+        switch exportFormat {
+        case .csv:
+            url = ExportService.shared.exportEvaluationSummaryToCSV(exportData, filename: "\(safeName)_evaluations.csv")
+        case .excel:
+            url = ExportService.shared.exportEvaluationSummaryToExcel(exportData, filename: "\(safeName)_evaluations.xls")
+        case .pdf:
+            url = ExportService.shared.exportEvaluationSummaryToPDF(exportData, filename: "\(safeName)_evaluations.pdf")
+        }
+
+        if let url = url {
+            ShareSheetPresenter.present(url: url)
+        }
         dismiss()
     }
 }

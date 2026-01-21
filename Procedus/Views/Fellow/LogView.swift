@@ -41,16 +41,16 @@ struct LogView: View {
     @Query private var users: [User]
     @Query private var notifications: [Notification]
     @Query private var facilities: [TrainingFacility]
+    @Query private var customProcedures: [CustomProcedure]
     
     // Get selected fellow ID from settings
-    @AppStorage("selectedFellowId") private var selectedFellowIdString = ""
-    
     @State private var showingNotifications = false
     @State private var showingExportOptions = false
     @State private var isExporting = false
-    
+
+    // Use appState for fellow identity (more reliable than @AppStorage)
     private var currentFellowId: UUID? {
-        UUID(uuidString: selectedFellowIdString)
+        appState.selectedFellowId
     }
     
     // Count unread notifications for current fellow
@@ -74,10 +74,10 @@ struct LogView: View {
         return user.displayName
     }
     
-    // Filter cases to only show current fellow's cases
+    // Filter cases to only show current fellow's cases (check both fellowId and ownerId for compatibility)
     private var myCases: [CaseEntry] {
         guard let fellowId = currentFellowId else { return [] }
-        return allCases.filter { $0.fellowId == fellowId }
+        return allCases.filter { $0.fellowId == fellowId || $0.ownerId == fellowId }
     }
     
     // Computed sorted version
@@ -91,6 +91,8 @@ struct LogView: View {
     @State private var weeks: [WeekOption] = []
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
+    @State private var caseToDelete: CaseEntry? = nil
+    @State private var showingDeleteConfirmation = false
 
     @Query private var programs: [Program]
 
@@ -197,10 +199,10 @@ struct LogView: View {
                     Text("DEBUG: Total: \(allCases.count) | Mine: \(myCases.count) | Week: \(casesForSelectedWeek.count)")
                         .font(.caption2)
                         .foregroundColor(.orange)
-                    Text("Fellow ID: \(selectedFellowIdString.isEmpty ? "NOT SET" : String(selectedFellowIdString.prefix(8)))... | Valid: \(hasFellowSelected ? "✓" : "✗")")
+                    Text("Fellow ID: \(currentFellowId?.uuidString.prefix(8) ?? "NOT SET")... | Valid: \(hasFellowSelected ? "✓" : "✗")")
                         .font(.caption2)
                         .foregroundColor(hasFellowSelected ? .green : .red)
-                    if !hasFellowSelected && !selectedFellowIdString.isEmpty {
+                    if !hasFellowSelected && currentFellowId != nil {
                         Text("⚠️ ID set but no matching User found - select identity in Settings")
                             .font(.caption2)
                             .foregroundColor(.red)
@@ -461,26 +463,39 @@ struct LogView: View {
     }
     
     // MARK: - Case List
-    
+
     private var caseList: some View {
         List {
             ForEach(casesForSelectedRange) { caseEntry in
-                CaseRowView(caseEntry: caseEntry, attendings: attendings)
+                CaseRowView(caseEntry: caseEntry, attendings: attendings, customProcedures: customProcedures)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         caseToEdit = caseEntry
                     }
                     .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
             }
-            .onDelete(perform: deleteCases)
+            .onDelete { offsets in
+                // Show confirmation before deleting
+                if let firstIndex = offsets.first {
+                    caseToDelete = casesForSelectedRange[firstIndex]
+                    showingDeleteConfirmation = true
+                }
+            }
         }
         .listStyle(.insetGrouped)
-    }
-
-    private func deleteCases(at offsets: IndexSet) {
-        for index in offsets {
-            let caseEntry = casesForSelectedRange[index]
-            modelContext.delete(caseEntry)
+        .alert("Delete Case?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                caseToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let caseEntry = caseToDelete {
+                    modelContext.delete(caseEntry)
+                    try? modelContext.save()
+                }
+                caseToDelete = nil
+            }
+        } message: {
+            Text("This action cannot be undone. The case and all its procedures will be permanently removed.")
         }
     }
 }
@@ -490,6 +505,7 @@ struct LogView: View {
 struct CaseRowView: View {
     let caseEntry: CaseEntry
     let attendings: [Attending]
+    var customProcedures: [CustomProcedure] = []
 
     /// Check if this is a noninvasive case (all procedures from cardiac imaging)
     private var isNoninvasiveCase: Bool {
@@ -520,19 +536,28 @@ struct CaseRowView: View {
     
     private var categoryBubbles: [ProcedureCategory] {
         var categories: Set<ProcedureCategory> = []
-        
+
         for tagId in caseEntry.procedureTagIds {
-            // Look up category for each procedure tag
-            for pack in SpecialtyPackCatalog.allPacks {
-                for packCategory in pack.categories {
-                    if packCategory.procedures.contains(where: { $0.id == tagId }) {
-                        categories.insert(packCategory.category)
-                        break
+            // Check if this is a custom procedure (format: "custom-{uuid}")
+            if tagId.hasPrefix("custom-") {
+                let uuidString = String(tagId.dropFirst(7)) // Remove "custom-" prefix
+                if let uuid = UUID(uuidString: uuidString),
+                   let customProc = customProcedures.first(where: { $0.id == uuid }) {
+                    categories.insert(customProc.category)
+                }
+            } else {
+                // Look up category for each procedure tag in specialty packs
+                for pack in SpecialtyPackCatalog.allPacks {
+                    for packCategory in pack.categories {
+                        if packCategory.procedures.contains(where: { $0.id == tagId }) {
+                            categories.insert(packCategory.category)
+                            break
+                        }
                     }
                 }
             }
         }
-        
+
         return Array(categories).sorted { $0.rawValue < $1.rawValue }
     }
     

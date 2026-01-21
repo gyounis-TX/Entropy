@@ -715,12 +715,19 @@ struct AttendingQueueView: View {
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query private var allUsers: [User]
     @Query private var notifications: [Procedus.Notification]
+    @Query private var programs: [Program]
 
     @State private var showingNotifications = false
     @State private var showingAttestAllConfirm = false
     #if DEBUG
     @State private var showAllPending = true
     #endif
+
+    private var currentProgram: Program? { programs.first }
+
+    private var evaluationsRequired: Bool {
+        currentProgram?.evaluationsEnabled == true && currentProgram?.evaluationsRequired == true
+    }
 
     private var pendingCases: [CaseEntry] {
         #if DEBUG
@@ -822,36 +829,57 @@ struct AttendingQueueView: View {
                         .padding(.top, 60)
                     } else {
                         // Info section with Attest All button
-                        HStack(alignment: .top, spacing: 16) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(pendingCases.count) pending attestations")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                Text("Tap a case to review individually, or attest all at once")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            // Attest All button
-                            Button {
-                                showingAttestAllConfirm = true
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Text("Attest All")
+                        VStack(spacing: 12) {
+                            HStack(alignment: .top, spacing: 16) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(pendingCases.count) pending attestations")
                                         .font(.headline)
                                         .fontWeight(.bold)
-                                    Text("I supervised")
-                                        .font(.caption)
-                                    Text("these cases")
-                                        .font(.caption)
+                                    if evaluationsRequired {
+                                        Text("Tap a case to review and complete required evaluations")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("Tap a case to review individually, or attest all at once")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(Color.green)
-                                .cornerRadius(12)
+
+                                Spacer()
+
+                                // Attest All button (hidden when evaluations required)
+                                if !evaluationsRequired && pendingCases.count > 1 {
+                                    Button {
+                                        showingAttestAllConfirm = true
+                                    } label: {
+                                        VStack(spacing: 4) {
+                                            Text("Attest All")
+                                                .font(.headline)
+                                                .fontWeight(.bold)
+                                            Text("I supervised")
+                                                .font(.caption)
+                                            Text("these cases")
+                                                .font(.caption)
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 12)
+                                        .background(Color.green)
+                                        .cornerRadius(12)
+                                    }
+                                }
+                            }
+
+                            // Show info message when evaluations are required
+                            if evaluationsRequired && pendingCases.count > 1 {
+                                HStack {
+                                    Image(systemName: "info.circle.fill")
+                                        .foregroundColor(.blue)
+                                    Text("Bulk attestation disabled — evaluations are required")
+                                        .font(.caption)
+                                        .foregroundColor(Color(UIColor.secondaryLabel))
+                                }
                             }
                         }
                         .padding(.horizontal, 16)
