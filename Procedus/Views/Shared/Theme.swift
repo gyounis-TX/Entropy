@@ -219,7 +219,7 @@ struct ClinicalCheckboxToggleStyle: ToggleStyle {
 
 struct PasscodeDotsView: View {
     let enteredCount: Int
-    let total: Int = 6
+    let total: Int = 4
     
     var body: some View {
         HStack(spacing: 16) {
@@ -274,9 +274,9 @@ struct PasscodeKeypad: View {
     }
     
     private func appendDigit(_ digit: String) {
-        guard enteredPasscode.count < 6 else { return }
+        guard enteredPasscode.count < 4 else { return }
         enteredPasscode += digit
-        if enteredPasscode.count == 6 {
+        if enteredPasscode.count == 4 {
             onComplete()
         }
     }

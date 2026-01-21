@@ -80,6 +80,18 @@ struct SettingsView: View {
         return procedureGroups.filter { !$0.isArchived && $0.creatorId == fellowId }.count
     }
 
+    private var activeCustomProceduresCount: Int {
+        customProcedures.filter { !$0.isArchived }.count
+    }
+
+    private var activeCustomAccessSitesCount: Int {
+        customAccessSites.filter { !$0.isArchived }.count
+    }
+
+    private var activeCustomComplicationsCount: Int {
+        customComplications.filter { !$0.isArchived }.count
+    }
+
     #if DEBUG
     private var hasIndividualDevData: Bool {
         // Check if we have any attendings with "Simpson" in the name (from dev data)
@@ -259,6 +271,7 @@ struct SettingsView: View {
                 icon: "list.clipboard.fill",
                 iconColor: Color(red: 0.9, green: 0.4, blue: 0.5),
                 title: "Custom Procedures",
+                badge: activeCustomProceduresCount > 0 ? .count(activeCustomProceduresCount) : nil,
                 showChevron: true
             ) {
                 showingCustomProcedures = true
@@ -269,6 +282,7 @@ struct SettingsView: View {
                 icon: "arrow.triangle.branch",
                 iconColor: .gray,
                 title: "Custom Access Sites",
+                badge: activeCustomAccessSitesCount > 0 ? .count(activeCustomAccessSitesCount) : nil,
                 showChevron: true
             ) {
                 showingCustomAccessSites = true
@@ -279,6 +293,7 @@ struct SettingsView: View {
                 icon: "exclamationmark.triangle.fill",
                 iconColor: .yellow,
                 title: "Custom Complications",
+                badge: activeCustomComplicationsCount > 0 ? .count(activeCustomComplicationsCount) : nil,
                 showChevron: true
             ) {
                 showingCustomComplications = true
@@ -703,6 +718,7 @@ struct SettingsView: View {
                     icon: "list.clipboard.fill",
                     iconColor: Color(red: 0.9, green: 0.4, blue: 0.5),
                     title: "My Custom Procedures",
+                    badge: activeCustomProceduresCount > 0 ? .count(activeCustomProceduresCount) : nil,
                     showChevron: true
                 ) {
                     showingCustomProcedures = true
@@ -1839,7 +1855,7 @@ struct AddFellowCustomProcedureSheet: View {
                                 Text(category.rawValue).tag(category.rawValue)
                             }
                         }
-                        .pickerStyle(.navigationLink)
+                        .pickerStyle(.menu)
                     }
                 } header: {
                     Text("Category")
@@ -2399,11 +2415,43 @@ struct CustomProcedureDetailsListSheet: View {
             }
             .overlay {
                 if myDetails.isEmpty {
-                    ContentUnavailableView(
-                        "No Procedure Details",
-                        systemImage: "slider.horizontal.3",
-                        description: Text("Add custom details like devices or techniques for specific procedures. These will appear when logging those procedures.")
-                    )
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            Spacer().frame(height: 40)
+
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+
+                            Text("No Procedure Details")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+
+                            Text("Add custom details like devices or techniques for specific procedures. These will appear when logging those procedures.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+
+                            // Example image
+                            VStack(spacing: 8) {
+                                Text("Example:")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                Image("ProcedureDetailsExample")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxWidth: 300)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            }
+                            .padding(.top, 8)
+
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
                 }
             }
             .navigationTitle("Procedure Details")
@@ -3068,7 +3116,7 @@ struct AddCustomProcedureSheet: View {
                                 Text(category.rawValue).tag(category.rawValue)
                             }
                         }
-                        .pickerStyle(.navigationLink)
+                        .pickerStyle(.menu)
                     }
                 } header: {
                     Text("Category")
