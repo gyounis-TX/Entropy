@@ -29,6 +29,7 @@ struct SettingsView: View {
     @State private var showingCustomProcedures = false
     @State private var showingCustomAccessSites = false
     @State private var showingCustomComplications = false
+    @State private var showingCustomProcedureDetails = false
     @State private var showingExportOptions = false
     @State private var showingImportLog = false
     @State private var showingAbout = false
@@ -203,8 +204,8 @@ struct SettingsView: View {
                 showingCloudBackup = true
             }
 
-            // FELLOW PROGRAM Section
-            SectionHeader(title: "FELLOW PROGRAM")
+            // TRAINING PROGRAM Section
+            SectionHeader(title: "TRAINING PROGRAM")
 
             // Program Specialty Row
             SettingsPillRow(
@@ -217,7 +218,7 @@ struct SettingsView: View {
                 showingFellowshipSpecialtyPicker = true
             }
 
-            // Specialty Packs Row (now under program section)
+            // Specialty Packs Row
             SettingsPillRow(
                 icon: "square.stack.3d.up.fill",
                 iconColor: .purple,
@@ -250,6 +251,9 @@ struct SettingsView: View {
                 showingFacilitiesList = true
             }
 
+            // PROCEDURES Section
+            SectionHeader(title: "PROCEDURES")
+
             // Custom Procedures Row
             SettingsPillRow(
                 icon: "list.clipboard.fill",
@@ -279,6 +283,19 @@ struct SettingsView: View {
             ) {
                 showingCustomComplications = true
             }
+
+            // Procedure Details Row
+            SettingsPillRow(
+                icon: "slider.horizontal.3",
+                iconColor: .cyan,
+                title: "Procedure Details",
+                showChevron: true
+            ) {
+                showingCustomProcedureDetails = true
+            }
+
+            // IMPORT/EXPORT Section
+            SectionHeader(title: "IMPORT/EXPORT")
 
             // Import Row
             SettingsPillRow(
@@ -388,6 +405,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showingCustomComplications) {
             CustomComplicationsListSheet()
         }
+        .sheet(isPresented: $showingCustomProcedureDetails) {
+            CustomProcedureDetailsListSheet()
+        }
         .sheet(isPresented: $showingExportOptions) {
             ExportSheet()
         }
@@ -408,7 +428,7 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Populate") { populateIndividualDevData() }
         } message: {
-            Text("This will create sample attendings (Simpsons), facilities, and 10 cases spanning the last 3 months.")
+            Text("This will create sample attendings (Simpsons), facilities, and 20 cases (10 invasive + 10 noninvasive) spanning the last 3 months.")
         }
         .alert("Reset Sample Data?", isPresented: $showingResetIndividualDevConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -460,17 +480,38 @@ struct SettingsView: View {
             }
         }
 
-        // Enable interventional cardiology pack if not enabled
+        // Enable cardiology packs if not enabled
         if !appState.enabledSpecialtyPackIds.contains("interventional-cardiology") {
             appState.toggleSpecialtyPack("interventional-cardiology")
         }
+        if !appState.enabledSpecialtyPackIds.contains("cardiac-imaging") {
+            appState.toggleSpecialtyPack("cardiac-imaging")
+        }
 
-        // Create 10 cases spanning last 3 months
+        // Create 10 invasive cases spanning last 3 months
         let calendar = Calendar.current
         let icPack = SpecialtyPackCatalog.pack(for: "interventional-cardiology")
-        let procedures = icPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
+        let invasiveProcedures = icPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
 
-        guard !createdAttendingIds.isEmpty, !createdFacilityIds.isEmpty, !procedures.isEmpty else { return }
+        // Access sites for IC procedures
+        let icAccessSites: [AccessSite] = [.femoral, .radial, .brachial, .pedal]
+        let operatorPositions: [OperatorPosition] = [.primary, .secondary]
+
+        // Sample case notes for realistic dev data
+        let sampleNotes = [
+            "Successful PCI to mid-LAD with DES. Patient tolerated well. No complications.",
+            "Diagnostic cath showed severe 3VD. Referred to CT surgery for CABG evaluation.",
+            "Right heart cath for pulmonary HTN workup. Mean PA pressure 38mmHg.",
+            "Elective PCI to RCA. Used radial access with 6Fr guide. Good angiographic result.",
+            "Complex bifurcation lesion. Used 2-stent technique with good final result.",
+            "Chronic total occlusion attempt. Achieved antegrade crossing after 90 mins.",
+            "Impella-supported high-risk PCI in patient with EF 20%. No hemodynamic issues.",
+            "STEMI activation - door to balloon 45 minutes. Culprit LAD, good flow restored.",
+            "Structural case - TAVR workup. Anatomy suitable for transfemoral approach.",
+            "EP study for syncope workup. No inducible arrhythmias. Plan for ILR."
+        ]
+
+        guard !createdAttendingIds.isEmpty, !createdFacilityIds.isEmpty, !invasiveProcedures.isEmpty else { return }
 
         for i in 0..<10 {
             // Spread cases over last 12 weeks
@@ -487,11 +528,65 @@ struct SettingsView: View {
 
             // Add 1-3 random procedures
             let numProcedures = Int.random(in: 1...3)
-            newCase.procedureTagIds = Array(procedures.shuffled().prefix(numProcedures))
+            newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
             newCase.createdAt = caseDate
-            newCase.notes = "Sample case \(i + 1) - auto-generated for testing"
+            newCase.caseTypeRaw = CaseType.invasive.rawValue
+
+            // Add 1-2 random access sites
+            let numAccessSites = Int.random(in: 1...2)
+            newCase.accessSiteIds = Array(icAccessSites.shuffled().prefix(numAccessSites)).map { $0.rawValue }
+
+            // Add random operator position
+            newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
+
+            // Use realistic sample notes
+            newCase.notes = sampleNotes[i]
 
             modelContext.insert(newCase)
+        }
+
+        // Create 10 noninvasive cases spanning last 3 months
+        let ciPack = SpecialtyPackCatalog.pack(for: "cardiac-imaging")
+        let noninvasiveProcedures = ciPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
+
+        // Sample noninvasive case notes
+        let noninvasiveNotes = [
+            "TTE showing preserved EF at 60%. No significant valvular disease.",
+            "Stress echo with borderline ischemia in inferior wall. Correlation needed.",
+            "TEE for afib cardioversion. No LAA thrombus identified. Cleared for DCCV.",
+            "Carotid ultrasound showing 50-69% stenosis on right. Medical management.",
+            "Lower extremity venous duplex negative for DVT bilaterally.",
+            "Renal artery duplex showing no significant stenosis. RAS excluded.",
+            "AAA surveillance - stable at 4.2cm. Continue annual monitoring.",
+            "Bubble study positive. PFO identified. Consider closure if cryptogenic stroke.",
+            "Dobutamine stress echo - no inducible ischemia at peak dose.",
+            "Right heart catheterization and TTE correlation for MR quantification."
+        ]
+
+        if !noninvasiveProcedures.isEmpty {
+            for i in 0..<10 {
+                // Spread cases over last 12 weeks
+                let weeksAgo = Int.random(in: 0...12)
+                let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+                let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+
+                let newCase = CaseEntry(
+                    ownerId: individualUserId,
+                    attendingId: nil,  // Noninvasive cases don't require attending
+                    weekBucket: weekBucket,
+                    facilityId: createdFacilityIds.randomElement()
+                )
+
+                // Add 1-2 random noninvasive procedures
+                let numProcedures = Int.random(in: 1...2)
+                newCase.procedureTagIds = Array(noninvasiveProcedures.shuffled().prefix(numProcedures))
+                newCase.createdAt = caseDate
+                newCase.caseTypeRaw = CaseType.noninvasive.rawValue
+                newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
+                newCase.notes = noninvasiveNotes[i]
+
+                modelContext.insert(newCase)
+            }
         }
 
         try? modelContext.save()
@@ -1023,6 +1118,7 @@ struct IndividualProfileEditSheet: View {
 
     @State private var firstName: String = ""
     @State private var lastName: String = ""
+    @State private var selectedPGYLevel: PGYLevel? = nil
 
     var body: some View {
         NavigationStack {
@@ -1032,6 +1128,19 @@ struct IndividualProfileEditSheet: View {
                     TextField("Last Name", text: $lastName)
                 } header: {
                     Text("Name")
+                }
+
+                Section {
+                    Picker("PGY Level", selection: $selectedPGYLevel) {
+                        Text("Not Selected").tag(nil as PGYLevel?)
+                        ForEach(PGYLevel.allCases) { level in
+                            Text(level.displayName).tag(level as PGYLevel?)
+                        }
+                    }
+                } header: {
+                    Text("Training Year")
+                } footer: {
+                    Text("Your current post-graduate year. Used for analytics and time range filtering.")
                 }
 
                 Section {
@@ -1050,6 +1159,7 @@ struct IndividualProfileEditSheet: View {
             .onAppear {
                 firstName = appState.individualFirstName
                 lastName = appState.individualLastName
+                selectedPGYLevel = appState.individualPGYLevel
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1059,6 +1169,7 @@ struct IndividualProfileEditSheet: View {
                     Button("Save") {
                         appState.individualFirstName = firstName
                         appState.individualLastName = lastName
+                        appState.individualPGYLevel = selectedPGYLevel
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -2213,6 +2324,374 @@ struct CustomComplicationsListSheet: View {
     private func deleteComplication(at offsets: IndexSet) {
         for index in offsets {
             complications[index].isArchived = true
+        }
+    }
+}
+
+// MARK: - Custom Procedure Detail Row View
+
+private struct CustomProcedureDetailRowView: View {
+    let detail: CustomProcedureDetail
+    let onTap: () -> Void
+
+    private var optionsPreview: String {
+        let preview = detail.options.prefix(3).joined(separator: ", ")
+        return detail.options.count > 3 ? preview + "..." : preview
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(detail.name)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+
+                Text("\(detail.options.count) options • \(detail.procedureTagIds.count) procedures")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                if !detail.options.isEmpty {
+                    Text(optionsPreview)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+}
+
+// MARK: - Custom Procedure Details List Sheet
+
+struct CustomProcedureDetailsListSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
+    @Query(filter: #Predicate<CustomProcedureDetail> { !$0.isArchived }) private var allDetails: [CustomProcedureDetail]
+
+    @State private var showingAddSheet = false
+    @State private var detailToEdit: CustomProcedureDetail?
+
+    /// Get individual user ID
+    private var individualUserId: UUID? {
+        if let uuidString = UserDefaults.standard.string(forKey: "individualUserUUID"),
+           let uuid = UUID(uuidString: uuidString) {
+            return uuid
+        }
+        return nil
+    }
+
+    /// Filter details to only show user's own in individual mode
+    private var myDetails: [CustomProcedureDetail] {
+        guard let userId = individualUserId else { return [] }
+        return allDetails.filter { $0.ownerId == userId }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(myDetails) { detail in
+                    CustomProcedureDetailRowView(detail: detail) {
+                        detailToEdit = detail
+                    }
+                }
+                .onDelete(perform: deleteDetail)
+            }
+            .overlay {
+                if myDetails.isEmpty {
+                    ContentUnavailableView(
+                        "No Procedure Details",
+                        systemImage: "slider.horizontal.3",
+                        description: Text("Add custom details like devices or techniques for specific procedures. These will appear when logging those procedures.")
+                    )
+                }
+            }
+            .navigationTitle("Procedure Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingAddSheet = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAddSheet) {
+                AddEditCustomProcedureDetailSheet(detail: nil)
+            }
+            .sheet(item: $detailToEdit) { detail in
+                AddEditCustomProcedureDetailSheet(detail: detail)
+            }
+        }
+    }
+
+    private func deleteDetail(at offsets: IndexSet) {
+        for index in offsets {
+            myDetails[index].isArchived = true
+        }
+    }
+}
+
+// MARK: - Add/Edit Custom Procedure Detail Sheet
+
+struct AddEditCustomProcedureDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
+
+    let detail: CustomProcedureDetail?
+
+    @State private var name: String = ""
+    @State private var optionsText: String = ""  // Comma-separated options
+    @State private var selectedProcedureIds: Set<String> = []
+    @State private var showingProcedurePicker = false
+
+    private var isEditing: Bool { detail != nil }
+
+    /// Get individual user ID
+    private var individualUserId: UUID? {
+        if let uuidString = UserDefaults.standard.string(forKey: "individualUserUUID"),
+           let uuid = UUID(uuidString: uuidString) {
+            return uuid
+        }
+        return nil
+    }
+
+    /// Parse options from comma-separated text
+    private var parsedOptions: [String] {
+        optionsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Get procedure names for display
+    private func procedureName(for tagId: String) -> String {
+        SpecialtyPackCatalog.findProcedure(by: tagId)?.title ?? tagId
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Detail Name", text: $name)
+                        .textInputAutocapitalization(.words)
+                } header: {
+                    Text("Name")
+                } footer: {
+                    Text("e.g., \"Device Used\", \"Technique\", \"Approach\"")
+                }
+
+                Section {
+                    TextField("Options (comma-separated)", text: $optionsText, axis: .vertical)
+                        .lineLimit(3...6)
+                        .textInputAutocapitalization(.words)
+                } header: {
+                    Text("Options")
+                } footer: {
+                    Text("Enter each option separated by commas.\ne.g., \"Penumbra, EKOS, AngioVac, Inari\"")
+                }
+
+                Section {
+                    Button {
+                        showingProcedurePicker = true
+                    } label: {
+                        HStack {
+                            Text("Select Procedures")
+                            Spacer()
+                            Text("\(selectedProcedureIds.count) selected")
+                                .foregroundColor(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    if !selectedProcedureIds.isEmpty {
+                        ForEach(Array(selectedProcedureIds).sorted(), id: \.self) { tagId in
+                            HStack {
+                                Text(procedureName(for: tagId))
+                                    .font(.subheadline)
+                                Spacer()
+                                Button {
+                                    selectedProcedureIds.remove(tagId)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Applies To")
+                } footer: {
+                    Text("This detail will appear when logging the selected procedures.")
+                }
+
+                if !parsedOptions.isEmpty {
+                    Section {
+                        ForEach(parsedOptions, id: \.self) { option in
+                            Label(option, systemImage: "checkmark.circle")
+                                .foregroundColor(.secondary)
+                        }
+                    } header: {
+                        Text("Preview (\(parsedOptions.count) options)")
+                    }
+                }
+            }
+            .navigationTitle(isEditing ? "Edit Detail" : "New Detail")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveDetail()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty ||
+                              parsedOptions.isEmpty ||
+                              selectedProcedureIds.isEmpty)
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                if let detail = detail {
+                    name = detail.name
+                    optionsText = detail.options.joined(separator: ", ")
+                    selectedProcedureIds = Set(detail.procedureTagIds)
+                }
+            }
+            .sheet(isPresented: $showingProcedurePicker) {
+                ProcedurePickerForDetailSheet(selectedProcedureIds: $selectedProcedureIds)
+            }
+        }
+    }
+
+    private func saveDetail() {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty else { return }
+
+        if let existingDetail = detail {
+            // Update existing
+            existingDetail.name = trimmedName
+            existingDetail.options = parsedOptions
+            existingDetail.procedureTagIds = Array(selectedProcedureIds)
+        } else {
+            // Create new
+            let newDetail = CustomProcedureDetail(
+                name: trimmedName,
+                procedureTagIds: Array(selectedProcedureIds),
+                options: parsedOptions,
+                ownerId: individualUserId
+            )
+            modelContext.insert(newDetail)
+        }
+
+        try? modelContext.save()
+        dismiss()
+    }
+}
+
+// MARK: - Procedure Picker for Detail Sheet
+
+struct ProcedurePickerForDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    @Binding var selectedProcedureIds: Set<String>
+
+    @State private var searchText = ""
+    @State private var expandedPackIds: Set<String> = []
+
+    /// Get enabled packs
+    private var enabledPacks: [SpecialtyPack] {
+        SpecialtyPackCatalog.allPacks.filter { appState.enabledSpecialtyPackIds.contains($0.id) }
+    }
+
+    /// Filter procedures by search
+    private func filteredProcedures(in pack: SpecialtyPack) -> [(category: PackCategory, procedures: [ProcedureTag])] {
+        if searchText.isEmpty {
+            return pack.categories.map { ($0, $0.procedures) }
+        }
+        let lowercased = searchText.lowercased()
+        return pack.categories.compactMap { category in
+            let filtered = category.procedures.filter {
+                $0.title.lowercased().contains(lowercased)
+            }
+            return filtered.isEmpty ? nil : (category, filtered)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(enabledPacks, id: \.id) { pack in
+                    let filteredCategories = filteredProcedures(in: pack)
+                    if !filteredCategories.isEmpty {
+                        Section {
+                            ForEach(filteredCategories, id: \.category.id) { item in
+                                DisclosureGroup(
+                                    isExpanded: Binding(
+                                        get: { expandedPackIds.contains("\(pack.id)-\(item.category.id)") },
+                                        set: { isExpanded in
+                                            if isExpanded {
+                                                expandedPackIds.insert("\(pack.id)-\(item.category.id)")
+                                            } else {
+                                                expandedPackIds.remove("\(pack.id)-\(item.category.id)")
+                                            }
+                                        }
+                                    )
+                                ) {
+                                    ForEach(item.procedures, id: \.id) { procedure in
+                                        Button {
+                                            if selectedProcedureIds.contains(procedure.id) {
+                                                selectedProcedureIds.remove(procedure.id)
+                                            } else {
+                                                selectedProcedureIds.insert(procedure.id)
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text(procedure.title)
+                                                    .foregroundColor(.primary)
+                                                Spacer()
+                                                if selectedProcedureIds.contains(procedure.id) {
+                                                    Image(systemName: "checkmark")
+                                                        .foregroundColor(.blue)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        CategoryBubble(category: item.category.category, size: 20)
+                                        Text(item.category.category.rawValue)
+                                            .font(.subheadline)
+                                    }
+                                }
+                            }
+                        } header: {
+                            Text(pack.name)
+                        }
+                    }
+                }
+            }
+            .searchable(text: $searchText, prompt: "Search procedures")
+            .navigationTitle("Select Procedures")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Text("\(selectedProcedureIds.count) selected")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
         }
     }
 }

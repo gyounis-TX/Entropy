@@ -376,6 +376,64 @@ final class CustomComplication {
     }
 }
 
+// MARK: - Custom Procedure Detail
+
+/// Allows fellows to define custom details (like devices, techniques) for specific procedures
+/// Similar to the built-in ThrombectomyDevice but user-defined
+@Model
+final class CustomProcedureDetail {
+    @Attribute(.unique) var id: UUID
+    var name: String                    // e.g., "Device Used", "Technique"
+    var procedureTagIds: [String]       // Which procedures this detail applies to
+    var optionsJson: String             // JSON array of option strings
+    var programId: UUID?                // For institutional mode
+    var ownerId: UUID?                  // For individual mode (owner of the detail)
+    var creatorId: UUID?                // Who created it (for fellow-created in institutional mode)
+    var isArchived: Bool
+    var createdAt: Date
+
+    /// Decode options from JSON
+    @Transient var options: [String] {
+        get {
+            guard let data = optionsJson.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue),
+               let json = String(data: data, encoding: .utf8) {
+                optionsJson = json
+            }
+        }
+    }
+
+    /// Check if this detail applies to a given procedure
+    func appliesTo(procedureId: String) -> Bool {
+        procedureTagIds.contains(procedureId)
+    }
+
+    init(name: String, procedureTagIds: [String], options: [String], programId: UUID? = nil, ownerId: UUID? = nil, creatorId: UUID? = nil) {
+        self.id = UUID()
+        self.name = name
+        self.procedureTagIds = procedureTagIds
+        self.programId = programId
+        self.ownerId = ownerId
+        self.creatorId = creatorId
+        self.isArchived = false
+        self.createdAt = Date()
+
+        // Encode options to JSON
+        if let data = try? JSONEncoder().encode(options),
+           let json = String(data: data, encoding: .utf8) {
+            self.optionsJson = json
+        } else {
+            self.optionsJson = "[]"
+        }
+    }
+}
+
 // MARK: - Case Entry
 
 @Model
@@ -416,6 +474,7 @@ final class CaseEntry {
     var migratedAt: Date?
     var caseTypeRaw: String?
     var operatorPositionRaw: String?
+    var customDetailSelections: [String: [String]]  // detailId.uuidString -> selected option strings
 
     @Transient var outcome: CaseOutcome {
         get { CaseOutcome(rawValue: outcomeRaw) ?? .success }
@@ -481,6 +540,7 @@ final class CaseEntry {
         self.migratedAt = nil
         self.caseTypeRaw = nil
         self.operatorPositionRaw = nil
+        self.customDetailSelections = [:]
     }
 
     static func makeWeekBucket(for date: Date) -> String {

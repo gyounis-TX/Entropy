@@ -23,6 +23,7 @@ struct ProcedusApp: App {
             CustomCategory.self,
             CustomAccessSite.self,
             CustomComplication.self,
+            CustomProcedureDetail.self,
             Attestation.self,
             EvaluationField.self,
             ProgramEvaluationSettings.self,

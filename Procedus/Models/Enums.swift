@@ -467,6 +467,7 @@ enum ChartGrouping: String, CaseIterable, Identifiable {
     case months = "Months"
     case quarters = "Quarters"
     case years = "Years"
+    case pgyYears = "PGY Years"
 
     var id: String { rawValue }
 
@@ -476,6 +477,7 @@ enum ChartGrouping: String, CaseIterable, Identifiable {
         case .months: return "Month"
         case .quarters: return "Quarter"
         case .years: return "Year"
+        case .pgyYears: return "PGY Level"
         }
     }
 
@@ -485,6 +487,7 @@ enum ChartGrouping: String, CaseIterable, Identifiable {
         case .months: return "calendar"
         case .quarters: return "calendar.badge.clock"
         case .years: return "calendar.circle"
+        case .pgyYears: return "person.badge.clock"
         }
     }
 }

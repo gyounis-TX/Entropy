@@ -19,6 +19,7 @@ struct IndividualLogView: View {
     @State private var showingExportOptions = false
     @State private var showingNotifications = false
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
+    @State private var selectedPGYLevelFilter: Int? = nil  // For PGY year filtering
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
 
     // Check if we should show case type filter (cardiology with both imaging and other packs)
@@ -82,8 +83,18 @@ struct IndividualLogView: View {
             let startOfAcademicYear = academicYearStartDate(for: now)
             filteredCases = myCases.filter { $0.createdAt >= startOfAcademicYear }
         case .pgy:
-            // PGY shows all cases - useful for year-over-year comparison
-            filteredCases = myCases
+            // Filter by specific PGY year if selected
+            if let pgyLevel = selectedPGYLevelFilter, let currentPGY = appState.individualPGYLevel {
+                let currentAcademicYear = academicYear(for: Date())
+                let yearsAgo = currentPGY.rawValue - pgyLevel
+                let targetAcademicYear = currentAcademicYear - yearsAgo
+
+                filteredCases = myCases.filter { caseEntry in
+                    academicYear(for: caseEntry.createdAt) == targetAcademicYear
+                }
+            } else {
+                filteredCases = myCases
+            }
         case .allTime:
             filteredCases = myCases
         case .custom:
@@ -120,6 +131,46 @@ struct IndividualLogView: View {
         components.month = 7
         components.day = 1
         return calendar.date(from: components) ?? date
+    }
+
+    /// Calculate academic year for a date (July 1 start)
+    private func academicYear(for date: Date) -> Int {
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        return month >= 7 ? year : year - 1
+    }
+
+    /// Get available PGY levels that have data, based on fellow's current PGY level
+    private var availablePGYLevels: [(level: Int, displayName: String)] {
+        guard let currentPGY = appState.individualPGYLevel else { return [] }
+
+        let currentAcademicYear = academicYear(for: Date())
+        var levelsWithData: Set<Int> = []
+
+        // Check which PGY levels have case data
+        for caseEntry in myCases {
+            let caseAcademicYear = academicYear(for: caseEntry.createdAt)
+            let yearsAgo = currentAcademicYear - caseAcademicYear
+            let pgyLevel = currentPGY.rawValue - yearsAgo
+
+            if pgyLevel >= 1 && pgyLevel <= 8 {
+                levelsWithData.insert(pgyLevel)
+            }
+        }
+
+        // Convert to display array, sorted descending (current year first)
+        return levelsWithData.sorted(by: >).map { level in
+            (level: level, displayName: "PGY-\(level)")
+        }
+    }
+
+    /// Combined display name for the current time range selection
+    private var timeRangeDisplayName: String {
+        if let pgyLevel = selectedPGYLevelFilter {
+            return "PGY-\(pgyLevel)"
+        }
+        return selectedRange.rawValue
     }
     
     var body: some View {
@@ -177,55 +228,55 @@ struct IndividualLogView: View {
     // MARK: - Case Type Filter Section
 
     private var caseTypeFilterSection: some View {
-        HStack(spacing: 0) {
-            // All cases button
-            Button {
-                selectedCaseTypeFilter = nil
-            } label: {
-                Text("All")
-                    .font(.subheadline)
-                    .fontWeight(selectedCaseTypeFilter == nil ? .semibold : .regular)
-                    .foregroundColor(selectedCaseTypeFilter == nil ? .white : ProcedusTheme.textPrimary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(selectedCaseTypeFilter == nil ? ProcedusTheme.primary : Color.clear)
-                    .cornerRadius(8)
-            }
-
+        HStack(spacing: 4) {
             // Invasive button
             Button {
                 selectedCaseTypeFilter = .invasive
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                     Text("Invasive")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(selectedCaseTypeFilter == .invasive ? .semibold : .regular)
                 }
                 .foregroundColor(selectedCaseTypeFilter == .invasive ? .white : ProcedusTheme.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(selectedCaseTypeFilter == .invasive ? Color.red : Color.clear)
-                .cornerRadius(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(selectedCaseTypeFilter == .invasive ? Color.red : Color(UIColor.tertiarySystemFill))
+                .cornerRadius(6)
             }
 
             // Noninvasive button
             Button {
                 selectedCaseTypeFilter = .noninvasive
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                     Text("Noninvasive")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(selectedCaseTypeFilter == .noninvasive ? .semibold : .regular)
                 }
                 .foregroundColor(selectedCaseTypeFilter == .noninvasive ? .white : ProcedusTheme.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(selectedCaseTypeFilter == .noninvasive ? Color.blue : Color.clear)
-                .cornerRadius(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(selectedCaseTypeFilter == .noninvasive ? Color.blue : Color(UIColor.tertiarySystemFill))
+                .cornerRadius(6)
+            }
+
+            // All cases button
+            Button {
+                selectedCaseTypeFilter = nil
+            } label: {
+                Text("All")
+                    .font(.caption)
+                    .fontWeight(selectedCaseTypeFilter == nil ? .semibold : .regular)
+                    .foregroundColor(selectedCaseTypeFilter == nil ? .white : ProcedusTheme.textPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(selectedCaseTypeFilter == nil ? ProcedusTheme.primary : Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(6)
             }
 
             Spacer()
@@ -241,12 +292,46 @@ struct IndividualLogView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            Picker("", selection: $selectedRange) {
-                ForEach(ProcedusAnalyticsRange.allCases.filter { $0 != .custom }, id: \.self) { range in
-                    Text(range.rawValue).tag(range)
+            Menu {
+                // Standard time ranges (excluding generic PGY and custom)
+                ForEach(ProcedusAnalyticsRange.allCases.filter { $0 != .pgy && $0 != .custom }, id: \.self) { range in
+                    Button {
+                        selectedPGYLevelFilter = nil
+                        selectedRange = range
+                    } label: {
+                        if selectedPGYLevelFilter == nil && selectedRange == range {
+                            Label(range.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(range.rawValue)
+                        }
+                    }
                 }
+
+                // Dynamic PGY levels (only if PGY level is set and there's data)
+                if !availablePGYLevels.isEmpty {
+                    Divider()
+                    ForEach(availablePGYLevels, id: \.level) { pgyOption in
+                        Button {
+                            selectedPGYLevelFilter = pgyOption.level
+                            selectedRange = .pgy
+                        } label: {
+                            if selectedPGYLevelFilter == pgyOption.level {
+                                Label(pgyOption.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(pgyOption.displayName)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(timeRangeDisplayName)
+                        .font(.subheadline)
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                }
+                .foregroundStyle(ProcedusTheme.primary)
             }
-            .pickerStyle(.menu)
             .tint(ProcedusTheme.primary)
 
             Spacer()
@@ -285,8 +370,31 @@ struct IndividualCaseRowView: View {
         return result
     }
 
+    /// Check if this is a noninvasive case (all procedures from cardiac imaging)
+    private var isNoninvasiveCase: Bool {
+        // Check caseType if set, otherwise infer from procedure IDs
+        if let caseType = caseEntry.caseType {
+            return caseType == .noninvasive
+        }
+        // Fallback: all cardiac imaging procedures start with "ci-"
+        return !caseEntry.procedureTagIds.isEmpty && caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("ci-") }
+    }
+
+    /// Get first procedure name for display
+    private var firstProcedureName: String {
+        guard let firstId = caseEntry.procedureTagIds.first,
+              let procedure = SpecialtyPackCatalog.findProcedure(by: firstId) else {
+            return "Study"
+        }
+        return procedure.title
+    }
+
     private var attendingName: String {
+        // For noninvasive cases without an attending, show the procedure name instead
         let attendingId = caseEntry.supervisorId ?? caseEntry.attendingId
+        if attendingId == nil && isNoninvasiveCase {
+            return firstProcedureName
+        }
         guard let id = attendingId else { return "Unknown" }
         return attendings.first { $0.id == id }?.lastName ?? "Unknown"
     }

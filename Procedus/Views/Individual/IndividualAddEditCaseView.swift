@@ -25,6 +25,9 @@ struct IndividualAddEditCaseView: View {
     @Query(filter: #Predicate<CustomComplication> { !$0.isArchived })
     private var customComplications: [CustomComplication]
 
+    @Query(filter: #Predicate<CustomProcedureDetail> { !$0.isArchived })
+    private var customProcedureDetails: [CustomProcedureDetail]
+
     @Query private var allUsers: [User]
 
     // Form state
@@ -36,6 +39,7 @@ struct IndividualAddEditCaseView: View {
     @State private var selectedOutcome: CaseOutcome = .success
     @State private var selectedComplications: Set<String> = []
     @State private var selectedDevices: [String: Set<String>] = [:]  // procedureId -> device names
+    @State private var customDetailSelections: [String: Set<String>] = [:]  // detailId.uuidString -> selected option strings
     @State private var caseNotes: String = ""
     @State private var showingDeleteConfirmation = false
 
@@ -149,13 +153,23 @@ struct IndividualAddEditCaseView: View {
         generateWeekBuckets(count: 52)
     }
     
-    // Complications filtered by enabled specialty packs + custom
+    // Complications filtered by case type - IC-specific for invasive
     private var allComplications: [(id: String, title: String, isCustom: Bool)] {
         var result: [(id: String, title: String, isCustom: Bool)] = []
         var seenComplications = Set<String>()
 
-        // Only show complications from ENABLED specialty packs
-        for pack in enabledPacks {
+        // For invasive cardiology cases, only show IC-specific complications
+        // For noninvasive, show cardiac imaging complications
+        let relevantPacks: [SpecialtyPack]
+        if selectedCaseType == .noninvasive || isSimplifiedNoninvasiveForm {
+            // Cardiac imaging complications only
+            relevantPacks = enabledPacks.filter { $0.id == "cardiac-imaging" }
+        } else {
+            // Invasive: IC and EP complications only (not all packs)
+            relevantPacks = enabledPacks.filter { $0.id == "interventional-cardiology" || $0.id == "electrophysiology" }
+        }
+
+        for pack in relevantPacks {
             for complication in pack.defaultComplications {
                 if !seenComplications.contains(complication.rawValue) {
                     seenComplications.insert(complication.rawValue)
@@ -203,6 +217,12 @@ struct IndividualAddEditCaseView: View {
             devices[procedureId] = Set(deviceList)
         }
         self._selectedDevices = State(initialValue: devices)
+        // Load existing custom detail selections
+        var details: [String: Set<String>] = [:]
+        for (detailId, optionList) in existingCase.customDetailSelections {
+            details[detailId] = Set(optionList)
+        }
+        self._customDetailSelections = State(initialValue: details)
         // Load case type and operator position
         self._selectedCaseType = State(initialValue: existingCase.caseType ?? .invasive)
         self._selectedOperatorPosition = State(initialValue: existingCase.operatorPosition)
@@ -430,13 +450,8 @@ struct IndividualAddEditCaseView: View {
                 // Clear operator position when switching to noninvasive
                 if newValue == .noninvasive {
                     selectedOperatorPosition = nil
-                    // Auto-expand cardiac imaging pack and all its categories for noninvasive cases
+                    // Auto-expand cardiac imaging pack (but keep subcategories collapsed)
                     expandedPackIds.insert("cardiac-imaging")
-                    if let cardiacImagingPack = SpecialtyPackCatalog.pack(for: "cardiac-imaging") {
-                        for category in cardiacImagingPack.categories {
-                            expandedCategoryIds.insert("\(cardiacImagingPack.id)-\(category.category.rawValue)")
-                        }
-                    }
                 }
             }
         } header: {
@@ -715,6 +730,11 @@ struct IndividualAddEditCaseView: View {
                     if ThrombectomyDevice.isEligible(procedureId: procedure.id) && selectedProcedureTagIds.contains(procedure.id) {
                         deviceSelectionView(for: procedure.id)
                     }
+
+                    // Show custom procedure details if applicable AND procedure is selected
+                    if selectedProcedureTagIds.contains(procedure.id) && !applicableCustomDetails(for: procedure.id).isEmpty {
+                        customDetailSelectionView(for: procedure.id)
+                    }
                 }
                 .padding(.leading, 24)
             }
@@ -774,7 +794,75 @@ struct IndividualAddEditCaseView: View {
         }
         selectedDevices[procedureId] = devices
     }
-    
+
+    // MARK: - Custom Procedure Details Selection
+
+    /// Get custom details that apply to a given procedure
+    private func applicableCustomDetails(for procedureId: String) -> [CustomProcedureDetail] {
+        customProcedureDetails.filter { $0.appliesTo(procedureId: procedureId) }
+    }
+
+    @ViewBuilder
+    private func customDetailSelectionView(for procedureId: String) -> some View {
+        let applicableDetails = applicableCustomDetails(for: procedureId)
+
+        if !applicableDetails.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(applicableDetails) { detail in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(detail.name):")
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), alignment: .leading),
+                            GridItem(.flexible(), alignment: .leading)
+                        ], spacing: 8) {
+                            ForEach(detail.options, id: \.self) { option in
+                                customDetailOptionCheckbox(option: option, detail: detail)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.top, 4)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 8)
+            .background(Color(UIColor.tertiarySystemGroupedBackground).opacity(0.5))
+            .cornerRadius(8)
+            .padding(.leading, 4)
+        }
+    }
+
+    private func customDetailOptionCheckbox(option: String, detail: CustomProcedureDetail) -> some View {
+        let detailId = detail.id.uuidString
+        let isSelected = customDetailSelections[detailId]?.contains(option) ?? false
+
+        return Button {
+            toggleCustomDetailOption(option: option, detailId: detailId)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isSelected ? ProcedusTheme.accent : Color(UIColor.tertiaryLabel))
+                Text(option)
+                    .font(.clinicalCaption)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleCustomDetailOption(option: String, detailId: String) {
+        var options = customDetailSelections[detailId] ?? Set<String>()
+        if options.contains(option) {
+            options.remove(option)
+        } else {
+            options.insert(option)
+        }
+        customDetailSelections[detailId] = options
+    }
+
     // MARK: - Custom Procedures Section
     
     private var customProceduresSection: some View {
@@ -1050,12 +1138,21 @@ struct IndividualAddEditCaseView: View {
             }
         }
 
+        // Convert custom detail selections to storage format
+        var customDetailStorage: [String: [String]] = [:]
+        for (detailId, options) in customDetailSelections {
+            if !options.isEmpty {
+                customDetailStorage[detailId] = Array(options)
+            }
+        }
+
         if let existingCase = existingCase {
             existingCase.supervisorId = attendingId
             existingCase.hospitalId = facilityId
             existingCase.weekBucket = selectedWeekBucket
             existingCase.procedureTagIds = Array(selectedProcedureTagIds)
             existingCase.procedureDevices = deviceStorage
+            existingCase.customDetailSelections = customDetailStorage
             existingCase.accessSiteIds = Array(selectedAccessSites)
             existingCase.outcomeRaw = selectedOutcome.rawValue
             existingCase.complicationIds = Array(selectedComplications)
@@ -1080,6 +1177,7 @@ struct IndividualAddEditCaseView: View {
             )
             newCase.procedureTagIds = Array(selectedProcedureTagIds)
             newCase.procedureDevices = deviceStorage
+            newCase.customDetailSelections = customDetailStorage
             newCase.accessSiteIds = Array(selectedAccessSites)
             newCase.outcomeRaw = selectedOutcome.rawValue
             newCase.complicationIds = Array(selectedComplications)
@@ -1157,5 +1255,5 @@ func generateWeekBuckets(count: Int) -> [String] {
 #Preview {
     IndividualAddEditCaseView()
         .environment(AppState())
-        .modelContainer(for: [CaseEntry.self, Attending.self, TrainingFacility.self, CustomProcedure.self, CustomAccessSite.self, CustomComplication.self], inMemory: true)
+        .modelContainer(for: [CaseEntry.self, Attending.self, TrainingFacility.self, CustomProcedure.self, CustomAccessSite.self, CustomComplication.self, CustomProcedureDetail.self], inMemory: true)
 }

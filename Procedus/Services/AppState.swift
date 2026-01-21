@@ -83,6 +83,21 @@ class AppState {
         set { UserDefaults.standard.set(newValue, forKey: "individualInstitutionName") }
     }
 
+    var individualPGYLevelRaw: Int {
+        get { UserDefaults.standard.integer(forKey: "individualPGYLevel") }
+        set { UserDefaults.standard.set(newValue, forKey: "individualPGYLevel") }
+    }
+
+    var individualPGYLevel: PGYLevel? {
+        get {
+            let raw = individualPGYLevelRaw
+            return raw > 0 ? PGYLevel(rawValue: raw) : nil
+        }
+        set {
+            individualPGYLevelRaw = newValue?.rawValue ?? 0
+        }
+    }
+
     /// Whether the user has ONLY cardiac imaging enabled (no other cardiology packs)
     var isCardiacImagingOnlyMode: Bool {
         let cardiacImaging = enabledSpecialtyPackIds.contains("cardiac-imaging")
@@ -315,6 +330,11 @@ class AppState {
         if individualFirstName.isEmpty && individualLastName.isEmpty {
             individualFirstName = "Bart"
             individualLastName = "Simpson"
+        }
+
+        // Dev mode defaults PGY level to PGY-4 if not set
+        if individualPGYLevel == nil {
+            individualPGYLevel = .pgy4
         }
         #endif
     }

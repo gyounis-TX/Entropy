@@ -53,12 +53,16 @@ struct AnalyticsView: View {
 
     @Query private var allCases: [CaseEntry]
     @Query(filter: #Predicate<CustomProcedure> { !$0.isArchived }) private var customProcedures: [CustomProcedure]
+    @Query(filter: #Predicate<CustomProcedureDetail> { !$0.isArchived }) private var customProcedureDetails: [CustomProcedureDetail]
+    @Query(filter: #Predicate<CustomAccessSite> { !$0.isArchived }) private var customAccessSites: [CustomAccessSite]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }, sort: \TrainingFacility.name) private var facilities: [TrainingFacility]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query private var notifications: [Procedus.Notification]
 
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
+    @State private var selectedPGYLevelFilter: Int? = nil  // nil = no PGY filter, otherwise specific PGY level (1-8)
     @State private var selectedFacilityId: UUID? = nil // nil = All Facilities
+    @State private var selectedAttendingId: UUID? = nil // nil = All Attendings
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
     @State private var showingNotifications = false
@@ -70,6 +74,7 @@ struct AnalyticsView: View {
     @State private var selectedProcedureIds: Set<String> = []  // Empty = all procedures
     @State private var selectedCategoryPresets: Set<CategoryPreset> = []  // Multiple presets allowed
     @State private var selectedAnalyticsCaseType: CaseType? = nil  // nil = all, for cardiology programs
+    @State private var selectedOperatorPositionFilter: OperatorPosition? = nil  // nil = all, for invasive cardiology
 
     // Check if this is a cardiology program that should show the case type filter
     private var shouldShowAnalyticsCaseTypeFilter: Bool {
@@ -115,7 +120,35 @@ struct AnalyticsView: View {
         guard let userId = currentUserId else { return [] }
         return allCases.filter { $0.ownerId == userId }
     }
-    
+
+    /// Get available PGY levels that have data, based on fellow's current PGY level
+    private var availablePGYLevels: [(level: Int, displayName: String)] {
+        guard let currentPGY = appState.individualPGYLevel else { return [] }
+
+        let currentAcademicYear = academicYear(for: Date())
+        var levelsWithData: Set<Int> = []
+
+        // Check which PGY levels have case data
+        for caseEntry in userCases {
+            let caseAcademicYear = academicYear(for: caseEntry.createdAt)
+            let yearsAgo = currentAcademicYear - caseAcademicYear
+            let pgyLevel = currentPGY.rawValue - yearsAgo
+            if pgyLevel >= 1 && pgyLevel <= 8 {
+                levelsWithData.insert(pgyLevel)
+            }
+        }
+
+        // Return sorted from highest to lowest (current PGY first)
+        return levelsWithData.sorted(by: >).map { level in
+            (level: level, displayName: "PGY-\(level)")
+        }
+    }
+
+    /// Standard time ranges without the generic PGY option
+    private var standardTimeRanges: [ProcedusAnalyticsRange] {
+        ProcedusAnalyticsRange.allCases.filter { $0 != .pgy && $0 != .custom }
+    }
+
     private var filteredCases: [CaseEntry] {
         let calendar = Calendar.current
         let now = Date()
@@ -153,6 +186,16 @@ struct AnalyticsView: View {
             cases = cases.filter { $0.hospitalId == facilityId }
         }
 
+        // Apply attending filter
+        if let attendingId = selectedAttendingId {
+            cases = cases.filter { $0.attendingId == attendingId }
+        }
+
+        // Apply operator position filter (for invasive cardiology cases)
+        if let operatorFilter = selectedOperatorPositionFilter {
+            cases = cases.filter { $0.operatorPosition == operatorFilter }
+        }
+
         // CRITICAL PER SPEC: Rejected cases do NOT count toward analytics
         // "Rejected cases do NOT count toward: Procedure totals, Analytics, Reports, Exports"
         cases = cases.filter { $0.attestationStatus != .rejected }
@@ -171,6 +214,18 @@ struct AnalyticsView: View {
                 } else {
                     return !hasCardiacImagingOnly
                 }
+            }
+        }
+
+        // Apply PGY level filter if selected
+        if let pgyLevel = selectedPGYLevelFilter, let currentPGY = appState.individualPGYLevel {
+            let currentAcademicYear = academicYear(for: Date())
+            // Calculate which academic year corresponds to this PGY level
+            let yearsAgo = currentPGY.rawValue - pgyLevel
+            let targetAcademicYear = currentAcademicYear - yearsAgo
+
+            cases = cases.filter { caseEntry in
+                academicYear(for: caseEntry.createdAt) == targetAcademicYear
             }
         }
 
@@ -288,8 +343,18 @@ struct AnalyticsView: View {
                     analyticsCaseTypeSection
                 }
 
+                // Operator position filter (for invasive cardiology)
+                if shouldShowOperatorPositionFilter {
+                    operatorPositionFilterSection
+                }
+
                 rangeSection
                 facilityFilterSection
+
+                // Attending filter (hide for noninvasive-only mode since those cases don't have attendings)
+                if selectedAnalyticsCaseType != .noninvasive {
+                    attendingFilterSection
+                }
 
                 if selectedRange == .custom {
                     customRangeSection
@@ -302,6 +367,11 @@ struct AnalyticsView: View {
                 // Hide access site section for noninvasive mode
                 if selectedAnalyticsCaseType != .noninvasive {
                     accessSiteSection
+                }
+
+                // Custom procedure details tracking
+                if !customProcedureDetails.isEmpty {
+                    customDetailsSection
                 }
 
                 notesSection
@@ -323,6 +393,13 @@ struct AnalyticsView: View {
             .sheet(isPresented: $showingNotifications) {
                 NotificationsSheet(role: appState.userRole, userId: appState.currentUser?.id)
             }
+            .sheet(isPresented: $showingProcedureFilter) {
+                ProcedureFilterSheet(
+                    selectedCategoryPresets: $selectedCategoryPresets,
+                    selectedProcedureIds: $selectedProcedureIds,
+                    enabledPacks: appState.getEnabledPacks()
+                )
+            }
         }
     }
     
@@ -331,24 +408,6 @@ struct AnalyticsView: View {
     private var analyticsCaseTypeSection: some View {
         Section {
             HStack(spacing: 8) {
-                // All cases button
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedAnalyticsCaseType = nil
-                        selectedCategoryPresets.removeAll()
-                    }
-                } label: {
-                    Text("All")
-                        .font(.subheadline)
-                        .fontWeight(selectedAnalyticsCaseType == nil ? .semibold : .regular)
-                        .foregroundColor(selectedAnalyticsCaseType == nil ? .white : ProcedusTheme.textPrimary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(selectedAnalyticsCaseType == nil ? ProcedusTheme.primary : Color(UIColor.tertiarySystemFill))
-                        .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-
                 // Invasive button
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -356,18 +415,18 @@ struct AnalyticsView: View {
                         selectedCategoryPresets.removeAll()
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "arrow.right.circle.fill")
-                            .font(.system(size: 11))
+                            .font(.system(size: 10))
                         Text("Invasive")
-                            .font(.subheadline)
+                            .font(.caption)
                             .fontWeight(selectedAnalyticsCaseType == .invasive ? .semibold : .regular)
                     }
                     .foregroundColor(selectedAnalyticsCaseType == .invasive ? .white : ProcedusTheme.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
                     .background(selectedAnalyticsCaseType == .invasive ? Color.red : Color(UIColor.tertiarySystemFill))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
 
@@ -378,18 +437,36 @@ struct AnalyticsView: View {
                         selectedCategoryPresets.removeAll()
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 11))
+                            .font(.system(size: 10))
                         Text("Noninvasive")
-                            .font(.subheadline)
+                            .font(.caption)
                             .fontWeight(selectedAnalyticsCaseType == .noninvasive ? .semibold : .regular)
                     }
                     .foregroundColor(selectedAnalyticsCaseType == .noninvasive ? .white : ProcedusTheme.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
                     .background(selectedAnalyticsCaseType == .noninvasive ? Color.blue : Color(UIColor.tertiarySystemFill))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+
+                // All cases button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedAnalyticsCaseType = nil
+                        selectedCategoryPresets.removeAll()
+                    }
+                } label: {
+                    Text("All")
+                        .font(.caption)
+                        .fontWeight(selectedAnalyticsCaseType == nil ? .semibold : .regular)
+                        .foregroundColor(selectedAnalyticsCaseType == nil ? .white : ProcedusTheme.textPrimary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(selectedAnalyticsCaseType == nil ? ProcedusTheme.primary : Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
 
@@ -401,9 +478,99 @@ struct AnalyticsView: View {
                 .foregroundStyle(ProcedusTheme.textSecondary)
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+        .onChange(of: selectedAnalyticsCaseType) { _, newValue in
+            // Clear operator position filter when switching away from invasive
+            if newValue != .invasive {
+                selectedOperatorPositionFilter = nil
+            }
+            // Default to appropriate preset based on case type
+            if newValue == .noninvasive {
+                selectedCategoryPresets = [.all]
+                selectedProcedureIds.removeAll()
+            }
+        }
+    }
+
+    // MARK: - Operator Position Filter Section (Invasive Cardiology)
+
+    private var shouldShowOperatorPositionFilter: Bool {
+        // Show when case type is invasive or when showing all (which includes invasive)
+        selectedAnalyticsCaseType != .noninvasive && appState.isCardiologyFellowship
+    }
+
+    private var operatorPositionFilterSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                // Primary button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedOperatorPositionFilter = .primary
+                    }
+                } label: {
+                    Text("Primary")
+                        .font(.subheadline)
+                        .fontWeight(selectedOperatorPositionFilter == .primary ? .semibold : .regular)
+                        .foregroundColor(selectedOperatorPositionFilter == .primary ? .white : ProcedusTheme.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(selectedOperatorPositionFilter == .primary ? Color.green : Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                // Secondary button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedOperatorPositionFilter = .secondary
+                    }
+                } label: {
+                    Text("Secondary")
+                        .font(.subheadline)
+                        .fontWeight(selectedOperatorPositionFilter == .secondary ? .semibold : .regular)
+                        .foregroundColor(selectedOperatorPositionFilter == .secondary ? .white : ProcedusTheme.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(selectedOperatorPositionFilter == .secondary ? Color.orange : Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                // All button
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedOperatorPositionFilter = nil
+                    }
+                } label: {
+                    Text("All")
+                        .font(.subheadline)
+                        .fontWeight(selectedOperatorPositionFilter == nil ? .semibold : .regular)
+                        .foregroundColor(selectedOperatorPositionFilter == nil ? .white : ProcedusTheme.textPrimary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(selectedOperatorPositionFilter == nil ? ProcedusTheme.primary : Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+            }
+        } header: {
+            Text("Operator Role")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
 
     // MARK: - Range Section
+
+    /// Combined display name for the current time range selection
+    private var timeRangeDisplayName: String {
+        if let pgyLevel = selectedPGYLevelFilter {
+            return "PGY-\(pgyLevel)"
+        }
+        return selectedRange.rawValue
+    }
 
     private var rangeSection: some View {
         Section {
@@ -411,35 +578,66 @@ struct AnalyticsView: View {
                 Text("Time Range")
                     .font(.clinicalBody)
                     .foregroundStyle(ProcedusTheme.textPrimary)
-                
+
                 Spacer()
-                
-                Picker("", selection: $selectedRange) {
-                    ForEach(ProcedusAnalyticsRange.allCases, id: \.self) { range in
-                        Text(range.rawValue).tag(range)
+
+                Menu {
+                    // Standard time ranges (excluding generic PGY and custom)
+                    ForEach(standardTimeRanges, id: \.self) { range in
+                        Button {
+                            selectedRange = range
+                            selectedPGYLevelFilter = nil
+                        } label: {
+                            if selectedPGYLevelFilter == nil && selectedRange == range {
+                                Label(range.rawValue, systemImage: "checkmark")
+                            } else {
+                                Text(range.rawValue)
+                            }
+                        }
                     }
+
+                    // Dynamic PGY levels (only if PGY level is set and there's data)
+                    if !availablePGYLevels.isEmpty {
+                        Divider()
+                        ForEach(availablePGYLevels, id: \.level) { pgyOption in
+                            Button {
+                                selectedPGYLevelFilter = pgyOption.level
+                                selectedRange = .pgy
+                                selectedChartGrouping = .pgyYears
+                            } label: {
+                                if selectedPGYLevelFilter == pgyOption.level {
+                                    Label(pgyOption.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(pgyOption.displayName)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(timeRangeDisplayName)
+                            .font(.clinicalBody)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10))
+                    }
+                    .foregroundColor(ProcedusTheme.primary)
                 }
-                .pickerStyle(.menu)
-                .tint(ProcedusTheme.primary)
-                .labelsHidden()
-                .controlSize(.small)
-                .fixedSize()
             }
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
-    
+
     // MARK: - Facility Filter Section
-    
+
     private var facilityFilterSection: some View {
         Section {
             HStack {
                 Text("Hospital")
                     .font(.clinicalBody)
                     .foregroundStyle(ProcedusTheme.textPrimary)
-                
+
                 Spacer()
-                
+
                 Picker("", selection: $selectedFacilityId) {
                     Text("All Hospitals").tag(nil as UUID?)
                     ForEach(facilities) { facility in
@@ -455,7 +653,34 @@ struct AnalyticsView: View {
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
-    
+
+    // MARK: - Attending Filter Section
+
+    private var attendingFilterSection: some View {
+        Section {
+            HStack {
+                Text("Attending")
+                    .font(.clinicalBody)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+
+                Spacer()
+
+                Picker("", selection: $selectedAttendingId) {
+                    Text("All Attendings").tag(nil as UUID?)
+                    ForEach(attendings.sorted { $0.name < $1.name }) { attending in
+                        Text(attending.name).tag(attending.id as UUID?)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(ProcedusTheme.primary)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
     // MARK: - Custom Range Section
     
     private var customRangeSection: some View {
@@ -618,13 +843,6 @@ struct AnalyticsView: View {
                 .foregroundStyle(ProcedusTheme.textSecondary)
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
-        .sheet(isPresented: $showingProcedureFilter) {
-            ProcedureFilterSheet(
-                selectedCategoryPresets: $selectedCategoryPresets,
-                selectedProcedureIds: $selectedProcedureIds,
-                enabledPacks: appState.getEnabledPacks()
-            )
-        }
     }
 
     @ViewBuilder
@@ -715,6 +933,8 @@ struct AnalyticsView: View {
             return casesByQuarter
         case .years:
             return casesByYear
+        case .pgyYears:
+            return casesByPGYYear
         }
     }
 
@@ -794,6 +1014,61 @@ struct AnalyticsView: View {
         .sorted { $0.bucket < $1.bucket }
         .suffix(5)
         .map { $0 }
+    }
+
+    /// Group cases by PGY level based on fellow's current PGY level and academic year
+    private var casesByPGYYear: [ChartDataPoint] {
+        guard let currentPGY = appState.individualPGYLevel else {
+            // If no PGY level set, fall back to academic years
+            return casesByAcademicYear
+        }
+
+        let currentAcademicYear = academicYear(for: Date())
+        var grouped: [Int: Int] = [:] // PGY level -> case count
+
+        for caseEntry in procedureFilteredCases {
+            let caseAcademicYear = academicYear(for: caseEntry.createdAt)
+            let yearsAgo = currentAcademicYear - caseAcademicYear
+            let pgyLevel = currentPGY.rawValue - yearsAgo
+
+            // Only include if PGY level is valid (1-8)
+            if pgyLevel >= 1 && pgyLevel <= 8 {
+                grouped[pgyLevel, default: 0] += 1
+            }
+        }
+
+        // Sort by PGY level ascending and create chart points
+        return grouped.map { pgyLevel, count in
+            ChartDataPoint(bucket: String(format: "%02d", pgyLevel), label: "PGY-\(pgyLevel)", count: count)
+        }
+        .sorted { $0.bucket < $1.bucket }
+        .map { $0 }
+    }
+
+    /// Fallback: group by academic year when PGY level not set
+    private var casesByAcademicYear: [ChartDataPoint] {
+        var grouped: [Int: Int] = [:]
+        for caseEntry in procedureFilteredCases {
+            let year = academicYear(for: caseEntry.createdAt)
+            grouped[year, default: 0] += 1
+        }
+        return grouped.map { year, count in
+            ChartDataPoint(bucket: String(year), label: "AY \(year)-\(year + 1)", count: count)
+        }
+        .sorted { $0.bucket < $1.bucket }
+        .suffix(5)
+        .map { $0 }
+    }
+
+    /// Calculate the academic year for a date (July 1 - June 30)
+    /// Returns the year in which the academic year started
+    private func academicYear(for date: Date) -> Int {
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        // If July-December, academic year is current year
+        // If January-June, academic year is previous year
+        return month >= 7 ? year : year - 1
     }
 
     /// Format week bucket (e.g., "2026-W03") to readable label (e.g., "Jan 13")
@@ -940,7 +1215,17 @@ struct AnalyticsView: View {
         for caseEntry in filteredCases {
             for siteId in caseEntry.accessSiteIds {
                 // Look up the display name for the access site
-                let siteName = AccessSite(rawValue: siteId)?.rawValue ?? siteId
+                let siteName: String
+                if let builtInSite = AccessSite(rawValue: siteId) {
+                    // Built-in access site
+                    siteName = builtInSite.rawValue
+                } else if let customSite = customAccessSites.first(where: { $0.id.uuidString == siteId }) {
+                    // Custom access site - use the title
+                    siteName = customSite.title
+                } else {
+                    // Fallback to raw ID (shouldn't happen normally)
+                    siteName = siteId
+                }
                 counts[siteName, default: 0] += 1
             }
         }
@@ -1017,6 +1302,79 @@ struct AnalyticsView: View {
                 Text("\(casesWithNotes.count) note\(casesWithNotes.count == 1 ? "" : "s")")
                     .font(.clinicalCaption)
                     .foregroundStyle(ProcedusTheme.textSecondary)
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Custom Details Section
+
+    /// Compute statistics for custom procedure details across filtered cases
+    private var customDetailStats: [(detail: CustomProcedureDetail, optionCounts: [(option: String, count: Int)])] {
+        var results: [(detail: CustomProcedureDetail, optionCounts: [(option: String, count: Int)])] = []
+
+        for detail in customProcedureDetails {
+            let detailId = detail.id.uuidString
+            var optionCounts: [String: Int] = [:]
+
+            // Count each option selection across filtered cases
+            for caseEntry in filteredCases {
+                if let selections = caseEntry.customDetailSelections[detailId] {
+                    for option in selections {
+                        optionCounts[option, default: 0] += 1
+                    }
+                }
+            }
+
+            // Only include details that have at least one selection
+            if !optionCounts.isEmpty {
+                let sortedCounts = optionCounts
+                    .map { (option: $0.key, count: $0.value) }
+                    .sorted { $0.count > $1.count }
+                results.append((detail: detail, optionCounts: sortedCounts))
+            }
+        }
+
+        return results.sorted { $0.detail.name < $1.detail.name }
+    }
+
+    private var customDetailsSection: some View {
+        Section {
+            if customDetailStats.isEmpty {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.title2)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                        Text("No custom detail data")
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                        Text("Custom details will appear here when logged with cases")
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textTertiary)
+                            .multilineTextAlignment(.center)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+            } else {
+                ForEach(customDetailStats, id: \.detail.id) { item in
+                    CustomDetailStatsRow(detailName: item.detail.name, optionCounts: item.optionCounts)
+                }
+            }
+        } header: {
+            HStack {
+                Text("Custom Procedure Details")
+                    .font(.clinicalFootnote)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                Spacer()
+                if !customDetailStats.isEmpty {
+                    let totalSelections = customDetailStats.flatMap { $0.optionCounts }.reduce(0) { $0 + $1.count }
+                    Text("\(totalSelections) selection\(totalSelections == 1 ? "" : "s")")
+                        .font(.clinicalCaption)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                }
             }
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
@@ -1401,10 +1759,57 @@ struct ProcedureFilterSheet: View {
     }
 }
 
+// MARK: - Custom Detail Stats Row
+
+private struct CustomDetailStatsRow: View {
+    let detailName: String
+    let optionCounts: [(option: String, count: Int)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 14))
+                    .foregroundStyle(ProcedusTheme.accent)
+                Text(detailName)
+                    .font(.clinicalBody)
+                    .fontWeight(.medium)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+                Spacer()
+                Text("\(optionCounts.reduce(0) { $0 + $1.count }) total")
+                    .font(.clinicalCaption)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+            }
+
+            // Display option counts in a compact layout
+            LazyVGrid(columns: [
+                GridItem(.flexible(), alignment: .leading),
+                GridItem(.flexible(), alignment: .leading)
+            ], spacing: 6) {
+                ForEach(optionCounts, id: \.option) { item in
+                    HStack(spacing: 4) {
+                        Text(item.option)
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("\(item.count)")
+                            .font(.clinicalCaption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(ProcedusTheme.primary)
+                    }
+                }
+            }
+            .padding(.leading, 20)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
     AnalyticsView()
         .environment(AppState())
-        .modelContainer(for: [CaseEntry.self, Attending.self, TrainingFacility.self, CustomProcedure.self], inMemory: true)
+        .modelContainer(for: [CaseEntry.self, Attending.self, TrainingFacility.self, CustomProcedure.self, CustomProcedureDetail.self], inMemory: true)
 }

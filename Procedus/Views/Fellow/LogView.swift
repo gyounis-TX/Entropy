@@ -301,55 +301,55 @@ struct LogView: View {
     // MARK: - Case Type Filter Section
 
     private var caseTypeFilterSection: some View {
-        HStack(spacing: 0) {
-            // All cases button
-            Button {
-                selectedCaseTypeFilter = nil
-            } label: {
-                Text("All")
-                    .font(.subheadline)
-                    .fontWeight(selectedCaseTypeFilter == nil ? .semibold : .regular)
-                    .foregroundColor(selectedCaseTypeFilter == nil ? .white : Color(UIColor.label))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(selectedCaseTypeFilter == nil ? Color(red: 0.05, green: 0.35, blue: 0.65) : Color.clear)
-                    .cornerRadius(8)
-            }
-
+        HStack(spacing: 4) {
             // Invasive button
             Button {
                 selectedCaseTypeFilter = .invasive
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                     Text("Invasive")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(selectedCaseTypeFilter == .invasive ? .semibold : .regular)
                 }
                 .foregroundColor(selectedCaseTypeFilter == .invasive ? .white : Color(UIColor.label))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(selectedCaseTypeFilter == .invasive ? Color.red : Color.clear)
-                .cornerRadius(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(selectedCaseTypeFilter == .invasive ? Color.red : Color(UIColor.tertiarySystemFill))
+                .cornerRadius(6)
             }
 
             // Noninvasive button
             Button {
                 selectedCaseTypeFilter = .noninvasive
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                     Text("Noninvasive")
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(selectedCaseTypeFilter == .noninvasive ? .semibold : .regular)
                 }
                 .foregroundColor(selectedCaseTypeFilter == .noninvasive ? .white : Color(UIColor.label))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(selectedCaseTypeFilter == .noninvasive ? Color.blue : Color.clear)
-                .cornerRadius(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(selectedCaseTypeFilter == .noninvasive ? Color.blue : Color(UIColor.tertiarySystemFill))
+                .cornerRadius(6)
+            }
+
+            // All cases button
+            Button {
+                selectedCaseTypeFilter = nil
+            } label: {
+                Text("All")
+                    .font(.caption)
+                    .fontWeight(selectedCaseTypeFilter == nil ? .semibold : .regular)
+                    .foregroundColor(selectedCaseTypeFilter == nil ? .white : Color(UIColor.label))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(selectedCaseTypeFilter == nil ? Color(red: 0.05, green: 0.35, blue: 0.65) : Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(6)
             }
 
             Spacer()
@@ -490,9 +490,32 @@ struct LogView: View {
 struct CaseRowView: View {
     let caseEntry: CaseEntry
     let attendings: [Attending]
-    
+
+    /// Check if this is a noninvasive case (all procedures from cardiac imaging)
+    private var isNoninvasiveCase: Bool {
+        // Check caseType if set, otherwise infer from procedure IDs
+        if let caseType = caseEntry.caseType {
+            return caseType == .noninvasive
+        }
+        // Fallback: all cardiac imaging procedures start with "ci-"
+        return !caseEntry.procedureTagIds.isEmpty && caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("ci-") }
+    }
+
+    /// Get first procedure name for display
+    private var firstProcedureName: String {
+        guard let firstId = caseEntry.procedureTagIds.first,
+              let procedure = SpecialtyPackCatalog.findProcedure(by: firstId) else {
+            return "Study"
+        }
+        return procedure.title
+    }
+
     private var attendingName: String {
-        attendings.first { $0.id == caseEntry.attendingId }?.lastName ?? "Unknown"
+        // For noninvasive cases without an attending, show the procedure name instead
+        if caseEntry.attendingId == nil && isNoninvasiveCase {
+            return firstProcedureName
+        }
+        return attendings.first { $0.id == caseEntry.attendingId }?.lastName ?? "Unknown"
     }
     
     private var categoryBubbles: [ProcedureCategory] {

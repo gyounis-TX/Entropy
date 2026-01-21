@@ -107,31 +107,32 @@ struct RootView: View {
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @State private var showingModeSelection = false
-    
+    @State private var showingIndividualSetup = false
+
     var body: some View {
         VStack(spacing: 32) {
             Spacer()
-            
+
             Image(systemName: "stethoscope.circle.fill")
                 .font(.system(size: 100))
                 .foregroundStyle(ProcedusTheme.primary)
-            
+
             Text("Welcome to Procedus")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-            
+
             Text("Track your procedural training with ease")
                 .font(.subheadline)
                 .foregroundStyle(ProcedusTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 48)
-            
+
             Spacer()
-            
+
             VStack(spacing: 16) {
                 // Individual Mode Button
                 Button {
-                    appState.setupIndividualMode()
+                    showingIndividualSetup = true
                 } label: {
                     HStack {
                         Image(systemName: "person.fill")
@@ -144,7 +145,7 @@ struct OnboardingView: View {
                     .background(ProcedusTheme.primary)
                     .cornerRadius(12)
                 }
-                
+
                 // Institutional Mode Button
                 Button {
                     showingModeSelection = true
@@ -167,6 +168,141 @@ struct OnboardingView: View {
         .sheet(isPresented: $showingModeSelection) {
             InstitutionalSetupView()
         }
+        .sheet(isPresented: $showingIndividualSetup) {
+            IndividualSetupView()
+        }
+    }
+}
+
+// MARK: - Individual Setup View
+
+struct IndividualSetupView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var selectedPGYLevel: PGYLevel? = nil
+    @State private var selectedSpecialty: FellowshipSpecialty? = nil
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                // Welcome section
+                Section {
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle.badge.plus")
+                            .font(.system(size: 50))
+                            .foregroundStyle(ProcedusTheme.primary)
+
+                        Text("Set Up Your Profile")
+                            .font(.headline)
+
+                        Text("Tell us a bit about yourself to personalize your experience.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+
+                // Name section
+                Section {
+                    TextField("First Name", text: $firstName)
+                        .textContentType(.givenName)
+                    TextField("Last Name", text: $lastName)
+                        .textContentType(.familyName)
+                } header: {
+                    Text("Your Name")
+                } footer: {
+                    Text("This will appear on your procedure logs and reports.")
+                }
+
+                // Training Year section
+                Section {
+                    Picker("PGY Level", selection: $selectedPGYLevel) {
+                        Text("Select Level").tag(nil as PGYLevel?)
+                        ForEach(PGYLevel.allCases) { level in
+                            Text(level.displayName).tag(level as PGYLevel?)
+                        }
+                    }
+                } header: {
+                    Text("Training Year")
+                } footer: {
+                    Text("Your post-graduate year helps organize analytics by training level.")
+                }
+
+                // Fellowship Type section
+                Section {
+                    Picker("Fellowship Type", selection: $selectedSpecialty) {
+                        Text("Select Specialty").tag(nil as FellowshipSpecialty?)
+                        ForEach(FellowshipSpecialty.allCases) { specialty in
+                            Text(specialty.displayName).tag(specialty as FellowshipSpecialty?)
+                        }
+                    }
+                } header: {
+                    Text("Fellowship Type")
+                } footer: {
+                    Text("This will enable the appropriate procedure packs for your specialty.")
+                }
+
+                // Continue button
+                Section {
+                    Button {
+                        completeSetup()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("Get Started")
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                    }
+                    .disabled(firstName.isEmpty || lastName.isEmpty)
+                }
+            }
+            .navigationTitle("Individual Mode")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Skip") {
+                        skipSetup()
+                    }
+                }
+            }
+        }
+    }
+
+    private func completeSetup() {
+        // Save profile info
+        UserDefaults.standard.set(firstName, forKey: "individualFirstName")
+        UserDefaults.standard.set(lastName, forKey: "individualLastName")
+
+        if let pgyLevel = selectedPGYLevel {
+            appState.individualPGYLevel = pgyLevel
+        }
+
+        if let specialty = selectedSpecialty {
+            appState.individualFellowshipSpecialty = specialty
+            // Enable packs for this specialty
+            appState.enablePacksForSpecialty(specialty)
+        }
+
+        // Complete onboarding
+        appState.setupIndividualMode()
+        dismiss()
+    }
+
+    private func skipSetup() {
+        // Complete onboarding without saving profile
+        appState.setupIndividualMode()
+        dismiss()
     }
 }
 
