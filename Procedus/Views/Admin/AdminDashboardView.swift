@@ -4584,12 +4584,14 @@ struct AddEvaluationFieldSheet: View {
                     Text("Enter the criteria that attendings will assess for each case.")
                 }
 
-                Section("Field Type") {
+                Section {
                     Picker("Type", selection: $fieldType) {
                         Text("Checkbox").tag(EvaluationFieldType.checkbox)
                         Text("Rating (1-5)").tag(EvaluationFieldType.rating)
                     }
                     .pickerStyle(.segmented)
+                } header: {
+                    Text("Field Type")
                 } footer: {
                     if fieldType == .checkbox {
                         Text("Attendings will check this box if the criteria is met.")
@@ -4649,12 +4651,14 @@ struct EditEvaluationFieldSheet: View {
                     TextField("Evaluation Criteria", text: $title)
                 }
 
-                Section("Field Type") {
+                Section {
                     Picker("Type", selection: $fieldType) {
                         Text("Checkbox").tag(EvaluationFieldType.checkbox)
                         Text("Rating (1-5)").tag(EvaluationFieldType.rating)
                     }
                     .pickerStyle(.segmented)
+                } header: {
+                    Text("Field Type")
                 } footer: {
                     if fieldType == .checkbox {
                         Text("Attendings will check this box if the criteria is met.")
@@ -5617,7 +5621,7 @@ struct FellowEvaluationDetailView: View {
     let fellow: User
     let cases: [CaseEntry]
     let evaluationFields: [EvaluationField]
-    let attendings: [Attending]
+    let attendings: [User]
 
     @State private var showingExport = false
     @State private var selectedTab = 0
@@ -5985,7 +5989,7 @@ struct ExportEvaluationSheet: View {
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
 
-        for caseEntry in filteredCases.sorted(by: { $0.procedureDate > $1.procedureDate }) {
+        for caseEntry in filteredCases.sorted(by: { $0.createdAt > $1.createdAt }) {
             if let comment = caseEntry.evaluationComment, !comment.isEmpty {
                 let attendingName = attendings.first(where: { $0.id == caseEntry.attestedById })?.displayName ?? "Unknown"
                 comments.append(ExportService.EvaluationExportData.CommentEntry(
