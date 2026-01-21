@@ -825,6 +825,26 @@ struct ManageProgramView: View {
                     ProgramDetailRow(label: "Institution", value: program.institutionName.isEmpty ? "Not Set" : program.institutionName)
                     Divider().padding(.leading, 16)
 
+                    // Program Specialty
+                    HStack {
+                        Text("Specialty")
+                            .font(.body)
+                            .foregroundColor(Color(UIColor.label))
+                        Spacer()
+                        if let specialty = program.fellowshipSpecialty {
+                            Label(specialty.displayName, systemImage: specialty.iconName)
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("Not Set")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    Divider().padding(.leading, 16)
+
                     // Program Code (auto-generated)
                     ProgramCodeRow(label: "Program Code", code: program.programCode)
                     Divider().padding(.leading, 16)
@@ -1312,6 +1332,7 @@ struct EditProgramSheet: View {
 
     @State private var name = ""
     @State private var institutionName = ""
+    @State private var selectedSpecialty: FellowshipSpecialty = .cardiology
 
     private var program: Program? { programs.first }
 
@@ -1324,7 +1345,25 @@ struct EditProgramSheet: View {
                     TextField("Institution Name", text: $institutionName)
                         .autocapitalization(.words)
                 } footer: {
-                    Text("Enter your program and institution name. The program code will be generated automatically.")
+                    Text("Enter your program and institution name.")
+                }
+
+                Section {
+                    Picker("Program Specialty", selection: $selectedSpecialty) {
+                        ForEach(FellowshipSpecialty.allCases) { specialty in
+                            Label(specialty.displayName, systemImage: specialty.iconName)
+                                .tag(specialty)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                } header: {
+                    Text("Specialty")
+                } footer: {
+                    if selectedSpecialty.isCardiology {
+                        Text("Will auto-enable: Interventional Cardiology, Electrophysiology, and Cardiac Imaging packs")
+                    } else {
+                        Text("Will auto-enable: \(selectedSpecialty.displayName) specialty pack")
+                    }
                 }
 
                 // Show program code (read-only)
@@ -1357,6 +1396,7 @@ struct EditProgramSheet: View {
                 if let program = program {
                     name = program.name
                     institutionName = program.institutionName
+                    selectedSpecialty = program.fellowshipSpecialty ?? .cardiology
                 }
             }
         }
@@ -1366,7 +1406,13 @@ struct EditProgramSheet: View {
         if let program = program {
             program.name = name.trimmingCharacters(in: .whitespaces)
             program.institutionName = institutionName.trimmingCharacters(in: .whitespaces)
-            // Program code is auto-generated and not editable
+
+            // Update specialty and auto-enable packs if specialty changed
+            if program.fellowshipSpecialty != selectedSpecialty {
+                program.fellowshipSpecialty = selectedSpecialty
+                program.specialtyPackIds = selectedSpecialty.defaultPackIds
+            }
+
             program.updatedAt = Date()
             try? modelContext.save()
         }
