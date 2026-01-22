@@ -93,6 +93,8 @@ struct LogView: View {
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
     @State private var caseToDelete: CaseEntry? = nil
     @State private var showingDeleteConfirmation = false
+    @State private var rejectedCaseToHandle: CaseEntry? = nil
+    @State private var showingRejectedCaseActions = false
 
     @Query private var programs: [Program]
 
@@ -101,9 +103,12 @@ struct LogView: View {
         programs.first
     }
 
+    private var hasCardiacImaging: Bool {
+        currentProgram?.specialtyPackIds.contains("cardiac-imaging") == true
+    }
+
     private var shouldShowCaseTypeFilter: Bool {
         guard let program = currentProgram else { return false }
-        let hasCardiacImaging = program.specialtyPackIds.contains("cardiac-imaging")
         let hasOtherCardiology = program.specialtyPackIds.contains("interventional-cardiology") || program.specialtyPackIds.contains("electrophysiology")
         return hasCardiacImaging && hasOtherCardiology
     }
@@ -262,7 +267,7 @@ struct LogView: View {
                                 .font(.system(size: 16))
                         }
                         .disabled(!hasFellowSelected || myCases.isEmpty)
-                        
+
                         // Add case button
                         Button {
                             showingAddCase = true
@@ -470,7 +475,12 @@ struct LogView: View {
                 CaseRowView(caseEntry: caseEntry, attendings: attendings, customProcedures: customProcedures)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        caseToEdit = caseEntry
+                        if caseEntry.attestationStatus == .rejected {
+                            rejectedCaseToHandle = caseEntry
+                            showingRejectedCaseActions = true
+                        } else {
+                            caseToEdit = caseEntry
+                        }
                     }
                     .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
             }
@@ -497,6 +507,51 @@ struct LogView: View {
         } message: {
             Text("This action cannot be undone. The case and all its procedures will be permanently removed.")
         }
+        .confirmationDialog("Rejected Case", isPresented: $showingRejectedCaseActions, presenting: rejectedCaseToHandle) { caseEntry in
+            Button("Resubmit for Attestation") {
+                resubmitCase(caseEntry)
+            }
+            Button("Edit Case") {
+                caseToEdit = caseEntry
+                rejectedCaseToHandle = nil
+            }
+            Button("Archive Case", role: .destructive) {
+                archiveCase(caseEntry)
+            }
+            Button("Cancel", role: .cancel) {
+                rejectedCaseToHandle = nil
+            }
+        } message: { caseEntry in
+            VStack {
+                Text("This case was rejected")
+                if let reason = caseEntry.rejectionReason, !reason.isEmpty {
+                    Text("Reason: \(reason)")
+                }
+            }
+        }
+    }
+
+    // MARK: - Rejected Case Handling
+
+    private func resubmitCase(_ caseEntry: CaseEntry) {
+        // Reset attestation status to pending for re-attestation
+        caseEntry.attestationStatus = .pending
+        caseEntry.rejectionReason = nil
+        caseEntry.rejectorId = nil
+        caseEntry.rejectedAt = nil
+        caseEntry.updatedAt = Date()
+
+        try? modelContext.save()
+        rejectedCaseToHandle = nil
+    }
+
+    private func archiveCase(_ caseEntry: CaseEntry) {
+        // Mark as archived - case will still exist but be excluded from analytics
+        caseEntry.isArchived = true
+        caseEntry.updatedAt = Date()
+
+        try? modelContext.save()
+        rejectedCaseToHandle = nil
     }
 }
 
@@ -777,9 +832,9 @@ struct FellowExportSheet: View {
         }.joined(separator: "; ")
     }
     
-    // Filter out rejected cases
+    // Filter out rejected and archived cases from exports
     private var exportableCases: [CaseEntry] {
-        cases.filter { $0.attestationStatus != .rejected }
+        cases.filter { $0.attestationStatus != .rejected && !$0.isArchived }
     }
     
     private func buildExportRows() -> [ExportService.CaseExportRow] {
@@ -929,6 +984,212 @@ struct FellowExportSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Bulk Imaging Entry Sheet
+
+struct BulkImagingEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
+
+    let weekBucket: String
+
+    @Query private var programs: [Program]
+    @Query private var facilities: [TrainingFacility]
+
+    @State private var selectedStudyType: ImagingStudyType = .echo
+    @State private var studyCount: Int = 1
+    @State private var selectedFacilityId: UUID?
+    @State private var notes: String = ""
+    @State private var isSaving = false
+    @State private var savedCount = 0
+    @State private var showingSuccess = false
+
+    private var currentProgram: Program? { programs.first }
+    private var currentFellowId: UUID? { appState.selectedFellowId }
+
+    private var activeFacilities: [TrainingFacility] {
+        facilities.filter { !$0.isArchived }
+    }
+
+    enum ImagingStudyType: String, CaseIterable, Identifiable {
+        case echo = "Echocardiogram"
+        case tte = "TTE"
+        case tee = "TEE"
+        case stressEcho = "Stress Echo"
+        case ct = "Cardiac CT"
+        case mri = "Cardiac MRI"
+        case nuclear = "Nuclear Imaging"
+        case pet = "PET Scan"
+
+        var id: String { rawValue }
+
+        var procedureId: String {
+            switch self {
+            case .echo: return "ci-echo"
+            case .tte: return "ci-tte"
+            case .tee: return "ci-tee"
+            case .stressEcho: return "ci-stress-echo"
+            case .ct: return "ci-cta"
+            case .mri: return "ci-mri"
+            case .nuclear: return "ci-nuclear"
+            case .pet: return "ci-pet"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .echo, .tte, .tee, .stressEcho: return "waveform.path.ecg"
+            case .ct: return "rays"
+            case .mri: return "brain.head.profile"
+            case .nuclear, .pet: return "atom"
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Study Type", selection: $selectedStudyType) {
+                        ForEach(ImagingStudyType.allCases) { type in
+                            Label(type.rawValue, systemImage: type.icon)
+                                .tag(type)
+                        }
+                    }
+                } header: {
+                    Text("Imaging Study")
+                }
+
+                Section {
+                    Stepper(value: $studyCount, in: 1...20) {
+                        HStack {
+                            Text("Number of Studies")
+                            Spacer()
+                            Text("\(studyCount)")
+                                .foregroundColor(.blue)
+                                .fontWeight(.semibold)
+                        }
+                    }
+
+                    // Quick count buttons
+                    HStack(spacing: 12) {
+                        ForEach([1, 5, 10], id: \.self) { count in
+                            Button {
+                                studyCount = count
+                            } label: {
+                                Text("\(count)")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(studyCount == count ? Color.blue : Color(UIColor.tertiarySystemFill))
+                                    .foregroundColor(studyCount == count ? .white : .primary)
+                                    .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                } header: {
+                    Text("Quantity")
+                } footer: {
+                    Text("Each study will be logged as a separate case for the current week.")
+                }
+
+                if !activeFacilities.isEmpty {
+                    Section {
+                        Picker("Facility", selection: $selectedFacilityId) {
+                            Text("No facility selected").tag(nil as UUID?)
+                            ForEach(activeFacilities) { facility in
+                                Text(facility.name).tag(facility.id as UUID?)
+                            }
+                        }
+                    } header: {
+                        Text("Location (Optional)")
+                    }
+                }
+
+                Section {
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                        .lineLimit(2...4)
+                } header: {
+                    Text("Notes")
+                } footer: {
+                    Text("Notes will be added to each study entry.")
+                }
+
+                Section {
+                    HStack {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Imaging studies don't require attending attestation")
+                                .font(.caption)
+                            Text("Studies will be logged as self-attested")
+                                .font(.caption)
+                                .foregroundColor(Color(UIColor.secondaryLabel))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Bulk Imaging Entry")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add \(studyCount) Stud\(studyCount == 1 ? "y" : "ies")") {
+                        saveStudies()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(isSaving)
+                }
+            }
+            .alert("Studies Added!", isPresented: $showingSuccess) {
+                Button("Done") { dismiss() }
+            } message: {
+                Text("\(savedCount) \(selectedStudyType.rawValue) stud\(savedCount == 1 ? "y" : "ies") added to your log.")
+            }
+        }
+    }
+
+    private func saveStudies() {
+        guard let fellowId = currentFellowId else { return }
+        isSaving = true
+
+        let now = Date()
+
+        for i in 0..<studyCount {
+            let caseEntry = CaseEntry(weekBucket: weekBucket)
+            caseEntry.fellowId = fellowId
+            caseEntry.ownerId = fellowId
+            caseEntry.procedureTagIds = [selectedStudyType.procedureId]
+            caseEntry.hospitalId = selectedFacilityId
+            caseEntry.facilityId = selectedFacilityId
+            caseEntry.caseType = .noninvasive
+            caseEntry.outcome = .success
+            caseEntry.notes = notes.isEmpty ? nil : notes
+            caseEntry.createdAt = now.addingTimeInterval(TimeInterval(i))  // Slightly offset timestamps
+            caseEntry.updatedAt = now
+
+            // Auto-attest since imaging studies don't need attending
+            caseEntry.attestationStatus = .attested
+            caseEntry.attestedAt = now
+
+            modelContext.insert(caseEntry)
+        }
+
+        do {
+            try modelContext.save()
+            savedCount = studyCount
+            showingSuccess = true
+        } catch {
+            print("Error saving bulk imaging studies: \(error)")
+        }
+
+        isSaving = false
     }
 }
 

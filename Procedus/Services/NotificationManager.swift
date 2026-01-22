@@ -29,13 +29,24 @@ class NotificationManager: ObservableObject {
         fellowName: String,
         caseId: UUID,
         procedureCount: Int,
+        procedureTitles: [String]? = nil,
         programId: UUID?
     ) {
+        // Build message with procedure names if available
+        let message: String
+        if let titles = procedureTitles, !titles.isEmpty {
+            let procedureList = titles.prefix(3).joined(separator: ", ")
+            let suffix = titles.count > 3 ? " + \(titles.count - 3) more" : ""
+            message = "\(fellowName) submitted a case with \(procedureList)\(suffix) for your attestation."
+        } else {
+            message = "\(fellowName) submitted a case with \(procedureCount) procedure(s) for your attestation."
+        }
+
         createNotification(
             userId: toAttendingId,
             attendingId: toAttendingId,
             title: "New Attestation Request",
-            message: "\(fellowName) submitted a case with \(procedureCount) procedure(s) for your attestation.",
+            message: message,
             type: .attestationRequested,
             caseId: caseId
         )

@@ -520,9 +520,9 @@ struct LogExportSheet: View {
     private func buildRows() -> [ExportService.CaseExportRow] {
         let df = DateFormatter(); df.dateStyle = .short
         
-        // CRITICAL PER SPEC: Rejected cases do NOT appear in exports
+        // CRITICAL PER SPEC: Rejected and archived cases do NOT appear in exports
         // "Rejected cases do NOT count toward: Procedure totals, Analytics, Reports, Exports"
-        let exportableCases = cases.filter { $0.attestationStatus != .rejected }
+        let exportableCases = cases.filter { $0.attestationStatus != .rejected && !$0.isArchived }
         
         return exportableCases.map { c in
             ExportService.CaseExportRow(
@@ -547,8 +547,8 @@ struct LogExportSheet: View {
     private func buildCountRows() -> [ExportService.ProcedureCountRow] {
         var counts: [String: (String, Int)] = [:]
         
-        // CRITICAL PER SPEC: Rejected cases do NOT count in procedure totals
-        let validCases = cases.filter { $0.attestationStatus != .rejected }
+        // CRITICAL PER SPEC: Rejected and archived cases do NOT count in procedure totals
+        let validCases = cases.filter { $0.attestationStatus != .rejected && !$0.isArchived }
         
         for c in validCases {
             for pid in c.procedureTagIds {
@@ -561,9 +561,9 @@ struct LogExportSheet: View {
             .sorted { $0.count > $1.count }
     }
     
-    // Note: totalCases in exportCountsExcel should exclude rejected
+    // Note: totalCases in exportCountsExcel should exclude rejected and archived
     private var validCaseCount: Int {
-        cases.filter { $0.attestationStatus != .rejected }.count
+        cases.filter { $0.attestationStatus != .rejected && !$0.isArchived }.count
     }
     
     private func exportCountsCSV() { if let url = ExportService.shared.exportProcedureCountsToCSV(rows: buildCountRows(), filename: "counts") { ShareSheetPresenter.present(url: url) } }

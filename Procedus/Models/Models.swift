@@ -472,6 +472,7 @@ final class CaseEntry {
     var proxyAttestorId: UUID?
     var isArchived: Bool
     var isMigrated: Bool
+    var isBulkEntry: Bool  // True if entered via bulk entry mode
     var migratedAt: Date?
     var caseTypeRaw: String?
     var operatorPositionRaw: String?
@@ -560,6 +561,7 @@ final class CaseEntry {
         self.proxyAttestorId = nil
         self.isArchived = false
         self.isMigrated = false
+        self.isBulkEntry = false
         self.migratedAt = nil
         self.caseTypeRaw = nil
         self.operatorPositionRaw = nil
@@ -620,6 +622,23 @@ final class Notification {
     var clearedAt: Date?
     var createdAt: Date
 
+    // Sender tracking for messages
+    var senderId: UUID?
+    var senderName: String?
+    var senderRoleRaw: String?
+
+    // Reply/conversation support
+    var replyToId: UUID?       // ID of the notification being replied to
+    var conversationId: UUID?  // Groups related messages together
+
+    @Transient var senderRole: UserRole? {
+        get {
+            guard let raw = senderRoleRaw else { return nil }
+            return UserRole(rawValue: raw)
+        }
+        set { senderRoleRaw = newValue?.rawValue }
+    }
+
     init(userId: UUID, title: String, message: String, notificationType: String, caseId: UUID? = nil, attendingId: UUID? = nil) {
         self.id = UUID()
         self.userId = userId
@@ -635,6 +654,11 @@ final class Notification {
         self.readAt = nil
         self.clearedAt = nil
         self.createdAt = Date()
+        self.senderId = nil
+        self.senderName = nil
+        self.senderRoleRaw = nil
+        self.replyToId = nil
+        self.conversationId = nil
     }
 }
 
@@ -690,6 +714,7 @@ extension String {
 final class EvaluationField {
     @Attribute(.unique) var id: UUID
     var title: String
+    var descriptionText: String?  // Optional expandable description for the field
     var fieldTypeRaw: String  // "checkbox" or "rating"
     var isRequired: Bool
     var displayOrder: Int
@@ -703,9 +728,10 @@ final class EvaluationField {
         set { fieldTypeRaw = newValue.rawValue }
     }
 
-    init(title: String, fieldType: EvaluationFieldType = .checkbox, isRequired: Bool = false, displayOrder: Int = 0, programId: UUID? = nil, isDefault: Bool = false) {
+    init(title: String, descriptionText: String? = nil, fieldType: EvaluationFieldType = .checkbox, isRequired: Bool = false, displayOrder: Int = 0, programId: UUID? = nil, isDefault: Bool = false) {
         self.id = UUID()
         self.title = title
+        self.descriptionText = descriptionText
         self.fieldTypeRaw = fieldType.rawValue
         self.isRequired = isRequired
         self.displayOrder = displayOrder
@@ -795,5 +821,117 @@ final class AuditEntry {
             entityName: "",
             details: details
         )
+    }
+}
+
+// MARK: - Badge (Achievement Definition)
+
+@Model
+final class Badge {
+    @Attribute(.unique) var id: String  // e.g., "first-pci-primary", "milestone-50-ic-pci-stent"
+    var title: String
+    var descriptionText: String
+    var iconName: String                // SF Symbol name
+    var badgeTypeRaw: String            // BadgeType enum raw value
+    var criteriaJson: String            // JSON-encoded BadgeCriteria
+    var tier: Int                       // 1=bronze, 2=silver, 3=gold, 4=platinum
+    var pointValue: Int                 // Points awarded for gamification
+    var isActive: Bool                  // Can be disabled by admin
+    var createdAt: Date
+
+    @Transient var badgeType: BadgeType {
+        get { BadgeType(rawValue: badgeTypeRaw) ?? .milestone }
+        set { badgeTypeRaw = newValue.rawValue }
+    }
+
+    @Transient var badgeTier: BadgeTier {
+        get { BadgeTier(rawValue: tier) ?? .bronze }
+        set { tier = newValue.rawValue }
+    }
+
+    @Transient var criteria: BadgeCriteria? {
+        get {
+            guard let data = criteriaJson.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(BadgeCriteria.self, from: data)
+        }
+        set {
+            if let newValue = newValue,
+               let data = try? JSONEncoder().encode(newValue),
+               let json = String(data: data, encoding: .utf8) {
+                criteriaJson = json
+            }
+        }
+    }
+
+    init(
+        id: String,
+        title: String,
+        description: String,
+        iconName: String,
+        badgeType: BadgeType,
+        criteria: BadgeCriteria,
+        tier: BadgeTier = .bronze,
+        pointValue: Int = 10
+    ) {
+        self.id = id
+        self.title = title
+        self.descriptionText = description
+        self.iconName = iconName
+        self.badgeTypeRaw = badgeType.rawValue
+        self.tier = tier.rawValue
+        self.pointValue = pointValue
+        self.isActive = true
+        self.createdAt = Date()
+
+        // Encode criteria to JSON
+        if let data = try? JSONEncoder().encode(criteria),
+           let json = String(data: data, encoding: .utf8) {
+            self.criteriaJson = json
+        } else {
+            self.criteriaJson = "{}"
+        }
+    }
+}
+
+// MARK: - BadgeEarned (Fellow's Earned Badges)
+
+@Model
+final class BadgeEarned {
+    @Attribute(.unique) var id: UUID
+    var badgeId: String               // References Badge.id
+    var fellowId: UUID                // User ID or ownerId of the fellow
+    var programId: UUID?              // For institutional mode
+    var earnedAt: Date
+    var triggeringCaseId: UUID?       // The case that triggered the badge
+    var notifiedAt: Date?             // When fellow was notified
+    var viewedAt: Date?               // When fellow viewed/acknowledged the badge
+    var procedureCount: Int           // Count at time of earning (for milestones)
+
+    init(
+        badgeId: String,
+        fellowId: UUID,
+        programId: UUID? = nil,
+        triggeringCaseId: UUID? = nil,
+        procedureCount: Int = 0
+    ) {
+        self.id = UUID()
+        self.badgeId = badgeId
+        self.fellowId = fellowId
+        self.programId = programId
+        self.earnedAt = Date()
+        self.triggeringCaseId = triggeringCaseId
+        self.notifiedAt = nil
+        self.viewedAt = nil
+        self.procedureCount = procedureCount
+    }
+
+    /// Mark badge as notified
+    func markNotified() {
+        notifiedAt = Date()
+    }
+
+    /// Mark badge as viewed/acknowledged
+    func markViewed() {
+        viewedAt = Date()
     }
 }

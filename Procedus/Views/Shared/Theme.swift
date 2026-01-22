@@ -45,23 +45,44 @@ struct NotificationBellButton: View {
     let role: UserRole
     let badgeCount: Int
     let action: () -> Void
-    
+
+    /// Role-based bell color
+    private var bellColor: Color {
+        switch role {
+        case .fellow:
+            return Color.blue
+        case .attending:
+            return Color.green
+        case .admin:
+            return Color.purple
+        }
+    }
+
     var body: some View {
         Button(action: action) {
-            ZStack(alignment: .topTrailing) {
+            ZStack {
+                // Solid colored circle background
+                Circle()
+                    .fill(bellColor)
+                    .frame(width: 36, height: 36)
+
+                // Bell icon centered
                 Image(systemName: "bell.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(ProcedusTheme.textSecondary)
-                
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+
+                // Badge count in center of bell (overlaid)
                 if badgeCount > 0 {
                     Text(badgeCount > 99 ? "99+" : "\(badgeCount)")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
+                        .foregroundStyle(Color.black)  // Always dark for readability
+                        .padding(.horizontal, 4)
                         .padding(.vertical, 2)
-                        .background(ProcedusTheme.error)
-                        .clipShape(Capsule())
-                        .offset(x: 8, y: -8)
+                        .background(
+                            Capsule()
+                                .fill(Color.white)
+                        )
+                        .offset(y: 2)  // Slightly below center for visual balance
                 }
             }
         }

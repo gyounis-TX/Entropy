@@ -55,7 +55,9 @@ struct SettingsView: View {
     // Identity selection sheets
     @State private var showingFellowIdentityPicker = false
     @State private var showingAttendingIdentityPicker = false
+    @State private var showingAdminIdentityPicker = false
     @State private var showingDefaultFacilityPicker = false
+    @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
     @State private var showingMigrationWizard = false
     @State private var showingProcedureGroups = false
 
@@ -156,6 +158,34 @@ struct SettingsView: View {
             return attending.name
         }
         return "Not Selected"
+    }
+
+    // Admin users (for admin identity selection in dev mode)
+    private var adminUsers: [User] {
+        allUsers.filter { $0.role == .admin }
+    }
+
+    // Selected admin name
+    private var selectedAdminName: String {
+        if let adminId = UUID(uuidString: selectedAdminIdString),
+           let admin = adminUsers.first(where: { $0.id == adminId }) {
+            return admin.displayName
+        }
+        // Auto-select first admin if none selected
+        if let firstAdmin = adminUsers.first {
+            return firstAdmin.displayName
+        }
+        return "Not Selected"
+    }
+
+    // Selected admin ID
+    private var selectedAdminId: UUID? {
+        if let adminId = UUID(uuidString: selectedAdminIdString),
+           adminUsers.contains(where: { $0.id == adminId }) {
+            return adminId
+        }
+        // Auto-select first admin if none selected
+        return adminUsers.first?.id
     }
 
     var body: some View {
@@ -313,11 +343,11 @@ struct SettingsView: View {
                 showingCustomComplications = true
             }
 
-            // Procedure Details Row
+            // Custom Details Row
             SettingsPillRow(
                 icon: "slider.horizontal.3",
                 iconColor: .cyan,
-                title: "Procedure Details",
+                title: "Custom Details",
                 badge: activeCustomProcedureDetailsCount > 0 ? .count(activeCustomProcedureDetailsCount) : nil,
                 showChevron: true
             ) {
@@ -835,11 +865,11 @@ struct SettingsView: View {
                     showingCustomComplications = true
                 }
 
-                // Procedure Details Row
+                // Custom Details Row
                 SettingsPillRow(
                     icon: "slider.horizontal.3",
                     iconColor: .cyan,
-                    title: "Procedure Details",
+                    title: "Custom Details",
                     badge: activeCustomProcedureDetailsCount > 0 ? .count(activeCustomProcedureDetailsCount) : nil,
                     showChevron: true
                 ) {
@@ -922,11 +952,11 @@ struct SettingsView: View {
                 SectionHeader(title: "PROFILE")
 
                 // Show role-based profile
-                // For attendings, use selectedAttendingName since they may not have a User object
+                // For attendings/admins, use selected identity name
                 SettingsPillRowWithRole(
                     icon: roleIcon,
                     iconColor: roleColor,
-                    title: appState.userRole == .attending ? selectedAttendingName : (appState.currentUser?.displayName ?? "User"),
+                    title: appState.userRole == .attending ? selectedAttendingName : (appState.userRole == .admin ? selectedAdminName : (appState.currentUser?.displayName ?? "User")),
                     roleBadge: appState.userRole.displayName,
                     roleBadgeColor: roleColor,
                     showChevron: true
@@ -944,6 +974,19 @@ struct SettingsView: View {
                         showChevron: true
                     ) {
                         showingAttendingIdentityPicker = true
+                    }
+                }
+
+                // Identity Selection for Admins (dev mode)
+                if appState.userRole == .admin && adminUsers.count > 1 {
+                    SettingsPillRow(
+                        icon: "person.crop.circle.badge.checkmark",
+                        iconColor: .purple,
+                        title: "Identity",
+                        subtitle: selectedAdminName,
+                        showChevron: true
+                    ) {
+                        showingAdminIdentityPicker = true
                     }
                 }
 
@@ -1062,6 +1105,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingAttendingIdentityPicker) {
             AttendingIdentityPickerSheet(attendings: activeAttendingsForSelection)
+        }
+        .sheet(isPresented: $showingAdminIdentityPicker) {
+            AdminIdentityPickerSheet(admins: adminUsers, selectedAdminIdString: $selectedAdminIdString)
         }
         .sheet(isPresented: $showingSpecialtyPacks) {
             SpecialtyPacksSheet()
@@ -1340,10 +1386,10 @@ struct NotificationFrequencyPicker: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(selectedFrequency.displayName)
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(Color(UIColor.secondaryLabel))
                     Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }
@@ -1355,64 +1401,152 @@ struct NotificationFrequencyPicker: View {
     }
 }
 
-// MARK: - Institutional Profile Edit Sheet
+// MARK: - Institutional Profile Sheet (View Only - Identity managed at role level)
 
 struct InstitutionalProfileEditSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
     @Environment(AppState.self) private var appState
+    @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
+    @Query(filter: #Predicate<User> { $0.roleRaw == "fellow" && !$0.hasGraduated }) private var fellows: [User]
+    @Query(filter: #Predicate<User> { $0.roleRaw == "Admin" }) private var adminUsers: [User]
 
-    @State private var firstName: String = ""
-    @State private var lastName: String = ""
+    @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
 
     var body: some View {
         NavigationStack {
             Form {
+                // Current Identity (read-only)
                 Section {
-                    TextField("First Name", text: $firstName)
-                    TextField("Last Name", text: $lastName)
-                } header: {
-                    Text("Name")
-                }
+                    HStack {
+                        Text("Name")
+                        Spacer()
+                        Text(currentIdentityName)
+                            .foregroundColor(.secondary)
+                    }
 
-                Section {
                     HStack {
                         Text("Role")
                         Spacer()
                         Text(appState.userRole.displayName)
                             .foregroundColor(.secondary)
                     }
-                } footer: {
-                    Text("Your role is assigned by the program administrator.")
+                } header: {
+                    Text("Current Identity")
                 }
-            }
-            .navigationTitle("Edit Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                firstName = appState.currentUser?.firstName ?? ""
-                lastName = appState.currentUser?.lastName ?? ""
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveProfile()
-                        dismiss()
+
+                // Identity Selection
+                Section {
+                    if appState.userRole == .attending {
+                        if attendings.isEmpty {
+                            Text("No attendings available")
+                                .foregroundColor(.secondary)
+                                .italic()
+                        } else {
+                            ForEach(attendings.sorted { $0.name < $1.name }) { attending in
+                                Button {
+                                    appState.selectedAttendingId = attending.id
+                                } label: {
+                                    HStack {
+                                        Text(attending.name)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if appState.selectedAttendingId == attending.id {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .fontWeight(.semibold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if appState.userRole == .fellow {
+                        if fellows.isEmpty {
+                            Text("No fellows available")
+                                .foregroundColor(.secondary)
+                                .italic()
+                        } else {
+                            ForEach(fellows.sorted { $0.displayName < $1.displayName }) { fellow in
+                                Button {
+                                    appState.selectedFellowId = fellow.id
+                                } label: {
+                                    HStack {
+                                        Text(fellow.displayName)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if appState.selectedFellowId == fellow.id {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .fontWeight(.semibold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if appState.userRole == .admin {
+                        if adminUsers.isEmpty {
+                            Text("No admin accounts available")
+                                .foregroundColor(.secondary)
+                                .italic()
+                        } else {
+                            ForEach(adminUsers.sorted { $0.displayName < $1.displayName }) { admin in
+                                Button {
+                                    selectedAdminIdString = admin.id.uuidString
+                                } label: {
+                                    HStack {
+                                        Text(admin.displayName)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if selectedAdminIdString == admin.id.uuidString {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.purple)
+                                                .fontWeight(.semibold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    .fontWeight(.semibold)
+                } header: {
+                    Text("Select Identity")
+                } footer: {
+                    Text("To change your name, contact your program administrator.")
+                }
+            }
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
                 }
             }
         }
     }
 
-    private func saveProfile() {
-        guard let user = appState.currentUser else { return }
-        user.firstName = firstName
-        user.lastName = lastName
-        user.updatedAt = Date()
-        try? modelContext.save()
+    private var currentIdentityName: String {
+        switch appState.userRole {
+        case .attending:
+            if let id = appState.selectedAttendingId,
+               let attending = attendings.first(where: { $0.id == id }) {
+                return attending.name
+            }
+            return "Not Selected"
+        case .fellow:
+            if let id = appState.selectedFellowId,
+               let fellow = fellows.first(where: { $0.id == id }) {
+                return fellow.displayName
+            }
+            return "Not Selected"
+        case .admin:
+            if let adminId = UUID(uuidString: selectedAdminIdString),
+               let admin = adminUsers.first(where: { $0.id == adminId }) {
+                return admin.displayName
+            }
+            if let firstAdmin = adminUsers.first {
+                return firstAdmin.displayName
+            }
+            return "Admin"
+        }
     }
 }
 
@@ -2713,7 +2847,7 @@ struct CustomProcedureDetailsListSheet: View {
                                 .font(.system(size: 48))
                                 .foregroundStyle(.secondary)
 
-                            Text("No Procedure Details")
+                            Text("No Custom Details")
                                 .font(.title2)
                                 .fontWeight(.semibold)
 
@@ -2744,7 +2878,7 @@ struct CustomProcedureDetailsListSheet: View {
                     }
                 }
             }
-            .navigationTitle("Procedure Details")
+            .navigationTitle("Custom Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -3119,7 +3253,7 @@ struct DevInstitutionalSheet: View {
     }
 
     private var availableAttendings: [Attending] {
-        attendings.filter { !$0.isArchived }
+        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
     }
 
     var body: some View {
@@ -3198,7 +3332,7 @@ struct DevRoleSwitcherSheet: View {
     }
 
     private var availableAttendings: [Attending] {
-        attendings.filter { !$0.isArchived }
+        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
     }
 
     var body: some View {
@@ -3419,19 +3553,28 @@ struct AddCustomProcedureSheet: View {
         appState.getEnabledPacks()
     }
 
-    // Combined categories from enabled packs (deduplicated)
-    private var availableCategories: [ProcedureCategory] {
+    // Get categories from enabled packs (preferred/suggested)
+    private var packCategories: Set<String> {
         var seen = Set<String>()
-        var result: [ProcedureCategory] = []
         for pack in enabledPacks {
             for packCategory in pack.categories {
-                if !seen.contains(packCategory.category.rawValue) {
-                    seen.insert(packCategory.category.rawValue)
-                    result.append(packCategory.category)
-                }
+                seen.insert(packCategory.category.rawValue)
             }
         }
-        return result.sorted { $0.rawValue < $1.rawValue }
+        return seen
+    }
+
+    // All available categories - pack categories first, then others
+    private var availableCategories: [ProcedureCategory] {
+        let packCats = packCategories
+        // Sort: pack categories first (alphabetically), then other categories (alphabetically)
+        return ProcedureCategory.allCases.sorted { a, b in
+            let aInPack = packCats.contains(a.rawValue)
+            let bInPack = packCats.contains(b.rawValue)
+            if aInPack && !bInPack { return true }
+            if !aInPack && bInPack { return false }
+            return a.rawValue < b.rawValue
+        }
     }
 
     var body: some View {
@@ -3442,20 +3585,32 @@ struct AddCustomProcedureSheet: View {
                 }
 
                 Section {
-                    if availableCategories.isEmpty {
-                        Text("No specialty packs enabled. Go to Settings to add one.")
-                            .foregroundColor(.secondary)
-                            .italic()
-                    } else {
-                        Picker("Category", selection: $selectedCategoryId) {
-                            ForEach(availableCategories) { category in
-                                Text(category.rawValue).tag(category.rawValue)
+                    Picker("Category", selection: $selectedCategoryId) {
+                        // Categories from enabled packs
+                        if !packCategories.isEmpty {
+                            Section {
+                                ForEach(availableCategories.filter { packCategories.contains($0.rawValue) }) { category in
+                                    Text(category.rawValue).tag(category.rawValue)
+                                }
+                            } header: {
+                                Text("From Your Specialty Packs")
                             }
                         }
-                        .pickerStyle(.menu)
+
+                        // Other categories
+                        Section {
+                            ForEach(availableCategories.filter { !packCategories.contains($0.rawValue) }) { category in
+                                Text(category.rawValue).tag(category.rawValue)
+                            }
+                        } header: {
+                            Text("Other Categories")
+                        }
                     }
+                    .pickerStyle(.navigationLink)
                 } header: {
                     Text("Category")
+                } footer: {
+                    Text("Choose a category to organize this procedure in your log.")
                 }
             }
             .navigationTitle(existingProcedure == nil ? "Add Custom Procedure" : "Edit Procedure")
@@ -3880,6 +4035,61 @@ struct AttendingIdentityPickerSheet: View {
                 }
             }
             .navigationTitle("Attending Identity")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Admin Identity Picker Sheet
+
+struct AdminIdentityPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+
+    let admins: [User]
+    @Binding var selectedAdminIdString: String
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if admins.isEmpty {
+                    Section {
+                        Text("No administrator accounts have been set up yet.")
+                            .foregroundColor(.secondary)
+                            .italic()
+                    }
+                } else {
+                    Section {
+                        ForEach(admins) { admin in
+                            Button {
+                                selectedAdminIdString = admin.id.uuidString
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Text(admin.displayName)
+                                        .foregroundColor(Color(UIColor.label))
+                                    Spacer()
+                                    if selectedAdminIdString == admin.id.uuidString {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.purple)
+                                            .fontWeight(.semibold)
+                                    }
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Select Your Identity")
+                    } footer: {
+                        Text("Select the administrator profile that matches you.")
+                    }
+                }
+            }
+            .navigationTitle("Admin Identity")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

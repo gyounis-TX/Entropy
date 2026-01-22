@@ -526,37 +526,43 @@ enum NotificationType: String, Codable, CaseIterable {
     case attestationComplete = "attestation_complete"
     case caseRejected = "case_rejected"
     case programChange = "program_change"
+    case programUpdate = "program_update"
     case procedureAdded = "procedure_added"
     case categoryAdded = "category_added"
     case userInvite = "user_invite"
     case reminder = "reminder"
     case info = "info"
-    
+    case badgeEarned = "badge_earned"
+
     var icon: String {
         switch self {
         case .attestationRequested: return "paperplane.fill"
         case .attestationComplete: return "checkmark.seal.fill"
         case .caseRejected: return "xmark.seal.fill"
         case .programChange: return "gear"
+        case .programUpdate: return "megaphone.fill"
         case .procedureAdded: return "plus.circle"
         case .categoryAdded: return "folder.badge.plus"
         case .userInvite: return "person.badge.plus"
         case .reminder: return "bell.fill"
         case .info: return "info.circle.fill"
+        case .badgeEarned: return "trophy.fill"
         }
     }
-    
+
     var color: Color {
         switch self {
         case .attestationRequested: return .blue
         case .attestationComplete: return .green
         case .caseRejected: return .red
         case .programChange: return .orange
+        case .programUpdate: return .purple
         case .procedureAdded: return .purple
         case .categoryAdded: return .purple
         case .userInvite: return .blue
         case .reminder: return .orange
         case .info: return .gray
+        case .badgeEarned: return .yellow
         }
     }
 }
@@ -850,6 +856,90 @@ enum NotificationFrequency: String, Codable, CaseIterable, Identifiable {
         case .daily: return "sun.max.fill"
         case .weekly: return "calendar.badge.clock"
         case .monthly: return "calendar"
+        }
+    }
+}
+
+// MARK: - Badge Type
+
+enum BadgeType: String, Codable, CaseIterable, Identifiable {
+    case firstProcedure = "first_procedure"       // First time doing a procedure
+    case firstAsPrimary = "first_as_primary"      // First time as primary operator
+    case milestone = "milestone"                   // Every N procedures (50, 100, etc.)
+    case categoryMilestone = "category_milestone"  // Total in a category
+    case totalCases = "total_cases"               // Total case count milestones
+    case diversity = "diversity"                   // Procedure type diversity
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .firstProcedure: return "First Procedure"
+        case .firstAsPrimary: return "First as Primary"
+        case .milestone: return "Milestone"
+        case .categoryMilestone: return "Category Milestone"
+        case .totalCases: return "Total Cases"
+        case .diversity: return "Diversity"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .firstProcedure: return "1.circle.fill"
+        case .firstAsPrimary: return "star.circle.fill"
+        case .milestone: return "flag.checkered"
+        case .categoryMilestone: return "chart.bar.fill"
+        case .totalCases: return "number.circle.fill"
+        case .diversity: return "chart.pie.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .firstProcedure: return .blue
+        case .firstAsPrimary: return .purple
+        case .milestone: return .orange
+        case .categoryMilestone: return .green
+        case .totalCases: return .cyan
+        case .diversity: return .pink
+        }
+    }
+}
+
+// MARK: - Badge Tier
+
+enum BadgeTier: Int, Codable, CaseIterable, Identifiable {
+    case bronze = 1
+    case silver = 2
+    case gold = 3
+    case platinum = 4
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bronze: return "Bronze"
+        case .silver: return "Silver"
+        case .gold: return "Gold"
+        case .platinum: return "Platinum"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .bronze: return Color(red: 0.8, green: 0.5, blue: 0.2)
+        case .silver: return Color(red: 0.75, green: 0.75, blue: 0.8)
+        case .gold: return Color(red: 1.0, green: 0.84, blue: 0.0)
+        case .platinum: return Color(red: 0.9, green: 0.9, blue: 0.95)
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .bronze: return "circle.fill"
+        case .silver: return "star.fill"
+        case .gold: return "crown.fill"
+        case .platinum: return "trophy.fill"
         }
     }
 }

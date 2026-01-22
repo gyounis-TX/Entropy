@@ -196,9 +196,9 @@ struct AnalyticsView: View {
             cases = cases.filter { $0.operatorPosition == operatorFilter }
         }
 
-        // CRITICAL PER SPEC: Rejected cases do NOT count toward analytics
+        // CRITICAL PER SPEC: Rejected and archived cases do NOT count toward analytics
         // "Rejected cases do NOT count toward: Procedure totals, Analytics, Reports, Exports"
-        cases = cases.filter { $0.attestationStatus != .rejected }
+        cases = cases.filter { $0.attestationStatus != .rejected && !$0.isArchived }
 
         // Apply case type filter if selected (for cardiology programs)
         if let caseTypeFilter = selectedAnalyticsCaseType {
@@ -1365,7 +1365,7 @@ struct AnalyticsView: View {
             }
         } header: {
             HStack {
-                Text("Custom Procedure Details")
+                Text("Custom Details")
                     .font(.clinicalFootnote)
                     .foregroundStyle(ProcedusTheme.textSecondary)
                 Spacer()

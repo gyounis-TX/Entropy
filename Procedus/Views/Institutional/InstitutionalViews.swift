@@ -10,19 +10,26 @@ import SwiftData
 struct FellowLogView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
-    
+
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
-    
+    @Query private var notifications: [Procedus.Notification]
+
     @AppStorage("selectedFellowId") private var selectedFellowIdString = ""
-    
+
     @State private var selectedWeek: String = ""
     @State private var showingAddCase = false
     @State private var caseToEdit: CaseEntry?
     @State private var showingNotifications = false
-    
+
     private var fellowId: UUID? { UUID(uuidString: selectedFellowIdString) }
+
+    private var unreadNotificationCount: Int {
+        guard let id = fellowId else { return 0 }
+        return notifications.filter { $0.userId == id && !$0.isRead && !$0.isCleared }.count
+    }
+
     private var myCases: [CaseEntry] {
         guard let id = fellowId else { return [] }
         return allCases.filter { $0.ownerId == id }
@@ -49,7 +56,7 @@ struct FellowLogView: View {
             .navigationTitle("Log")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    NotificationBellButton(role: .fellow, badgeCount: 0) { showingNotifications = true }
+                    NotificationBellButton(role: .fellow, badgeCount: unreadNotificationCount) { showingNotifications = true }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showingAddCase = true } label: { Image(systemName: "plus").fontWeight(.semibold) }
@@ -58,6 +65,9 @@ struct FellowLogView: View {
             }
             .sheet(isPresented: $showingAddCase) { AddEditCaseView(weekBucket: selectedWeek) }
             .sheet(item: $caseToEdit) { c in AddEditCaseView(existingCase: c) }
+            .sheet(isPresented: $showingNotifications) {
+                NotificationsSheet(role: .fellow, userId: fellowId)
+            }
             .onAppear {
                 if selectedWeek.isEmpty { selectedWeek = CaseEntry.makeWeekBucket(for: Date()) }
             }
@@ -322,8 +332,48 @@ struct AttestationDetailSheet: View {
 
         try? modelContext.save()
 
-        PushNotificationManager.shared.notifyAttestationComplete(caseId: caseEntry.id, status: "attested", fellowId: caseEntry.ownerId ?? UUID())
+        let fellowId = caseEntry.fellowId ?? caseEntry.ownerId ?? UUID()
+        PushNotificationManager.shared.notifyAttestationComplete(caseId: caseEntry.id, status: "attested", fellowId: fellowId)
+
+        // Check and award badges for the fellow
+        checkAndAwardBadges(for: fellowId)
+
         dismiss()
+    }
+
+    private func checkAndAwardBadges(for fellowId: UUID) {
+        let casesDescriptor = FetchDescriptor<CaseEntry>()
+        guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
+
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>(
+            predicate: #Predicate<BadgeEarned> { $0.fellowId == fellowId }
+        )
+        let existingBadges = (try? modelContext.fetch(badgesDescriptor)) ?? []
+
+        let newBadges = BadgeService.shared.checkAndAwardBadges(
+            for: fellowId,
+            attestedCase: caseEntry,
+            allCases: allCases,
+            existingBadges: existingBadges,
+            modelContext: modelContext
+        )
+
+        for earned in newBadges {
+            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                let notification = Procedus.Notification(
+                    userId: fellowId,
+                    title: "Achievement Unlocked!",
+                    message: "You earned the \"\(badge.title)\" badge!",
+                    notificationType: NotificationType.badgeEarned.rawValue,
+                    caseId: nil
+                )
+                modelContext.insert(notification)
+            }
+        }
+
+        if !newBadges.isEmpty {
+            try? modelContext.save()
+        }
     }
 }
 
@@ -469,7 +519,11 @@ struct RejectionSheet: View {
     }
     
     private func reject() {
-        guard let attestorId = UUID(uuidString: UserDefaults.standard.string(forKey: "selectedAttendingId") ?? "") else { return }
+        guard let attestorId = UUID(uuidString: UserDefaults.standard.string(forKey: "selectedAttendingId") ?? "") else {
+            // Fallback: still dismiss if attestorId not found
+            dismiss()
+            return
+        }
 
         // Build rejection reason string
         var fullReason = selectedReasons.map { $0.displayName }.joined(separator: "; ")
@@ -481,16 +535,32 @@ struct RejectionSheet: View {
         // Reject the case
         caseEntry.attestationStatus = .rejected
         caseEntry.rejectionReason = fullReason
-        caseEntry.attestorId = attestorId
+        caseEntry.rejectorId = attestorId
+        caseEntry.rejectedAt = Date()
         caseEntry.attestationComment = comment.isEmpty ? nil : comment
+
+        // Create database notification for the fellow
+        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
+            let notification = Procedus.Notification(
+                userId: fellowId,
+                title: "Case Rejected",
+                message: "Your case was rejected. Reason: \(fullReason.prefix(200))",
+                notificationType: NotificationType.caseRejected.rawValue,
+                caseId: caseEntry.id
+            )
+            modelContext.insert(notification)
+        }
 
         try? modelContext.save()
 
         // Notify Fellow per spec: "Fellow must be notified"
         PushNotificationManager.shared.notifyAttestationComplete(caseId: caseEntry.id, status: "rejected", fellowId: caseEntry.ownerId ?? UUID())
 
+        // Dismiss sheet then notify parent
         dismiss()
-        onReject()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            onReject()
+        }
     }
 }
 

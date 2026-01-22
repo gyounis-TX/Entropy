@@ -37,11 +37,14 @@ struct AdminDashboardView: View {
     @State private var showingCustomComplications = false
     @State private var showingCustomProcedureDetails = false
     @State private var showingExportSheet = false
+    @State private var showingProgramMessage = false
 
     private var currentProgram: Program? { programs.first }
 
+    // Admin doesn't receive notifications - they send them to others
+    // This count shows only admin-specific notifications (currently none)
     private var unreadNotificationCount: Int {
-        notifications.filter { !$0.isRead }.count
+        0  // Admin role sends notifications, doesn't receive them
     }
 
     private var fellowCount: Int {
@@ -114,6 +117,9 @@ struct AdminDashboardView: View {
                         // Access Section
                         accessSection
 
+                        // Communications Section
+                        communicationsSection
+
                         #if DEBUG
                         // Developer Tools Section
                         developerToolsSection
@@ -161,6 +167,9 @@ struct AdminDashboardView: View {
             .sheet(isPresented: $showingExportSheet) {
                 ExportSheet()
             }
+            .sheet(isPresented: $showingProgramMessage) {
+                SendProgramUpdateSheet()
+            }
         }
     }
 
@@ -168,23 +177,27 @@ struct AdminDashboardView: View {
 
     private var headerSection: some View {
         HStack {
-            // Purple notification badge
+            // Admin notification bell (purple for admin role)
             Button {
                 showingNotifications = true
             } label: {
                 ZStack {
                     Circle()
-                        .fill(Color.purple)
+                        .fill(Color.purple)  // Purple for admin
                         .frame(width: 44, height: 44)
 
+                    Image(systemName: "bell.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+
+                    // Notification count badge in center of bell
                     if unreadNotificationCount > 0 {
                         Text("\(unreadNotificationCount)")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.white)
-                    } else {
-                        Image(systemName: "bell.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.white)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.purple)
+                            .padding(4)
+                            .background(Circle().fill(.white))
+                            .offset(y: 2)  // Centered in bell
                     }
                 }
             }
@@ -264,7 +277,7 @@ struct AdminDashboardView: View {
             }
 
             Button { showingCustomProcedureDetails = true } label: {
-                AdminPillRow(icon: "slider.horizontal.3", iconColor: .cyan, title: "Procedure Details", badge: customProcedureDetailCount > 0 ? "\(customProcedureDetailCount)" : nil)
+                AdminPillRow(icon: "slider.horizontal.3", iconColor: .cyan, title: "Custom Details", badge: customProcedureDetailCount > 0 ? "\(customProcedureDetailCount)" : nil)
             }
         }
     }
@@ -309,6 +322,18 @@ struct AdminDashboardView: View {
 
             Button { showingInviteCodes = true } label: {
                 AdminPillRow(icon: "qrcode", iconColor: .purple, title: "Manage Invite Codes")
+            }
+        }
+    }
+
+    // MARK: - Communications Section
+
+    private var communicationsSection: some View {
+        VStack(spacing: 8) {
+            AdminSectionHeader(title: "COMMUNICATIONS")
+
+            Button { showingProgramMessage = true } label: {
+                AdminPillRow(icon: "paperplane.fill", iconColor: .blue, title: "Send Message")
             }
         }
     }
@@ -456,6 +481,9 @@ struct AdminDashboardView: View {
             "cardiac-imaging"
         ]
 
+        // Set fellowship specialty to Cardiology
+        program.fellowshipSpecialty = .cardiology
+
         // Enable evaluations with default settings
         program.evaluationsEnabled = true
         program.updatedAt = Date()
@@ -478,17 +506,34 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Create admin user (Mrs. Krabappel)
-        if !allUsers.contains(where: { $0.email == "krabappel@springfield.com" }) {
-            let admin = User(
-                email: "krabappel@springfield.com",
-                firstName: "Edna",
-                lastName: "Krabappel",
-                role: .admin,
-                accountMode: .institutional,
-                programId: program.id
-            )
-            modelContext.insert(admin)
+        // Create admin users - Cindy Crabapple and Lionel Hutz
+        let adminData = [
+            ("Cindy", "Crabapple", "crabapple@springfield.com"),
+            ("Lionel", "Hutz", "hutz@springfield.com")
+        ]
+        for (first, last, email) in adminData {
+            if let existingAdmin = allUsers.first(where: { $0.email == email }) {
+                existingAdmin.firstName = first
+                existingAdmin.lastName = last
+                existingAdmin.role = .admin
+            } else {
+                let admin = User(
+                    email: email,
+                    firstName: first,
+                    lastName: last,
+                    role: .admin,
+                    accountMode: .institutional,
+                    programId: program.id
+                )
+                modelContext.insert(admin)
+            }
+        }
+
+        // Clean up old admin with wrong email
+        if let oldAdmin = allUsers.first(where: { $0.email == "krabappel@springfield.com" }) {
+            oldAdmin.email = "crabapple@springfield.com"
+            oldAdmin.firstName = "Cindy"
+            oldAdmin.lastName = "Crabapple"
         }
 
         // Create fellows (Simpsons) - track IDs as we create
@@ -572,16 +617,18 @@ struct AdminDashboardView: View {
 
         // Create default evaluation fields if not exist
         if evaluationFields.isEmpty {
-            let defaultFields = [
-                "Procedural Competence",
-                "Clinical Judgment",
-                "Documentation",
-                "Professionalism",
-                "Communication"
+            let defaultFields: [(title: String, description: String)] = [
+                ("Procedural Competence", "Technical skill execution, proper technique, appropriate equipment handling, and ability to complete procedure safely and efficiently."),
+                ("Clinical Judgment", "Appropriate patient selection, recognition of complications, ability to adapt to unexpected findings, and sound decision-making during the procedure."),
+                ("Documentation", "Accurate, complete, and timely documentation of the procedure, findings, complications, and follow-up plan."),
+                ("Professionalism", "Appropriate communication with team members, respectful patient interactions, and adherence to ethical standards."),
+                ("Communication", "Clear explanation of procedure to patient and family, effective team communication during procedure, and appropriate handoff to receiving team.")
             ]
-            for (i, title) in defaultFields.enumerated() {
+            for (i, fieldInfo) in defaultFields.enumerated() {
                 let field = EvaluationField(
-                    title: title,
+                    title: fieldInfo.title,
+                    descriptionText: fieldInfo.description,
+                    fieldType: .rating,  // Use rating type for default fields
                     isRequired: true,
                     displayOrder: i,
                     programId: program.id,
@@ -661,9 +708,33 @@ struct AdminDashboardView: View {
                 newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
 
                 modelContext.insert(newCase)
+
+                // Create attestation notification for attending
+                if let attendingId = newCase.attendingId {
+                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
+                    let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
+                        SpecialtyPackCatalog.findProcedure(by: tagId)?.title
+                    }
+                    let procedureList = procedureTitles.prefix(3).joined(separator: ", ")
+                    let suffix = procedureTitles.count > 3 ? " + \(procedureTitles.count - 3) more" : ""
+                    let message = procedureTitles.isEmpty ?
+                        "\(fellowName) submitted a case with \(newCase.procedureTagIds.count) procedure(s) for your attestation." :
+                        "\(fellowName) submitted a case with \(procedureList)\(suffix) for your attestation."
+
+                    let notification = Procedus.Notification(
+                        userId: attendingId,
+                        title: "New Case for Attestation",
+                        message: message,
+                        notificationType: NotificationType.attestationRequested.rawValue,
+                        caseId: newCase.id,
+                        attendingId: attendingId
+                    )
+                    notification.createdAt = caseDate  // Match the case creation date
+                    modelContext.insert(notification)
+                }
             }
 
-            // Create 10 noninvasive cases
+            // Create 10 noninvasive cases (1 procedure per case as per imaging logging convention)
             if !noninvasiveProcedures.isEmpty {
                 for i in 0..<10 {
                     let weeksAgo = Int.random(in: 0...threeYearsInWeeks)
@@ -680,8 +751,8 @@ struct AdminDashboardView: View {
                     )
                     newCase.programId = program.id
 
-                    let numProcedures = Int.random(in: 1...2)
-                    newCase.procedureTagIds = Array(noninvasiveProcedures.shuffled().prefix(numProcedures))
+                    // Noninvasive cases have exactly 1 procedure per case (imaging study)
+                    newCase.procedureTagIds = [noninvasiveProcedures.randomElement()!]
                     newCase.createdAt = caseDate
                     newCase.caseTypeRaw = CaseType.noninvasive.rawValue
                     newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
@@ -1081,20 +1152,25 @@ struct ManageProgramView: View {
                     ProgramCodeRow(label: "Program Code", code: program.programCode)
                     Divider().padding(.leading, 16)
 
-                    // Edit Details Button
-                    Button { showingEditProgram = true } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "pencil.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(.blue)
-                            Text("Edit Details")
-                                .font(.body)
-                                .foregroundColor(.blue)
-                            Spacer()
+                    // Edit Details Button (compact, right-aligned)
+                    HStack {
+                        Spacer()
+                        Button { showingEditProgram = true } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "pencil")
+                                    .font(.caption)
+                                Text("Edit")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.blue)
+                            .cornerRadius(6)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
 
                     Divider().padding(.leading, 16)
 
@@ -4572,6 +4648,7 @@ struct AddEvaluationFieldSheet: View {
     let nextDisplayOrder: Int
 
     @State private var title = ""
+    @State private var descriptionText = ""
     @State private var fieldType: EvaluationFieldType = .checkbox
     @State private var isRequired = false
 
@@ -4582,6 +4659,13 @@ struct AddEvaluationFieldSheet: View {
                     TextField("Evaluation Criteria", text: $title)
                 } footer: {
                     Text("Enter the criteria that attendings will assess for each case.")
+                }
+
+                Section {
+                    TextField("Description (optional)", text: $descriptionText, axis: .vertical)
+                        .lineLimit(2...4)
+                } footer: {
+                    Text("Optional description that attendings can expand to see more details about this criteria.")
                 }
 
                 Section {
@@ -4616,6 +4700,7 @@ struct AddEvaluationFieldSheet: View {
                     Button("Add") {
                         let field = EvaluationField(
                             title: title,
+                            descriptionText: descriptionText.isEmpty ? nil : descriptionText,
                             fieldType: fieldType,
                             isRequired: isRequired,
                             displayOrder: nextDisplayOrder,
@@ -4641,6 +4726,7 @@ struct EditEvaluationFieldSheet: View {
     let field: EvaluationField
 
     @State private var title: String = ""
+    @State private var descriptionText: String = ""
     @State private var fieldType: EvaluationFieldType = .checkbox
     @State private var isRequired: Bool = false
 
@@ -4649,6 +4735,13 @@ struct EditEvaluationFieldSheet: View {
             Form {
                 Section {
                     TextField("Evaluation Criteria", text: $title)
+                }
+
+                Section {
+                    TextField("Description (optional)", text: $descriptionText, axis: .vertical)
+                        .lineLimit(2...4)
+                } footer: {
+                    Text("Optional description that attendings can expand to see more details about this criteria.")
                 }
 
                 Section {
@@ -4680,6 +4773,7 @@ struct EditEvaluationFieldSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         field.title = title
+                        field.descriptionText = descriptionText.isEmpty ? nil : descriptionText
                         field.fieldType = fieldType
                         field.isRequired = isRequired
                         try? modelContext.save()
@@ -4690,6 +4784,7 @@ struct EditEvaluationFieldSheet: View {
             }
             .onAppear {
                 title = field.title
+                descriptionText = field.descriptionText ?? ""
                 fieldType = field.fieldType
                 isRequired = field.isRequired
             }
@@ -6265,35 +6360,385 @@ struct InviteCodeDetailRow: View {
     }
 }
 
+// MARK: - Send Program Message Sheet
+
+struct SendProgramUpdateSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Query private var programs: [Program]
+    @Query private var users: [User]
+
+    @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
+
+    @State private var messageTitle = ""
+    @State private var messageBody = ""
+    @State private var targetAudience: TargetAudience = .all
+    @State private var isSending = false
+    @State private var showingConfirmation = false
+    @State private var showingSuccess = false
+
+    private var program: Program? { programs.first }
+
+    private var adminUsers: [User] {
+        users.filter { $0.role == .admin }
+    }
+
+    private var currentAdmin: User? {
+        if let adminId = UUID(uuidString: selectedAdminIdString),
+           let admin = adminUsers.first(where: { $0.id == adminId }) {
+            return admin
+        }
+        return adminUsers.first
+    }
+
+    private var fellows: [User] {
+        guard let programId = program?.id else { return [] }
+        return users.filter { $0.programId == programId && $0.role == .fellow && !$0.hasGraduated }
+    }
+
+    private var attendings: [User] {
+        guard let programId = program?.id else { return [] }
+        return users.filter { $0.programId == programId && $0.role == .attending }
+    }
+
+    enum TargetAudience: String, CaseIterable, Identifiable {
+        case all = "All Members"
+        case fellowsOnly = "Fellows Only"
+        case attendingsOnly = "Attendings Only"
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .all: return "person.3.fill"
+            case .fellowsOnly: return "person.2.fill"
+            case .attendingsOnly: return "stethoscope"
+            }
+        }
+    }
+
+    private var recipientCount: Int {
+        switch targetAudience {
+        case .all: return fellows.count + attendings.count
+        case .fellowsOnly: return fellows.count
+        case .attendingsOnly: return attendings.count
+        }
+    }
+
+    private var canSend: Bool {
+        !messageTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !messageBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        recipientCount > 0
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Title", text: $messageTitle)
+                } header: {
+                    Text("Message Title")
+                } footer: {
+                    Text("A brief headline for your message")
+                }
+
+                Section {
+                    TextEditor(text: $messageBody)
+                        .frame(minHeight: 120)
+                } header: {
+                    Text("Message Body")
+                } footer: {
+                    Text("The full content of your message")
+                }
+
+                Section {
+                    Picker("Send To", selection: $targetAudience) {
+                        ForEach(TargetAudience.allCases) { audience in
+                            Label(audience.rawValue, systemImage: audience.icon)
+                                .tag(audience)
+                        }
+                    }
+                } header: {
+                    Text("Recipients")
+                } footer: {
+                    Text("\(recipientCount) member\(recipientCount == 1 ? "" : "s") will receive this message")
+                }
+
+                Section {
+                    HStack {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("Messages are sent to recipients and will appear in their Messages tab. Recipients can reply to you.")
+                            .font(.caption)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                    }
+                }
+            }
+            .navigationTitle("Send Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") {
+                        showingConfirmation = true
+                    }
+                    .disabled(!canSend || isSending)
+                    .fontWeight(.semibold)
+                }
+            }
+            .alert("Send Message?", isPresented: $showingConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Send") {
+                    sendMessage()
+                }
+            } message: {
+                Text("This will send \"\(messageTitle)\" to \(recipientCount) member\(recipientCount == 1 ? "" : "s").")
+            }
+            .alert("Message Sent!", isPresented: $showingSuccess) {
+                Button("Done") { dismiss() }
+            } message: {
+                Text("Your message has been sent to \(recipientCount) member\(recipientCount == 1 ? "" : "s").")
+            }
+        }
+    }
+
+    private func sendMessage() {
+        guard let program = program else { return }
+        isSending = true
+
+        // Create a conversation ID for grouping replies
+        let conversationId = UUID()
+
+        // Get sender info
+        let senderId = currentAdmin?.id
+        let senderName = currentAdmin?.displayName ?? "Program Admin"
+
+        // Get recipient user IDs based on target audience
+        let recipientIds: [UUID]
+        switch targetAudience {
+        case .all:
+            recipientIds = (fellows + attendings).map { $0.id }
+        case .fellowsOnly:
+            recipientIds = fellows.map { $0.id }
+        case .attendingsOnly:
+            recipientIds = attendings.map { $0.id }
+        }
+
+        // Create notification records for each recipient
+        for userId in recipientIds {
+            let notification = Procedus.Notification(
+                userId: userId,
+                title: messageTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                message: messageBody.trimmingCharacters(in: .whitespacesAndNewlines),
+                notificationType: NotificationType.programUpdate.rawValue
+            )
+            // Set sender tracking
+            notification.senderId = senderId
+            notification.senderName = senderName
+            notification.senderRoleRaw = UserRole.admin.rawValue
+            notification.conversationId = conversationId
+            modelContext.insert(notification)
+        }
+
+        try? modelContext.save()
+
+        isSending = false
+        showingSuccess = true
+    }
+}
+
 // MARK: - Notifications Sheet
 
 struct NotificationsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var notifications: [Procedus.Notification]
+    @Query private var attendings: [Attending]
+    @Query private var users: [User]
 
     let role: UserRole
     let userId: UUID?
 
-    private var relevantNotifications: [Procedus.Notification] {
-        var filtered = notifications.filter { !$0.isCleared }
-        if let userId = userId {
-            filtered = filtered.filter { $0.userId == userId || $0.attendingId == userId }
+    @State private var selectedCategory: NotificationCategory = .attestations
+    @State private var notificationToReply: Procedus.Notification?
+
+    /// Get the current user for reply functionality
+    private var currentUser: User? {
+        guard let userId = userId else { return nil }
+        // For fellows, find directly by ID
+        if let user = users.first(where: { $0.id == userId }) {
+            return user
         }
-        return filtered.sorted { $0.createdAt > $1.createdAt }
+        // For attendings, find by name match
+        if let attending = attendings.first(where: { $0.id == userId }) {
+            return users.first(where: { "\($0.firstName) \($0.lastName)" == attending.name })
+        }
+        return nil
+    }
+
+    /// Get effective user name for replying
+    private var currentUserName: String {
+        if let user = currentUser {
+            return user.displayName
+        }
+        // Fallback for attending without User record
+        if let attending = attendings.first(where: { $0.id == userId }) {
+            return attending.name
+        }
+        return "User"
+    }
+
+    /// Get effective user ID for replying (prefer User.id over Attending.id)
+    private var effectiveUserId: UUID? {
+        currentUser?.id ?? userId
+    }
+
+    /// For attending role, get all related IDs (Attending.id, Attending.userId, matching User.id)
+    private var relatedIds: Set<UUID> {
+        guard let userId = userId else { return [] }
+        var ids: Set<UUID> = [userId]
+
+        if role == .attending {
+            // Check if userId is an Attending ID
+            if let attending = attendings.first(where: { $0.id == userId }) {
+                // Add the linked User ID if it exists
+                if let linkedUserId = attending.userId {
+                    ids.insert(linkedUserId)
+                }
+                // Also find any User with matching name
+                if let matchingUser = users.first(where: { $0.role == .attending && "\($0.firstName) \($0.lastName)" == attending.name }) {
+                    ids.insert(matchingUser.id)
+                }
+            }
+            // Check if userId is a User ID for an attending
+            if let user = users.first(where: { $0.id == userId && $0.role == .attending }) {
+                // Find the matching Attending record
+                let userName = "\(user.firstName) \(user.lastName)"
+                if let attending = attendings.first(where: { $0.name == userName }) {
+                    ids.insert(attending.id)
+                    if let linkedUserId = attending.userId {
+                        ids.insert(linkedUserId)
+                    }
+                }
+            }
+        }
+
+        return ids
+    }
+
+    enum NotificationCategory: String, CaseIterable, Identifiable {
+        case attestations = "Attestations"
+        case messages = "Messages"
+
+        var id: String { rawValue }
+
+        var notificationTypes: [String] {
+            switch self {
+            case .attestations:
+                return [
+                    NotificationType.attestationRequested.rawValue,
+                    NotificationType.attestationComplete.rawValue,
+                    NotificationType.caseRejected.rawValue
+                ]
+            case .messages:
+                return [
+                    NotificationType.programUpdate.rawValue,
+                    NotificationType.programChange.rawValue,
+                    NotificationType.procedureAdded.rawValue,
+                    NotificationType.categoryAdded.rawValue,
+                    NotificationType.userInvite.rawValue,
+                    NotificationType.reminder.rawValue,
+                    NotificationType.info.rawValue
+                ]
+            }
+        }
+    }
+
+    private var allRelevantNotifications: [Procedus.Notification] {
+        // Admin role doesn't receive notifications - they only send them
+        // If no userId provided for non-admin, return empty
+        guard userId != nil, !relatedIds.isEmpty else { return [] }
+        return notifications
+            .filter { notification in
+                !notification.isCleared &&
+                (relatedIds.contains(notification.userId) ||
+                 (notification.attendingId != nil && relatedIds.contains(notification.attendingId!)))
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var filteredNotifications: [Procedus.Notification] {
+        allRelevantNotifications.filter { selectedCategory.notificationTypes.contains($0.notificationType) }
+    }
+
+    private var attestationCount: Int {
+        allRelevantNotifications.filter { NotificationCategory.attestations.notificationTypes.contains($0.notificationType) && !$0.isRead }.count
+    }
+
+    private var messagesCount: Int {
+        allRelevantNotifications.filter { NotificationCategory.messages.notificationTypes.contains($0.notificationType) && !$0.isRead }.count
+    }
+
+    private var attestationNotifications: [Procedus.Notification] {
+        allRelevantNotifications.filter { NotificationCategory.attestations.notificationTypes.contains($0.notificationType) }
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                if relevantNotifications.isEmpty {
-                    Text("No notifications")
+            VStack(spacing: 0) {
+                // Category Picker - simplified to avoid rendering bugs with counts
+                Picker("Category", selection: $selectedCategory) {
+                    Text(attestationCount > 0 ? "Attestations (\(attestationCount))" : "Attestations")
+                        .tag(NotificationCategory.attestations)
+                    Text(messagesCount > 0 ? "Messages (\(messagesCount))" : "Messages")
+                        .tag(NotificationCategory.messages)
+                }
+                .pickerStyle(.segmented)
+                .padding()
+
+                // Clear Attestations button for attending role
+                if role == .attending && !attestationNotifications.isEmpty && selectedCategory == .attestations {
+                    Button {
+                        clearAttestationNotifications()
+                    } label: {
+                        HStack {
+                            Image(systemName: "xmark.circle.fill")
+                            Text("Clear All Attestation Notifications")
+                        }
                         .font(.subheadline)
-                        .foregroundColor(Color(UIColor.secondaryLabel))
-                        .italic()
-                } else {
-                    ForEach(relevantNotifications) { notification in
-                        NotificationRow(notification: notification)
+                        .foregroundStyle(.red)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
+
+                List {
+                    if filteredNotifications.isEmpty {
+                        Text("No \(selectedCategory.rawValue.lowercased())")
+                            .font(.subheadline)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                            .italic()
+                    } else {
+                        ForEach(filteredNotifications) { notification in
+                            NotificationRow(notification: notification) {
+                                // Reply callback
+                                notificationToReply = notification
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                // Mark as read when tapped
+                                if !notification.isRead {
+                                    notification.isRead = true
+                                    notification.readAt = Date()
+                                    try? modelContext.save()
+                                }
+                            }
                             .swipeActions(edge: .trailing) {
                                 Button {
                                     notification.isCleared = true
@@ -6314,7 +6759,17 @@ struct NotificationsSheet: View {
                                     }
                                     .tint(.blue)
                                 }
+                                // Add reply swipe action for messages with sender
+                                if notification.senderId != nil {
+                                    Button {
+                                        notificationToReply = notification
+                                    } label: {
+                                        Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
+                                    }
+                                    .tint(.green)
+                                }
                             }
+                        }
                     }
                 }
             }
@@ -6324,10 +6779,10 @@ struct NotificationsSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
-                if !relevantNotifications.isEmpty {
+                if !filteredNotifications.isEmpty {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Clear All") {
-                            for notification in relevantNotifications {
+                            for notification in filteredNotifications {
                                 notification.isCleared = true
                                 notification.clearedAt = Date()
                             }
@@ -6337,7 +6792,25 @@ struct NotificationsSheet: View {
                     }
                 }
             }
+            .sheet(item: $notificationToReply) { notification in
+                if let effectiveId = effectiveUserId {
+                    ReplyToMessageSheet(
+                        originalNotification: notification,
+                        currentUserId: effectiveId,
+                        currentUserName: currentUserName,
+                        currentUserRole: role
+                    )
+                }
+            }
         }
+    }
+
+    private func clearAttestationNotifications() {
+        for notification in attestationNotifications {
+            notification.isCleared = true
+            notification.clearedAt = Date()
+        }
+        try? modelContext.save()
     }
 }
 
@@ -6345,6 +6818,20 @@ struct NotificationsSheet: View {
 
 struct NotificationRow: View {
     let notification: Procedus.Notification
+    var onReply: (() -> Void)? = nil
+
+    private var isMessageType: Bool {
+        let messageTypes = [
+            NotificationType.programUpdate.rawValue,
+            NotificationType.programChange.rawValue,
+            NotificationType.info.rawValue
+        ]
+        return messageTypes.contains(notification.notificationType)
+    }
+
+    private var canReply: Bool {
+        isMessageType && notification.senderId != nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -6362,12 +6849,139 @@ struct NotificationRow: View {
                     .font(.caption)
                     .foregroundColor(Color(UIColor.tertiaryLabel))
             }
+
+            // Show sender if available
+            if let senderName = notification.senderName {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.circle.fill")
+                        .font(.caption2)
+                    Text("From: \(senderName)")
+                        .font(.caption2)
+                }
+                .foregroundColor(Color(UIColor.tertiaryLabel))
+            }
+
             Text(notification.message)
                 .font(.caption)
                 .foregroundColor(Color(UIColor.secondaryLabel))
                 .lineLimit(2)
+
+            // Reply button for messages with sender
+            if canReply, let replyAction = onReply {
+                Button {
+                    replyAction()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.caption2)
+                        Text("Reply")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Reply To Message Sheet
+
+struct ReplyToMessageSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let originalNotification: Procedus.Notification
+    let currentUserId: UUID
+    let currentUserName: String
+    let currentUserRole: UserRole
+
+    @State private var replyMessage = ""
+    @State private var isSending = false
+    @State private var showingSuccess = false
+
+    private var canSend: Bool {
+        !replyMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(originalNotification.title)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text(originalNotification.message)
+                            .font(.caption)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                        if let senderName = originalNotification.senderName {
+                            Text("From: \(senderName)")
+                                .font(.caption2)
+                                .foregroundColor(Color(UIColor.tertiaryLabel))
+                        }
+                    }
+                } header: {
+                    Text("Original Message")
+                }
+
+                Section {
+                    TextEditor(text: $replyMessage)
+                        .frame(minHeight: 100)
+                } header: {
+                    Text("Your Reply")
+                } footer: {
+                    Text("Your reply will be sent to the original sender")
+                }
+            }
+            .navigationTitle("Reply")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") {
+                        sendReply()
+                    }
+                    .disabled(!canSend || isSending)
+                    .fontWeight(.semibold)
+                }
+            }
+            .alert("Reply Sent!", isPresented: $showingSuccess) {
+                Button("Done") { dismiss() }
+            } message: {
+                Text("Your reply has been sent.")
+            }
+        }
+    }
+
+    private func sendReply() {
+        guard let recipientId = originalNotification.senderId else { return }
+        isSending = true
+
+        // Create reply notification for the original sender
+        let replyNotification = Procedus.Notification(
+            userId: recipientId,
+            title: "Reply: \(originalNotification.title)",
+            message: replyMessage.trimmingCharacters(in: .whitespacesAndNewlines),
+            notificationType: NotificationType.programUpdate.rawValue
+        )
+
+        // Set sender tracking
+        replyNotification.senderId = currentUserId
+        replyNotification.senderName = currentUserName
+        replyNotification.senderRoleRaw = currentUserRole.rawValue
+        replyNotification.replyToId = originalNotification.id
+        replyNotification.conversationId = originalNotification.conversationId ?? originalNotification.id
+
+        modelContext.insert(replyNotification)
+        try? modelContext.save()
+
+        isSending = false
+        showingSuccess = true
     }
 }
 

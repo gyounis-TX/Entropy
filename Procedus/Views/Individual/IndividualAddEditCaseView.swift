@@ -46,7 +46,18 @@ struct IndividualAddEditCaseView: View {
     // Case type and operator position (cardiology-specific)
     @State private var selectedCaseType: CaseType = .invasive
     @State private var selectedOperatorPosition: OperatorPosition? = nil
-    
+
+    // Noninvasive entry mode
+    enum NoninvasiveEntryMode: String, CaseIterable, Identifiable {
+        case caseEntry = "Case Entry"
+        case bulkEntry = "Bulk Entry"
+        var id: String { rawValue }
+    }
+    @State private var noninvasiveEntryMode: NoninvasiveEntryMode = .caseEntry
+    @State private var bulkQuantities: [String: Int] = [:]  // procedureId -> quantity (0-99)
+    @State private var bulkShowingSuccess = false
+    @State private var bulkSavedCount = 0
+
     // Collapsible state - default ALL to COLLAPSED (closed)
     // We track what's EXPANDED (empty = all closed by default)
     @State private var expandedPackIds: Set<String> = []
@@ -116,6 +127,18 @@ struct IndividualAddEditCaseView: View {
     // Attending is required UNLESS using simplified noninvasive form
     // In institutional mode, also require identity selection
     private var canSave: Bool {
+        // For bulk entry mode, check if any quantities are > 0
+        if isSimplifiedNoninvasiveForm && !isEditing && noninvasiveEntryMode == .bulkEntry {
+            let hasBulkQuantities = bulkQuantities.values.reduce(0, +) > 0
+            let baseRequirements = selectedFacilityId != nil && hasBulkQuantities
+            if appState.isIndividualMode {
+                return baseRequirements
+            } else {
+                return baseRequirements && hasValidIdentity
+            }
+        }
+
+        // Standard case entry mode
         let hasRequiredFields = selectedFacilityId != nil && !selectedProcedureTagIds.isEmpty
         // Attending not required for simplified noninvasive form or cardiac imaging only procedures
         let hasAttendingOrNoninvasive = selectedAttendingId != nil || isSimplifiedNoninvasiveForm || isCardiacImagingOnly
@@ -273,7 +296,22 @@ struct IndividualAddEditCaseView: View {
                     operatorPositionSection
                 }
 
-                proceduresSection    // Uses filteredEnabledPacks based on case type
+                // Entry mode toggle for noninvasive (Case Entry vs Bulk Entry)
+                if isSimplifiedNoninvasiveForm && !isEditing {
+                    noninvasiveEntryModeSection
+                }
+
+                // Procedures Section - varies by mode
+                if isSimplifiedNoninvasiveForm && !isEditing && noninvasiveEntryMode == .bulkEntry {
+                    // Bulk Entry: Show quantity counters for each imaging modality
+                    bulkQuantitySection
+                } else if isSimplifiedNoninvasiveForm && !isEditing && noninvasiveEntryMode == .caseEntry {
+                    // Case Entry for Noninvasive: Show radio buttons (single selection)
+                    noninvasiveCaseEntrySection
+                } else {
+                    // Standard procedures section (invasive or editing)
+                    proceduresSection    // Uses filteredEnabledPacks based on case type
+                }
 
                 // Outcome and complications (hidden for simplified noninvasive form)
                 if !isSimplifiedNoninvasiveForm {
@@ -308,6 +346,11 @@ struct IndividualAddEditCaseView: View {
                 Button("Delete", role: .destructive) { deleteCase() }
             } message: {
                 Text("Are you sure you want to delete this case? This action cannot be undone.")
+            }
+            .alert("Studies Added!", isPresented: $bulkShowingSuccess) {
+                Button("Done") { dismiss() }
+            } message: {
+                Text("\(bulkSavedCount) imaging stud\(bulkSavedCount == 1 ? "y" : "ies") added to your log.")
             }
             .onAppear {
                 // Pre-populate default facility for new cases
@@ -447,9 +490,12 @@ struct IndividualAddEditCaseView: View {
                 // Clear selected procedures when case type changes
                 selectedProcedureTagIds.removeAll()
                 selectedDevices.removeAll()
+                bulkQuantities.removeAll()
                 // Clear operator position when switching to noninvasive
                 if newValue == .noninvasive {
                     selectedOperatorPosition = nil
+                    // Default to case entry mode
+                    noninvasiveEntryMode = .caseEntry
                     // Auto-expand cardiac imaging pack (but keep subcategories collapsed)
                     expandedPackIds.insert("cardiac-imaging")
                 }
@@ -462,7 +508,8 @@ struct IndividualAddEditCaseView: View {
             if selectedCaseType == .invasive {
                 Text("Invasive procedures requiring sterile access (cath lab, EP lab)")
             } else {
-                Text("Noninvasive imaging studies (echo, CT, MRI, nuclear)")
+                Text("Noninvasive imaging studies (echo, CT, MRI, nuclear). Choose entry mode below.")
+                    .foregroundColor(.blue)
             }
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
@@ -960,9 +1007,195 @@ struct IndividualAddEditCaseView: View {
             }
         )
     }
-    
+
+    // MARK: - Noninvasive Entry Mode Toggle
+
+    private var noninvasiveEntryModeSection: some View {
+        Section {
+            Picker("Entry Mode", selection: $noninvasiveEntryMode) {
+                ForEach(NoninvasiveEntryMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: noninvasiveEntryMode) { _, _ in
+                // Clear selections when switching modes
+                selectedProcedureTagIds.removeAll()
+                bulkQuantities.removeAll()
+            }
+        } header: {
+            Text("Entry Mode")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        } footer: {
+            if noninvasiveEntryMode == .caseEntry {
+                Text("Log a single imaging study with detailed selection.")
+            } else {
+                Text("Quickly log multiple studies by quantity per modality.")
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    // MARK: - Noninvasive Case Entry (Radio Buttons - Single Selection)
+
+    private var noninvasiveCaseEntrySection: some View {
+        Section {
+            // Get cardiac imaging procedures from the pack
+            let imagingPack = filteredEnabledPacks.first { $0.id == "cardiac-imaging" }
+            if let pack = imagingPack {
+                ForEach(pack.categories, id: \.id) { packCategory in
+                    DisclosureGroup(
+                        isExpanded: Binding(
+                            get: { expandedCategoryIds.contains("noninv-\(packCategory.id)") },
+                            set: { expanded in
+                                if expanded { expandedCategoryIds.insert("noninv-\(packCategory.id)") }
+                                else { expandedCategoryIds.remove("noninv-\(packCategory.id)") }
+                            }
+                        )
+                    ) {
+                        ForEach(packCategory.procedures) { procedure in
+                            noninvasiveRadioRow(procedure: procedure)
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(packCategory.category.rawValue)
+                                .font(.subheadline)
+                                .foregroundStyle(ProcedusTheme.textPrimary)
+                            CategoryBubble(category: packCategory.category, size: 20)
+                        }
+                    }
+                }
+            } else {
+                Text("No imaging procedures available")
+                    .font(.subheadline)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+            }
+        } header: {
+            Text("Select Imaging Study")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        } footer: {
+            if selectedProcedureTagIds.isEmpty {
+                Text("Select one imaging study to log.")
+            } else {
+                Text("One study selected. Tap Save to log this case.")
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    private func noninvasiveRadioRow(procedure: ProcedureTag) -> some View {
+        let isSelected = selectedProcedureTagIds.contains(procedure.id)
+        return Button {
+            // Radio button behavior: select this, deselect others
+            selectedProcedureTagIds.removeAll()
+            selectedProcedureTagIds.insert(procedure.id)
+        } label: {
+            HStack {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(isSelected ? ProcedusTheme.primary : ProcedusTheme.textTertiary)
+                    .font(.system(size: 20))
+
+                Text(procedure.title)
+                    .font(.subheadline)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Bulk Quantity Section (Counters per Modality)
+
+    /// Get all imaging procedures from the cardiac imaging pack
+    private var imagingProcedures: [ProcedureTag] {
+        guard let pack = filteredEnabledPacks.first(where: { $0.id == "cardiac-imaging" }) else {
+            return []
+        }
+        var procedures: [ProcedureTag] = []
+        for category in pack.categories {
+            procedures.append(contentsOf: category.procedures)
+        }
+        return procedures
+    }
+
+    private var bulkQuantitySection: some View {
+        Section {
+            ForEach(imagingProcedures) { procedure in
+                bulkQuantityRow(for: procedure)
+            }
+        } header: {
+            Text("Bulk Entry - Studies by Modality")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        } footer: {
+            let totalStudies = bulkQuantities.values.reduce(0, +)
+            if totalStudies == 0 {
+                Text("Use +/- to set the number of studies for each modality.")
+            } else {
+                Text("Total: \(totalStudies) stud\(totalStudies == 1 ? "y" : "ies") to log.")
+                    .foregroundColor(.blue)
+            }
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    private func bulkQuantityRow(for procedure: ProcedureTag) -> some View {
+        let quantity = bulkQuantities[procedure.id] ?? 0
+
+        return HStack {
+            // Procedure name
+            Text(procedure.title)
+                .font(.subheadline)
+                .foregroundStyle(ProcedusTheme.textPrimary)
+
+            Spacer()
+
+            // Quantity controls
+            HStack(spacing: 12) {
+                // Minus button
+                Button {
+                    let current = bulkQuantities[procedure.id] ?? 0
+                    if current > 0 {
+                        bulkQuantities[procedure.id] = current - 1
+                    }
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(quantity > 0 ? ProcedusTheme.primary : ProcedusTheme.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .disabled(quantity == 0)
+
+                // Quantity display
+                Text("\(quantity)")
+                    .font(.headline)
+                    .frame(minWidth: 36)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(quantity > 0 ? ProcedusTheme.primary : ProcedusTheme.textSecondary)
+
+                // Plus button
+                Button {
+                    let current = bulkQuantities[procedure.id] ?? 0
+                    if current < 99 {
+                        bulkQuantities[procedure.id] = current + 1
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(quantity < 99 ? ProcedusTheme.primary : ProcedusTheme.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .disabled(quantity >= 99)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     // MARK: - Outcome Section
-    
+
     private var outcomeSection: some View {
         Section {
             HStack(spacing: 8) {
@@ -1168,49 +1401,95 @@ struct IndividualAddEditCaseView: View {
                 existingCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
             }
         } else {
-            let newCase = CaseEntry(
-                fellowId: appState.isIndividualMode ? nil : userId,
-                ownerId: userId,
-                attendingId: attendingId,
-                weekBucket: selectedWeekBucket,
-                facilityId: facilityId
-            )
-            newCase.procedureTagIds = Array(selectedProcedureTagIds)
-            newCase.procedureDevices = deviceStorage
-            newCase.customDetailSelections = customDetailStorage
-            newCase.accessSiteIds = Array(selectedAccessSites)
-            newCase.outcomeRaw = selectedOutcome.rawValue
-            newCase.complicationIds = Array(selectedComplications)
-            newCase.notes = caseNotes.isEmpty ? nil : caseNotes
+            let now = Date()
+            var caseIndex = 0
 
-            // Save case type and operator position (cardiology-specific)
-            newCase.caseType = shouldShowCaseTypeToggle ? selectedCaseType : nil
-            newCase.operatorPosition = shouldShowOperatorPosition ? selectedOperatorPosition : nil
+            // Check if using bulk entry mode
+            if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry {
+                // BULK ENTRY MODE: Create cases for each modality with quantities
+                for (procedureId, quantity) in bulkQuantities where quantity > 0 {
+                    for _ in 0..<quantity {
+                        let newCase = CaseEntry(
+                            fellowId: appState.isIndividualMode ? nil : userId,
+                            ownerId: userId,
+                            attendingId: nil,  // Noninvasive doesn't require attending
+                            weekBucket: selectedWeekBucket,
+                            facilityId: facilityId
+                        )
+                        newCase.procedureTagIds = [procedureId]
+                        newCase.caseType = .noninvasive
+                        newCase.outcomeRaw = CaseOutcome.success.rawValue
+                        newCase.notes = caseNotes.isEmpty ? nil : caseNotes
+                        newCase.isBulkEntry = true  // Mark as bulk entry
+                        // Slightly offset timestamps for multiple cases
+                        newCase.createdAt = now.addingTimeInterval(TimeInterval(caseIndex))
+                        newCase.updatedAt = now
+                        // Auto-attest noninvasive imaging
+                        newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
 
-            // Set attestation status based on mode and procedure type
-            if appState.isIndividualMode || isCardiacImagingOnly || isSimplifiedNoninvasiveForm {
-                // Individual mode or cardiac imaging = no attestation required
-                newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
-            } else {
-                newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
-
-                // Notify attending about new attestation request
-                if let attendingId = attendingId {
-                    NotificationManager.shared.notifyAttestationRequested(
-                        toAttendingId: attendingId,
-                        fellowName: fellowDisplayName,
-                        caseId: newCase.id,
-                        procedureCount: selectedProcedureTagIds.count,
-                        programId: nil
-                    )
+                        caseIndex += 1
+                        modelContext.insert(newCase)
+                    }
                 }
-            }
+                bulkSavedCount = caseIndex
+            } else {
+                // STANDARD CASE ENTRY MODE
+                let newCase = CaseEntry(
+                    fellowId: appState.isIndividualMode ? nil : userId,
+                    ownerId: userId,
+                    attendingId: attendingId,
+                    weekBucket: selectedWeekBucket,
+                    facilityId: facilityId
+                )
+                newCase.procedureTagIds = Array(selectedProcedureTagIds)
+                newCase.procedureDevices = deviceStorage
+                newCase.customDetailSelections = customDetailStorage
+                newCase.accessSiteIds = Array(selectedAccessSites)
+                newCase.outcomeRaw = selectedOutcome.rawValue
+                newCase.complicationIds = Array(selectedComplications)
+                newCase.notes = caseNotes.isEmpty ? nil : caseNotes
 
-            modelContext.insert(newCase)
+                // Save case type and operator position (cardiology-specific)
+                newCase.caseType = shouldShowCaseTypeToggle ? selectedCaseType : nil
+                newCase.operatorPosition = shouldShowOperatorPosition ? selectedOperatorPosition : nil
+
+                // Set attestation status based on mode and procedure type
+                if appState.isIndividualMode || isCardiacImagingOnly || isSimplifiedNoninvasiveForm {
+                    // Individual mode or cardiac imaging = no attestation required
+                    newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
+                } else {
+                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+
+                    // Notify attending about new attestation request
+                    if let attendingId = attendingId {
+                        // Get procedure titles for notification
+                        let procedureTitles = selectedProcedureTagIds.compactMap { tagId -> String? in
+                            SpecialtyPackCatalog.findProcedure(by: tagId)?.title
+                        }
+                        NotificationManager.shared.notifyAttestationRequested(
+                            toAttendingId: attendingId,
+                            fellowName: fellowDisplayName,
+                            caseId: newCase.id,
+                            procedureCount: selectedProcedureTagIds.count,
+                            procedureTitles: procedureTitles,
+                            programId: nil
+                        )
+                    }
+                }
+
+                modelContext.insert(newCase)
+                bulkSavedCount = 1
+            }
         }
 
         try? modelContext.save()
-        dismiss()
+
+        // Show success alert for bulk entry mode, otherwise just dismiss
+        if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry && bulkSavedCount > 0 {
+            bulkShowingSuccess = true
+        } else {
+            dismiss()
+        }
     }
     
     /// Get or create a persistent user ID for individual mode

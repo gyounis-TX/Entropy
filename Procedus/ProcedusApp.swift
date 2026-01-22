@@ -30,6 +30,8 @@ struct ProcedusApp: App {
             Notification.self,
             AuditEntry.self,
             FellowProcedureGroup.self,
+            Badge.self,
+            BadgeEarned.self,
         ])
         
         let modelConfiguration = ModelConfiguration(

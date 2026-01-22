@@ -34,12 +34,17 @@ struct RootView: View {
                 .tabItem {
                     Label("Log", systemImage: "list.clipboard")
                 }
-            
+
             AnalyticsView()
                 .tabItem {
                     Label("Analytics", systemImage: "chart.bar")
                 }
-            
+
+            BadgeDashboardView()
+                .tabItem {
+                    Label("Badges", systemImage: "trophy")
+                }
+
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
@@ -56,12 +61,17 @@ struct RootView: View {
                     .tabItem {
                         Label("Log", systemImage: "list.clipboard")
                     }
-                
+
                 AnalyticsView()
                     .tabItem {
                         Label("Analytics", systemImage: "chart.bar")
                     }
-                
+
+                BadgeDashboardView()
+                    .tabItem {
+                        Label("Badges", systemImage: "trophy")
+                    }
+
                 SettingsView()
                     .tabItem {
                         Label("Settings", systemImage: "gearshape")
@@ -1113,6 +1123,12 @@ struct AttestationDetailView: View {
         caseEntry.attestorId = userId
         caseEntry.attestationComment = comment.isEmpty ? nil : comment
         try? modelContext.save()
+
+        // Check and award badges for the fellow
+        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
+            checkAndAwardBadges(for: fellowId)
+        }
+
         dismiss()
     }
 
@@ -1122,8 +1138,57 @@ struct AttestationDetailView: View {
         caseEntry.rejectionReason = rejectionReason.trimmingCharacters(in: .whitespaces)
         caseEntry.attestorId = userId
         caseEntry.attestationComment = comment.isEmpty ? nil : comment
+
+        // Create database notification for the fellow
+        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
+            let reason = rejectionReason.trimmingCharacters(in: .whitespaces)
+            let notification = Procedus.Notification(
+                userId: fellowId,
+                title: "Case Rejected",
+                message: "Your case was rejected. Reason: \(reason.prefix(200))",
+                notificationType: NotificationType.caseRejected.rawValue,
+                caseId: caseEntry.id
+            )
+            modelContext.insert(notification)
+        }
+
         try? modelContext.save()
         dismiss()
+    }
+
+    private func checkAndAwardBadges(for fellowId: UUID) {
+        let casesDescriptor = FetchDescriptor<CaseEntry>()
+        guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
+
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>(
+            predicate: #Predicate<BadgeEarned> { $0.fellowId == fellowId }
+        )
+        let existingBadges = (try? modelContext.fetch(badgesDescriptor)) ?? []
+
+        let newBadges = BadgeService.shared.checkAndAwardBadges(
+            for: fellowId,
+            attestedCase: caseEntry,
+            allCases: allCases,
+            existingBadges: existingBadges,
+            modelContext: modelContext
+        )
+
+        for earned in newBadges {
+            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                let notification = Procedus.Notification(
+                    userId: fellowId,
+                    title: "Achievement Unlocked!",
+                    message: "You earned the \"\(badge.title)\" badge!",
+                    notificationType: NotificationType.badgeEarned.rawValue,
+                    caseId: nil
+                )
+                modelContext.insert(notification)
+            }
+        }
+
+        if !newBadges.isEmpty {
+            try? modelContext.save()
+        }
     }
 }
 
@@ -1212,6 +1277,12 @@ struct SimpleAttestationDetailView: View {
         caseEntry.attestorId = userId
         caseEntry.attestationComment = comment.isEmpty ? nil : comment
         try? modelContext.save()
+
+        // Check and award badges for the fellow
+        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
+            checkAndAwardBadges(for: fellowId)
+        }
+
         dismiss()
     }
 
@@ -1221,8 +1292,57 @@ struct SimpleAttestationDetailView: View {
         caseEntry.rejectionReason = rejectionReason.trimmingCharacters(in: .whitespaces)
         caseEntry.attestorId = userId
         caseEntry.attestationComment = comment.isEmpty ? nil : comment
+
+        // Create database notification for the fellow
+        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
+            let reason = rejectionReason.trimmingCharacters(in: .whitespaces)
+            let notification = Procedus.Notification(
+                userId: fellowId,
+                title: "Case Rejected",
+                message: "Your case was rejected. Reason: \(reason.prefix(200))",
+                notificationType: NotificationType.caseRejected.rawValue,
+                caseId: caseEntry.id
+            )
+            modelContext.insert(notification)
+        }
+
         try? modelContext.save()
         dismiss()
+    }
+
+    private func checkAndAwardBadges(for fellowId: UUID) {
+        let casesDescriptor = FetchDescriptor<CaseEntry>()
+        guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
+
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>(
+            predicate: #Predicate<BadgeEarned> { $0.fellowId == fellowId }
+        )
+        let existingBadges = (try? modelContext.fetch(badgesDescriptor)) ?? []
+
+        let newBadges = BadgeService.shared.checkAndAwardBadges(
+            for: fellowId,
+            attestedCase: caseEntry,
+            allCases: allCases,
+            existingBadges: existingBadges,
+            modelContext: modelContext
+        )
+
+        for earned in newBadges {
+            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                let notification = Procedus.Notification(
+                    userId: fellowId,
+                    title: "Achievement Unlocked!",
+                    message: "You earned the \"\(badge.title)\" badge!",
+                    notificationType: NotificationType.badgeEarned.rawValue,
+                    caseId: nil
+                )
+                modelContext.insert(notification)
+            }
+        }
+
+        if !newBadges.isEmpty {
+            try? modelContext.save()
+        }
     }
 }
 
