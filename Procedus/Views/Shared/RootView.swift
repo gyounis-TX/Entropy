@@ -84,7 +84,7 @@ struct RootView: View {
 
                 MyImageLibraryView()
                     .tabItem {
-                        Label("My Images", systemImage: "photo")
+                        Label("My Gallery", systemImage: "photo")
                     }
 
                 SharedImageLibraryView()

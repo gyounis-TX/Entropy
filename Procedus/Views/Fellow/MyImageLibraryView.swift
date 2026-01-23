@@ -27,7 +27,16 @@ struct MyImageLibraryView: View {
     }
 
     private var myMedia: [CaseMedia] {
-        allMedia.filter { $0.ownerId == currentUserId }
+        // Show media where either:
+        // 1. ownerId matches current user (direct ownership)
+        // 2. caseEntryId belongs to a case owned by current user (case ownership)
+        let myCaseIds = Set(allCases.filter {
+            $0.ownerId == currentUserId || $0.fellowId == currentUserId
+        }.map { $0.id })
+
+        return allMedia.filter { media in
+            media.ownerId == currentUserId || myCaseIds.contains(media.caseEntryId)
+        }
     }
 
     private var filteredMedia: [CaseMedia] {
@@ -84,7 +93,7 @@ struct MyImageLibraryView: View {
                 }
             }
             .background(Color(UIColor.systemGroupedBackground))
-            .navigationTitle("My Images")
+            .navigationTitle("My Gallery")
             .sheet(item: $selectedMedia) { media in
                 MediaFullDetailView(media: media, showCaseLink: true)
             }
