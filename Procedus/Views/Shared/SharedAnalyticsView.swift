@@ -55,6 +55,7 @@ struct AnalyticsView: View {
     @Query(filter: #Predicate<CustomProcedure> { !$0.isArchived }) private var customProcedures: [CustomProcedure]
     @Query(filter: #Predicate<CustomProcedureDetail> { !$0.isArchived }) private var customProcedureDetails: [CustomProcedureDetail]
     @Query(filter: #Predicate<CustomAccessSite> { !$0.isArchived }) private var customAccessSites: [CustomAccessSite]
+    @Query(filter: #Predicate<CustomComplication> { !$0.isArchived }) private var customComplications: [CustomComplication]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }, sort: \TrainingFacility.name) private var facilities: [TrainingFacility]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query private var notifications: [Procedus.Notification]
@@ -368,6 +369,9 @@ struct AnalyticsView: View {
                 if selectedAnalyticsCaseType != .noninvasive {
                     accessSiteSection
                 }
+
+                // Complications section - show for all case types
+                complicationSection
 
                 // Custom procedure details tracking
                 if !customProcedureDetails.isEmpty {
@@ -1234,6 +1238,80 @@ struct AnalyticsView: View {
             .sorted { $0.count > $1.count }
     }
 
+    // MARK: - Complication Section
+
+    private var complicationSection: some View {
+        Section {
+            let complicationCounts = casesByComplication
+            if complicationCounts.isEmpty {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.title2)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                        Text("No complications reported")
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+            } else {
+                ForEach(complicationCounts, id: \.complication) { item in
+                    HStack {
+                        Text(item.complication)
+                            .font(.clinicalBody)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+                        Spacer()
+                        Text("\(item.count)")
+                            .font(.clinicalBody)
+                            .fontWeight(.medium)
+                            .foregroundStyle(ProcedusTheme.primary)
+                        Text("cases")
+                            .font(.clinicalCaption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Cases by Complication")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+        }
+        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+    }
+
+    private struct ComplicationCount {
+        let complication: String
+        let count: Int
+    }
+
+    private var casesByComplication: [ComplicationCount] {
+        var counts: [String: Int] = [:]
+
+        for caseEntry in filteredCases {
+            for compId in caseEntry.complicationIds {
+                // Look up the display name for the complication
+                let compName: String
+                if let builtInComp = Complication(rawValue: compId) {
+                    // Built-in complication
+                    compName = builtInComp.rawValue
+                } else if let customComp = customComplications.first(where: { $0.id.uuidString == compId }) {
+                    // Custom complication - use the title
+                    compName = customComp.title
+                } else {
+                    // Fallback to raw ID (shouldn't happen normally)
+                    compName = compId
+                }
+                counts[compName, default: 0] += 1
+            }
+        }
+
+        return counts.map { ComplicationCount(complication: $0.key, count: $0.value) }
+            .sorted { $0.count > $1.count }
+    }
+
     // MARK: - Notes Section
 
     private var notesSection: some View {
@@ -1529,23 +1607,28 @@ private struct NoteRowView: View {
         if searchText.isEmpty {
             Text(text)
         } else {
-            let searchLower = searchText.lowercased()
-            let textLower = text.lowercased()
-
-            if let range = textLower.range(of: searchLower) {
-                let before = String(text[text.startIndex..<range.lowerBound])
-                let match = String(text[range])
-                let after = String(text[range.upperBound..<text.endIndex])
-
-                Text(before) +
-                Text(match)
-                    .foregroundStyle(ProcedusTheme.primary)
-                    .fontWeight(.semibold) +
-                Text(after)
-            } else {
-                Text(text)
-            }
+            Text(highlightedAttributedString(text, highlight: searchText))
         }
+    }
+
+    private func highlightedAttributedString(_ text: String, highlight: String) -> AttributedString {
+        var attributedString = AttributedString(text)
+        let searchLower = highlight.lowercased()
+        let textLower = text.lowercased()
+
+        if let range = textLower.range(of: searchLower) {
+            // Convert String.Index range to AttributedString range
+            let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
+            let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
+
+            let attrStart = attributedString.index(attributedString.startIndex, offsetByCharacters: startOffset)
+            let attrEnd = attributedString.index(attributedString.startIndex, offsetByCharacters: endOffset)
+
+            attributedString[attrStart..<attrEnd].foregroundColor = UIColor(ProcedusTheme.primary)
+            attributedString[attrStart..<attrEnd].font = .body.bold()
+        }
+
+        return attributedString
     }
 }
 

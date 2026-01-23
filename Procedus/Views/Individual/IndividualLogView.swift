@@ -23,6 +23,7 @@ struct IndividualLogView: View {
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
     @State private var caseToDelete: CaseEntry? = nil
     @State private var showingDeleteConfirmation = false
+    @State private var showingAttestedCaseAlert = false
 
     // Check if we should show case type filter (cardiology with both imaging and other packs)
     private var shouldShowCaseTypeFilter: Bool {
@@ -36,9 +37,15 @@ struct IndividualLogView: View {
     
     // FIXED: Get user ID that works in both Individual and Institutional mode
     private var currentUserId: UUID {
-        // In institutional mode, use the currentUser's ID
-        if let userId = appState.currentUser?.id {
-            return userId
+        // In institutional mode, prioritize selectedFellowId (matches what's used when creating cases)
+        if !appState.isIndividualMode {
+            if let fellowId = appState.selectedFellowId {
+                return fellowId
+            }
+            // Fallback to currentUser's ID
+            if let userId = appState.currentUser?.id {
+                return userId
+            }
         }
         // In individual mode, use persistent UUID from UserDefaults
         return getOrCreateIndividualUserId()
@@ -191,7 +198,13 @@ struct IndividualLogView: View {
                     List {
                         ForEach(casesForSelectedRange) { caseEntry in
                             IndividualCaseRowView(caseEntry: caseEntry, attendings: Array(attendings), facilities: Array(facilities))
-                                .onTapGesture { caseToEdit = caseEntry }
+                                .onTapGesture {
+                                    if caseEntry.attestationStatus == .attested {
+                                        showingAttestedCaseAlert = true
+                                    } else {
+                                        caseToEdit = caseEntry
+                                    }
+                                }
                         }
                         .onDelete { offsets in
                             // Show confirmation before deleting
@@ -216,17 +229,25 @@ struct IndividualLogView: View {
                     } message: {
                         Text("This action cannot be undone. The case and all its procedures will be permanently removed.")
                     }
+                    .alert("Case Cannot Be Modified", isPresented: $showingAttestedCaseAlert) {
+                        Button("OK", role: .cancel) { }
+                    } message: {
+                        Text("Attested cases cannot be edited. Please contact your attending if changes are needed.")
+                    }
                 }
             }
             .background(ProcedusTheme.background)
             .navigationTitle("Log")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    NotificationBellButton(
-                        role: appState.userRole,
-                        badgeCount: unreadNotificationCount
-                    ) {
-                        showingNotifications = true
+                // Only show notification bell in institutional mode (individual mode has no attestation workflow)
+                if !appState.isIndividualMode {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        NotificationBellButton(
+                            role: appState.userRole,
+                            badgeCount: unreadNotificationCount
+                        ) {
+                            showingNotifications = true
+                        }
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -558,7 +579,13 @@ struct LogExportSheet: View {
             }
         }
         return counts.map { ExportService.ProcedureCountRow(category: $0.value.0, procedure: $0.key, count: $0.value.1) }
-            .sorted { $0.count > $1.count }
+            .sorted {
+                // Sort by category first, then by procedure name within category
+                if $0.category != $1.category {
+                    return $0.category < $1.category
+                }
+                return $0.procedure < $1.procedure
+            }
     }
     
     // Note: totalCases in exportCountsExcel should exclude rejected and archived

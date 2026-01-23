@@ -7,7 +7,8 @@ import SwiftData
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
-    
+    @AppStorage("badgesEnabled") private var badgesEnabled = true
+
     var body: some View {
         Group {
             if !appState.hasCompletedOnboarding {
@@ -40,10 +41,12 @@ struct RootView: View {
                     Label("Analytics", systemImage: "chart.bar")
                 }
 
-            BadgeDashboardView()
-                .tabItem {
-                    Label("Badges", systemImage: "trophy")
-                }
+            if badgesEnabled {
+                BadgeDashboardView()
+                    .tabItem {
+                        Label("Badges", systemImage: "trophy")
+                    }
+            }
 
             SettingsView()
                 .tabItem {
@@ -51,7 +54,7 @@ struct RootView: View {
                 }
         }
     }
-    
+
     @ViewBuilder
     private var institutionalTabView: some View {
         switch appState.userRole {
@@ -67,10 +70,12 @@ struct RootView: View {
                         Label("Analytics", systemImage: "chart.bar")
                     }
 
-                BadgeDashboardView()
-                    .tabItem {
-                        Label("Badges", systemImage: "trophy")
-                    }
+                if badgesEnabled {
+                    BadgeDashboardView()
+                        .tabItem {
+                            Label("Badges", systemImage: "trophy")
+                        }
+                }
 
                 SettingsView()
                     .tabItem {

@@ -29,6 +29,8 @@ struct IndividualAddEditCaseView: View {
     private var customProcedureDetails: [CustomProcedureDetail]
 
     @Query private var allUsers: [User]
+    @Query private var allCases: [CaseEntry]
+    @Query private var earnedBadgesQuery: [BadgeEarned]
 
     // Form state
     @State private var selectedAttendingId: UUID?
@@ -57,6 +59,10 @@ struct IndividualAddEditCaseView: View {
     @State private var bulkQuantities: [String: Int] = [:]  // procedureId -> quantity (0-99)
     @State private var bulkShowingSuccess = false
     @State private var bulkSavedCount = 0
+
+    // Badge celebration state
+    @State private var earnedBadges: [Badge] = []
+    @State private var showingBadgeCelebration = false
 
     // Collapsible state - default ALL to COLLAPSED (closed)
     // We track what's EXPANDED (empty = all closed by default)
@@ -321,6 +327,23 @@ struct IndividualAddEditCaseView: View {
 
                 notesSection
 
+                // Media Section (Edit mode only - case must exist first)
+                if isEditing, let existing = existingCase {
+                    Section {
+                        CaseMediaSection(
+                            caseId: existing.id,
+                            ownerId: getOrCreateIndividualUserId(),
+                            ownerName: "Individual User"
+                        )
+                    } header: {
+                        Text("Attachments")
+                            .font(.caption)
+                    } footer: {
+                        Text("Add images or videos. PHI will be detected and must be redacted.")
+                            .font(.caption2)
+                    }
+                }
+
                 if isEditing {
                     deleteSection
                 }
@@ -351,6 +374,17 @@ struct IndividualAddEditCaseView: View {
                 Button("Done") { dismiss() }
             } message: {
                 Text("\(bulkSavedCount) imaging stud\(bulkSavedCount == 1 ? "y" : "ies") added to your log.")
+            }
+            .overlay {
+                // Badge celebration overlay
+                if showingBadgeCelebration && !earnedBadges.isEmpty {
+                    MultipleBadgesCelebrationView(badges: earnedBadges) {
+                        showingBadgeCelebration = false
+                        earnedBadges = []
+                        dismiss()
+                    }
+                    .transition(.opacity)
+                }
             }
             .onAppear {
                 // Pre-populate default facility for new cases
@@ -388,6 +422,7 @@ struct IndividualAddEditCaseView: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                     .tint(ProcedusTheme.primary)
+                    .font(.subheadline)
                 }
             }
         } header: {
@@ -427,6 +462,7 @@ struct IndividualAddEditCaseView: View {
                     .pickerStyle(.menu)
                     .labelsHidden()
                     .tint(ProcedusTheme.primary)
+                    .font(.subheadline)
                 }
             }
             
@@ -471,6 +507,7 @@ struct IndividualAddEditCaseView: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .tint(ProcedusTheme.primary)
+                .font(.subheadline)
             }
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
@@ -1363,6 +1400,8 @@ struct IndividualAddEditCaseView: View {
             userId = getOrCreateIndividualUserId()
         }
 
+        var savedCaseId: UUID?
+
         // Convert device selections to storage format
         var deviceStorage: [String: [String]] = [:]
         for (procedureId, devices) in selectedDevices {
@@ -1427,6 +1466,9 @@ struct IndividualAddEditCaseView: View {
                         // Auto-attest noninvasive imaging
                         newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
 
+                        if caseIndex == 0 {
+                            savedCaseId = newCase.id
+                        }
                         caseIndex += 1
                         modelContext.insert(newCase)
                     }
@@ -1479,12 +1521,84 @@ struct IndividualAddEditCaseView: View {
 
                 modelContext.insert(newCase)
                 bulkSavedCount = 1
+                savedCaseId = newCase.id
             }
         }
 
         try? modelContext.save()
 
-        // Show success alert for bulk entry mode, otherwise just dismiss
+        // Check if badges are enabled
+        let badgesEnabled = UserDefaults.standard.bool(forKey: "badgesEnabled")
+
+        // Check for newly earned badges if this is a new case (not editing) and badges are enabled
+        if !isEditing && badgesEnabled, let caseId = savedCaseId {
+            checkAndShowBadgeCelebration(userId: userId, savedCaseId: caseId)
+        } else {
+            // Show success alert for bulk entry mode, otherwise just dismiss
+            if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry && bulkSavedCount > 0 {
+                bulkShowingSuccess = true
+            } else {
+                dismiss()
+            }
+        }
+    }
+
+    private func checkAndShowBadgeCelebration(userId: UUID, savedCaseId: UUID) {
+        // Get the saved case from allCases
+        guard let savedCase = allCases.first(where: { $0.id == savedCaseId }) else {
+            // Case not found, just dismiss
+            if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry && bulkSavedCount > 0 {
+                bulkShowingSuccess = true
+            } else {
+                dismiss()
+            }
+            return
+        }
+
+        // Get existing badges for this user
+        let existingBadges = earnedBadgesQuery.filter { $0.fellowId == userId }
+
+        // Check and award new badges
+        let newBadges = BadgeService.shared.checkAndAwardBadges(
+            for: userId,
+            attestedCase: savedCase,
+            allCases: allCases,
+            existingBadges: existingBadges,
+            modelContext: modelContext
+        )
+
+        // Create notifications for earned badges
+        for earned in newBadges {
+            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                let notification = Notification(
+                    userId: userId,
+                    title: "Achievement Unlocked!",
+                    message: "You earned the \"\(badge.title)\" badge!",
+                    notificationType: NotificationType.badgeEarned.rawValue,
+                    caseId: savedCaseId
+                )
+                modelContext.insert(notification)
+            }
+        }
+
+        if !newBadges.isEmpty {
+            try? modelContext.save()
+
+            // Get the actual Badge objects to display
+            earnedBadges = newBadges.compactMap { earned in
+                BadgeCatalog.badge(withId: earned.badgeId)
+            }
+
+            if !earnedBadges.isEmpty {
+                // Show badge celebration
+                withAnimation {
+                    showingBadgeCelebration = true
+                }
+                return
+            }
+        }
+
+        // No badges earned, proceed with normal dismissal
         if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry && bulkSavedCount > 0 {
             bulkShowingSuccess = true
         } else {

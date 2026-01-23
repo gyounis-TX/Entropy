@@ -37,9 +37,9 @@ class NotificationManager: ObservableObject {
         if let titles = procedureTitles, !titles.isEmpty {
             let procedureList = titles.prefix(3).joined(separator: ", ")
             let suffix = titles.count > 3 ? " + \(titles.count - 3) more" : ""
-            message = "\(fellowName) submitted a case with \(procedureList)\(suffix) for your attestation."
+            message = "\(fellowName) submitted a case of \(procedureList)\(suffix) for your attestation."
         } else {
-            message = "\(fellowName) submitted a case with \(procedureCount) procedure(s) for your attestation."
+            message = "\(fellowName) submitted a case of \(procedureCount) procedure(s) for your attestation."
         }
 
         createNotification(

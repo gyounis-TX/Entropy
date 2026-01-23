@@ -104,7 +104,7 @@ enum LegacyProcedusMigrationService {
         // Peripheral
         "peripheral angiography": "ic-periph-angio",
         "peripheral intervention": "ic-periph-pvi",
-        "pvi": "ic-periph-pvi",
+        "peripheral vascular intervention": "ic-periph-pvi",
         "lower extremity intervention": "ic-periph-pvi",
         "carotid stent": "ic-periph-carotid",
         "carotid artery stenting": "ic-periph-carotid",

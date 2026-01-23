@@ -31,6 +31,8 @@ class AppLockService {
     
     var biometrySystemImage: String {
         switch biometryType {
+        case .none:
+            return "lock"
         case .faceID:
             return "faceid"
         case .touchID:
@@ -41,9 +43,11 @@ class AppLockService {
             return "lock"
         }
     }
-    
+
     var biometryName: String {
         switch biometryType {
+        case .none:
+            return "Biometrics"
         case .faceID:
             return "Face ID"
         case .touchID:

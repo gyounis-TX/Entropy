@@ -95,6 +95,7 @@ struct LogView: View {
     @State private var showingDeleteConfirmation = false
     @State private var rejectedCaseToHandle: CaseEntry? = nil
     @State private var showingRejectedCaseActions = false
+    @State private var showingAttestedCaseAlert = false
 
     @Query private var programs: [Program]
 
@@ -478,6 +479,9 @@ struct LogView: View {
                         if caseEntry.attestationStatus == .rejected {
                             rejectedCaseToHandle = caseEntry
                             showingRejectedCaseActions = true
+                        } else if caseEntry.attestationStatus == .attested {
+                            // Show alert that attested cases cannot be edited
+                            showingAttestedCaseAlert = true
                         } else {
                             caseToEdit = caseEntry
                         }
@@ -506,6 +510,11 @@ struct LogView: View {
             }
         } message: {
             Text("This action cannot be undone. The case and all its procedures will be permanently removed.")
+        }
+        .alert("Case Cannot Be Modified", isPresented: $showingAttestedCaseAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Attested cases cannot be edited. Please contact your attending if changes are needed.")
         }
         .confirmationDialog("Rejected Case", isPresented: $showingRejectedCaseActions, presenting: rejectedCaseToHandle) { caseEntry in
             Button("Resubmit for Attestation") {

@@ -582,8 +582,14 @@ enum AuditActionType: String, Codable, CaseIterable {
     case exported = "exported"
     case loggedIn = "logged_in"
     case loggedOut = "logged_out"
+    case mediaAdded = "media_added"
+    case mediaTextDetected = "media_text_detected"
+    case mediaPHIConfirmed = "media_phi_confirmed"
+    case mediaRedacted = "media_redacted"
+    case mediaDeleted = "media_deleted"
+    case mediaUploadedToCloud = "media_uploaded_to_cloud"
     case unknown = "unknown"
-    
+
     var pastTense: String {
         switch self {
         case .created: return "created"
@@ -598,10 +604,16 @@ enum AuditActionType: String, Codable, CaseIterable {
         case .exported: return "exported"
         case .loggedIn: return "logged in"
         case .loggedOut: return "logged out"
+        case .mediaAdded: return "added media to"
+        case .mediaTextDetected: return "detected text in media for"
+        case .mediaPHIConfirmed: return "confirmed no PHI in media for"
+        case .mediaRedacted: return "redacted PHI in media for"
+        case .mediaDeleted: return "deleted media from"
+        case .mediaUploadedToCloud: return "uploaded media to cloud for"
         case .unknown: return "performed action on"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .created: return "plus.circle"
@@ -616,6 +628,12 @@ enum AuditActionType: String, Codable, CaseIterable {
         case .exported: return "square.and.arrow.up"
         case .loggedIn: return "person.badge.plus"
         case .loggedOut: return "person.badge.minus"
+        case .mediaAdded: return "photo.badge.plus"
+        case .mediaTextDetected: return "doc.text.magnifyingglass"
+        case .mediaPHIConfirmed: return "checkmark.shield"
+        case .mediaRedacted: return "rectangle.inset.filled"
+        case .mediaDeleted: return "photo.badge.minus"
+        case .mediaUploadedToCloud: return "icloud.and.arrow.up"
         case .unknown: return "questionmark.circle"
         }
     }
@@ -633,8 +651,9 @@ enum AuditEntityType: String, Codable, CaseIterable {
     case attending = "attending"
     case evaluationField = "evaluation_field"
     case notification = "notification"
+    case caseMedia = "case_media"
     case unknown = "unknown"
-    
+
     var displayName: String {
         switch self {
         case .caseEntry: return "case"
@@ -646,6 +665,7 @@ enum AuditEntityType: String, Codable, CaseIterable {
         case .attending: return "attending"
         case .evaluationField: return "evaluation field"
         case .notification: return "notification"
+        case .caseMedia: return "case media"
         case .unknown: return "item"
         }
     }
@@ -869,6 +889,7 @@ enum BadgeType: String, Codable, CaseIterable, Identifiable {
     case categoryMilestone = "category_milestone"  // Total in a category
     case totalCases = "total_cases"               // Total case count milestones
     case diversity = "diversity"                   // Procedure type diversity
+    case cocatsTraining = "cocats_training"       // COCATS training level requirements
 
     var id: String { rawValue }
 
@@ -880,6 +901,7 @@ enum BadgeType: String, Codable, CaseIterable, Identifiable {
         case .categoryMilestone: return "Category Milestone"
         case .totalCases: return "Total Cases"
         case .diversity: return "Diversity"
+        case .cocatsTraining: return "COCATS Training"
         }
     }
 
@@ -891,6 +913,7 @@ enum BadgeType: String, Codable, CaseIterable, Identifiable {
         case .categoryMilestone: return "chart.bar.fill"
         case .totalCases: return "number.circle.fill"
         case .diversity: return "chart.pie.fill"
+        case .cocatsTraining: return "graduationcap.fill"
         }
     }
 
@@ -902,6 +925,7 @@ enum BadgeType: String, Codable, CaseIterable, Identifiable {
         case .categoryMilestone: return .green
         case .totalCases: return .cyan
         case .diversity: return .pink
+        case .cocatsTraining: return .red
         }
     }
 }
@@ -940,6 +964,60 @@ enum BadgeTier: Int, Codable, CaseIterable, Identifiable {
         case .silver: return "star.fill"
         case .gold: return "crown.fill"
         case .platinum: return "trophy.fill"
+        }
+    }
+
+    /// Description explaining what this tier represents
+    var tierDescription: String {
+        switch self {
+        case .bronze:
+            return "Getting Started - Early milestones and first experiences"
+        case .silver:
+            return "Building Competence - Developing skills and consistency"
+        case .gold:
+            return "Demonstrating Mastery - Advanced achievements and expertise"
+        case .platinum:
+            return "Elite Performance - Exceptional accomplishments and leadership"
+        }
+    }
+
+    /// Point range typically associated with this tier
+    var pointRange: String {
+        switch self {
+        case .bronze: return "10-25 points"
+        case .silver: return "25-50 points"
+        case .gold: return "50-100 points"
+        case .platinum: return "100+ points"
+        }
+    }
+}
+
+// MARK: - Media Type
+
+enum MediaType: String, Codable, CaseIterable, Identifiable {
+    case image
+    case video
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .image: return "Image"
+        case .video: return "Video"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .image: return "photo"
+        case .video: return "video"
+        }
+    }
+
+    var allowedExtensions: [String] {
+        switch self {
+        case .image: return ["jpg", "jpeg", "png", "heic", "heif"]
+        case .video: return ["mp4", "mov", "m4v"]
         }
     }
 }

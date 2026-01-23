@@ -14,11 +14,34 @@ struct BadgeDashboardView: View {
 
     @State private var selectedCategory: BadgeType? = nil
     @State private var showingBadgeDetail: Badge? = nil
+    @State private var showingTierLegend = false
 
     // MARK: - Computed Properties
 
     private var currentFellowId: UUID? {
-        appState.selectedFellowId ?? appState.currentUser?.id
+        // For institutional mode, use selected fellow or current user
+        if !appState.isIndividualMode {
+            if let fellowId = appState.selectedFellowId {
+                return fellowId
+            }
+            if let userId = appState.currentUser?.id {
+                return userId
+            }
+        }
+        // For individual mode, use persistent UUID from UserDefaults
+        return getOrCreateIndividualUserId()
+    }
+
+    /// Get or create a persistent user ID for individual mode
+    private func getOrCreateIndividualUserId() -> UUID {
+        let key = "individualUserUUID"
+        if let uuidString = UserDefaults.standard.string(forKey: key),
+           let uuid = UUID(uuidString: uuidString) {
+            return uuid
+        }
+        let newUUID = UUID()
+        UserDefaults.standard.set(newUUID.uuidString, forKey: key)
+        return newUUID
     }
 
     private var myEarnedBadges: [BadgeEarned] {
@@ -44,7 +67,8 @@ struct BadgeDashboardView: View {
         }
         // Show a curated list when no filter
         return allBadges.filter { badge in
-            // Show first procedure badges and first few milestones
+            // Show first procedure badges (any role and primary) and first few milestones
+            badge.badgeType == .firstProcedure ||
             badge.badgeType == .firstAsPrimary ||
             badge.badgeType == .totalCases ||
             badge.badgeType == .diversity ||
@@ -116,17 +140,43 @@ struct BadgeDashboardView: View {
                 }
             }
 
-            // Tier distribution
+            // Tier distribution with info button
             HStack(spacing: 8) {
                 ForEach(BadgeTier.allCases) { tier in
                     let count = badgesForTier(tier).count
                     TierBadgeCount(tier: tier, count: count)
+                }
+
+                Spacer()
+
+                Button {
+                    showingTierLegend = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.body)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
                 }
             }
         }
         .padding()
         .background(ProcedusTheme.cardBackground)
         .cornerRadius(16)
+        .sheet(isPresented: $showingTierLegend) {
+            NavigationStack {
+                TierLegendView()
+                    .padding()
+                    .navigationTitle("Badge Tiers")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") {
+                                showingTierLegend = false
+                            }
+                        }
+                    }
+            }
+            .presentationDetents([.medium])
+        }
     }
 
     // MARK: - Recent Badges Section
@@ -295,6 +345,8 @@ struct TierBadgeCount: View {
     let tier: BadgeTier
     let count: Int
 
+    @State private var showingInfo = false
+
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: tier.iconName)
@@ -308,6 +360,87 @@ struct TierBadgeCount: View {
         .padding(.vertical, 4)
         .background(tier.color.opacity(0.1))
         .cornerRadius(8)
+        .onTapGesture {
+            showingInfo = true
+        }
+        .popover(isPresented: $showingInfo) {
+            TierInfoPopover(tier: tier)
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+// MARK: - Tier Info Popover
+
+struct TierInfoPopover: View {
+    let tier: BadgeTier
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: tier.iconName)
+                    .font(.title2)
+                    .foregroundStyle(tier.color)
+                Text(tier.displayName)
+                    .font(.headline)
+                    .foregroundStyle(tier.color)
+            }
+
+            Text(tier.tierDescription)
+                .font(.subheadline)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+
+            Divider()
+
+            Text(tier.pointRange)
+                .font(.caption)
+                .foregroundStyle(ProcedusTheme.textTertiary)
+        }
+        .padding()
+        .frame(minWidth: 200)
+    }
+}
+
+// MARK: - Tier Legend View
+
+struct TierLegendView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Badge Tiers")
+                .font(.headline)
+                .foregroundStyle(ProcedusTheme.textPrimary)
+
+            VStack(spacing: 8) {
+                ForEach(BadgeTier.allCases) { tier in
+                    HStack(spacing: 12) {
+                        Image(systemName: tier.iconName)
+                            .font(.body)
+                            .foregroundStyle(tier.color)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(tier.displayName)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(tier.color)
+                            Text(tier.tierDescription)
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text(tier.pointRange)
+                            .font(.caption2)
+                            .foregroundStyle(ProcedusTheme.textTertiary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .padding()
+        .background(ProcedusTheme.cardBackground)
+        .cornerRadius(12)
     }
 }
 

@@ -851,14 +851,11 @@ final class Badge {
 
     @Transient var criteria: BadgeCriteria? {
         get {
-            guard let data = criteriaJson.data(using: .utf8) else { return nil }
-            return try? JSONDecoder().decode(BadgeCriteria.self, from: data)
+            BadgeCriteria.fromJson(criteriaJson)
         }
         set {
-            if let newValue = newValue,
-               let data = try? JSONEncoder().encode(newValue),
-               let json = String(data: data, encoding: .utf8) {
-                criteriaJson = json
+            if let newValue = newValue {
+                criteriaJson = newValue.toJson()
             }
         }
     }
@@ -882,14 +879,7 @@ final class Badge {
         self.pointValue = pointValue
         self.isActive = true
         self.createdAt = Date()
-
-        // Encode criteria to JSON
-        if let data = try? JSONEncoder().encode(criteria),
-           let json = String(data: data, encoding: .utf8) {
-            self.criteriaJson = json
-        } else {
-            self.criteriaJson = "{}"
-        }
+        self.criteriaJson = criteria.toJson()
     }
 }
 
@@ -933,5 +923,122 @@ final class BadgeEarned {
     /// Mark badge as viewed/acknowledged
     func markViewed() {
         viewedAt = Date()
+    }
+}
+
+// MARK: - Case Media (Image/Video Attachments)
+
+@Model
+final class CaseMedia {
+    @Attribute(.unique) var id: UUID
+    var caseEntryId: UUID                    // FK to CaseEntry
+    var ownerId: UUID                        // User who uploaded
+    var ownerName: String                    // Display name for shared library
+
+    // Media Info
+    var mediaTypeRaw: String                 // "image" or "video"
+    var fileName: String
+    var localPath: String
+    var cloudPath: String?
+    var thumbnailPath: String?
+    var fileSizeBytes: Int
+    var contentHash: String                  // SHA256
+
+    // Dimensions
+    var width: Int?
+    var height: Int?
+    var durationSeconds: Double?             // Videos only
+
+    // Search & Sharing
+    var searchTerms: [String]                // User-defined labels
+    var isSharedWithFellowship: Bool         // If true, visible in Teaching Files
+    var caseDate: Date?
+
+    // PHI Detection
+    var textDetectionRan: Bool
+    var textWasDetected: Bool
+    var detectedTextRegions: String?         // JSON: [{x, y, width, height, text}]
+    var detectedTextConfidence: Double?
+    var userConfirmedNoPHI: Bool
+    var userConfirmedAt: Date?
+    var redactionApplied: Bool
+    var redactedRegions: String?             // JSON: [{x, y, width, height}]
+
+    // Timestamps
+    var capturedAt: Date?
+    var createdAt: Date
+    var updatedAt: Date
+    var uploadedToCloudAt: Date?
+
+    @Transient var mediaType: MediaType {
+        get { MediaType(rawValue: mediaTypeRaw) ?? .image }
+        set { mediaTypeRaw = newValue.rawValue }
+    }
+
+    /// Maximum file size: 10 MB
+    static let maxFileSizeBytes = 10 * 1024 * 1024
+
+    init(
+        caseEntryId: UUID,
+        ownerId: UUID,
+        ownerName: String,
+        mediaType: MediaType,
+        fileName: String,
+        localPath: String
+    ) {
+        self.id = UUID()
+        self.caseEntryId = caseEntryId
+        self.ownerId = ownerId
+        self.ownerName = ownerName
+        self.mediaTypeRaw = mediaType.rawValue
+        self.fileName = fileName
+        self.localPath = localPath
+        self.cloudPath = nil
+        self.thumbnailPath = nil
+        self.fileSizeBytes = 0
+        self.contentHash = ""
+        self.width = nil
+        self.height = nil
+        self.durationSeconds = nil
+        self.searchTerms = []
+        self.isSharedWithFellowship = false
+        self.caseDate = nil
+        self.textDetectionRan = false
+        self.textWasDetected = false
+        self.detectedTextRegions = nil
+        self.detectedTextConfidence = nil
+        self.userConfirmedNoPHI = false
+        self.userConfirmedAt = nil
+        self.redactionApplied = false
+        self.redactedRegions = nil
+        self.capturedAt = nil
+        self.createdAt = Date()
+        self.updatedAt = Date()
+        self.uploadedToCloudAt = nil
+    }
+}
+
+// MARK: - Search Term Suggestion (Auto-suggest for media labels)
+
+@Model
+final class SearchTermSuggestion {
+    @Attribute(.unique) var term: String     // Normalized lowercase
+    var displayText: String                  // Original casing
+    var usageCount: Int
+    var lastUsedAt: Date
+    var createdAt: Date
+
+    init(term: String) {
+        self.term = term.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        self.displayText = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.usageCount = 1
+        self.lastUsedAt = Date()
+        self.createdAt = Date()
+    }
+
+    /// Increment usage count and update last used timestamp
+    func recordUsage() {
+        usageCount += 1
+        lastUsedAt = Date()
     }
 }

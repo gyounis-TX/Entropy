@@ -23,6 +23,12 @@ class AppState {
     // Individual mode profile - trigger forces view updates when names change
     private var profileUpdateTrigger: Int = 0
 
+    // Facility selection trigger - forces view updates when default facility changes
+    private var facilityUpdateTrigger: Int = 0
+
+    // Attending selection trigger - forces view updates when selected attending changes
+    private var attendingUpdateTrigger: Int = 0
+
     var individualFirstName: String {
         get { UserDefaults.standard.string(forKey: "individualFirstName") ?? "" }
         set {
@@ -156,6 +162,8 @@ class AppState {
 
     var selectedAttendingId: UUID? {
         get {
+            // Access trigger to ensure reactivity
+            _ = attendingUpdateTrigger
             if let uuidString = UserDefaults.standard.string(forKey: "selectedAttendingId") {
                 return UUID(uuidString: uuidString)
             }
@@ -167,12 +175,15 @@ class AppState {
             } else {
                 UserDefaults.standard.removeObject(forKey: "selectedAttendingId")
             }
+            attendingUpdateTrigger += 1
         }
     }
 
     // Default facility for case entry (can change for rotations)
     var defaultFacilityId: UUID? {
         get {
+            // Access trigger to ensure reactivity
+            _ = facilityUpdateTrigger
             if let uuidString = UserDefaults.standard.string(forKey: "defaultFacilityId") {
                 return UUID(uuidString: uuidString)
             }
@@ -184,6 +195,7 @@ class AppState {
             } else {
                 UserDefaults.standard.removeObject(forKey: "defaultFacilityId")
             }
+            facilityUpdateTrigger += 1
         }
     }
     

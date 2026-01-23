@@ -23,7 +23,7 @@ class PushNotificationManager: NSObject, ObservableObject, UNUserNotificationCen
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
             isAuthorized = granted
-            if granted { await UIApplication.shared.registerForRemoteNotifications() }
+            if granted { await MainActor.run { UIApplication.shared.registerForRemoteNotifications() } }
             return granted
         } catch { return false }
     }

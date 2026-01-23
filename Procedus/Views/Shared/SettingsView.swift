@@ -45,7 +45,13 @@ struct SettingsView: View {
     @AppStorage("attestationAlertsEnabled") private var attestationAlertsEnabled = true
     @AppStorage("rejectedCasesAlertsEnabled") private var rejectedCasesAlertsEnabled = true
     @AppStorage("notificationFrequency") private var notificationFrequencyRaw = NotificationFrequency.immediate.rawValue
+    @AppStorage("caseLoggingReminderEnabled") private var caseLoggingReminderEnabled = false
+    @AppStorage("caseLoggingReminderHour") private var caseLoggingReminderHour = 17 // 5 PM default
+    @AppStorage("allowCellularMediaUpload") private var allowCellularMediaUpload = false
     @State private var showingNotificationsSheet = false
+
+    // Achievement settings
+    @AppStorage("badgesEnabled") private var badgesEnabled = true
 
     private var notificationFrequency: NotificationFrequency {
         get { NotificationFrequency(rawValue: notificationFrequencyRaw) ?? .immediate }
@@ -59,6 +65,7 @@ struct SettingsView: View {
     @State private var showingDefaultFacilityPicker = false
     @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
     @State private var showingMigrationWizard = false
+    @State private var showingInstitutionalToIndividualMigration = false
     @State private var showingProcedureGroups = false
 
     // Individual dev mode
@@ -296,15 +303,28 @@ struct SettingsView: View {
                 showingAttendingsList = true
             }
 
-            // Hospitals/Facilities Row
+            // Facilities Row
             SettingsPillRow(
                 icon: "building.2.fill",
                 iconColor: Color(red: 0.2, green: 0.4, blue: 0.8),
-                title: "Hospitals",
+                title: "Facilities",
                 badge: activeFacilitiesCount > 0 ? .count(activeFacilitiesCount) : nil,
                 showChevron: true
             ) {
                 showingFacilitiesList = true
+            }
+
+            // Default Facility Row (only show if there are facilities)
+            if activeFacilitiesCount > 0 {
+                SettingsPillRow(
+                    icon: "star.fill",
+                    iconColor: .yellow,
+                    title: "Default Facility",
+                    subtitle: defaultFacilityName,
+                    showChevron: true
+                ) {
+                    showingDefaultFacilityPicker = true
+                }
             }
 
             // PROCEDURES Section
@@ -377,6 +397,16 @@ struct SettingsView: View {
                 showingExportOptions = true
             }
 
+            // ACHIEVEMENTS Section
+            SectionHeader(title: "ACHIEVEMENTS")
+
+            SettingsPillToggle(
+                icon: "trophy.fill",
+                iconColor: .yellow,
+                title: "Badges & Achievements",
+                isOn: $badgesEnabled
+            )
+
             // NOTIFICATIONS Section
             SectionHeader(title: "NOTIFICATIONS")
 
@@ -387,7 +417,9 @@ struct SettingsView: View {
                 isOn: $pushNotificationsEnabled
             )
 
-            if pushNotificationsEnabled {
+            // Only show attestation-related toggles if NOT in pure individual mode
+            // (individual mode has no attestation workflow)
+            if pushNotificationsEnabled && !appState.isIndividualMode {
                 // Attested Cases (when attending attests your case)
                 SettingsPillToggle(
                     icon: "checkmark.seal.fill",
@@ -415,6 +447,49 @@ struct SettingsView: View {
                 )
                 .padding(.leading, 20)
             }
+
+            // Case logging reminder - available for all users
+            if pushNotificationsEnabled {
+                SettingsPillToggle(
+                    icon: "calendar.badge.clock",
+                    iconColor: .blue,
+                    title: "Daily Log Reminder",
+                    isOn: $caseLoggingReminderEnabled
+                )
+                .padding(.leading, 20)
+                .onChange(of: caseLoggingReminderEnabled) { _, enabled in
+                    if enabled {
+                        scheduleLoggingReminder()
+                    } else {
+                        cancelLoggingReminder()
+                    }
+                }
+
+                if caseLoggingReminderEnabled {
+                    CaseLoggingReminderTimePicker(selectedHour: $caseLoggingReminderHour)
+                        .padding(.leading, 20)
+                        .onChange(of: caseLoggingReminderHour) { _, _ in
+                            scheduleLoggingReminder()
+                        }
+                }
+            }
+
+            // MEDIA Section
+            SectionHeader(title: "MEDIA")
+
+            SettingsPillToggle(
+                icon: "antenna.radiowaves.left.and.right",
+                iconColor: .green,
+                title: "Upload on Cellular",
+                isOn: $allowCellularMediaUpload
+            )
+            .padding(.bottom, 4)
+
+            Text("When disabled, case images will only upload to cloud when connected to WiFi.")
+                .font(.caption2)
+                .foregroundColor(Color(UIColor.secondaryLabel))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
 
             // About Row
             SettingsPillRow(
@@ -495,6 +570,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showingFacilitiesList) {
             FacilitiesListSheet()
         }
+        .sheet(isPresented: $showingDefaultFacilityPicker) {
+            DefaultFacilityPickerSheet(facilities: facilities.filter { !$0.isArchived })
+        }
         .sheet(isPresented: $showingCustomProcedures) {
             CustomProceduresListSheet()
         }
@@ -538,6 +616,36 @@ struct SettingsView: View {
         #endif
     }
 
+    // MARK: - Case Logging Reminder
+
+    private func scheduleLoggingReminder() {
+        // Cancel any existing reminders first
+        cancelLoggingReminder()
+
+        let content = UNMutableNotificationContent()
+        content.title = "Time to Log Your Cases"
+        content.body = "Don't forget to log your procedures from today!"
+        content.sound = .default
+
+        // Schedule daily at the selected hour
+        var dateComponents = DateComponents()
+        dateComponents.hour = caseLoggingReminderHour
+        dateComponents.minute = 0
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let request = UNNotificationRequest(identifier: "daily-case-logging-reminder", content: content, trigger: trigger)
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Failed to schedule logging reminder: \(error)")
+            }
+        }
+    }
+
+    private func cancelLoggingReminder() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily-case-logging-reminder"])
+    }
+
     #if DEBUG
     private func populateIndividualDevData() {
         // Get or create individual user ID
@@ -545,8 +653,8 @@ struct SettingsView: View {
 
         // Create attendings (Simpsons family - same as institutional)
         let attendingData = [
-            ("Dr. Julius", "Hibbert"),
             ("Dr. Nick", "Riviera"),
+            ("Dr. Julius", "Hibbert"),
             ("Dr. Marvin", "Monroe")
         ]
 
@@ -641,6 +749,18 @@ struct SettingsView: View {
             // Use realistic sample notes
             newCase.notes = sampleNotes[i]
 
+            // Individual mode: cases are self-attested (no institutional attestation workflow)
+            // First 2 cases have specific procedures for badge testing
+            if i == 0 {
+                newCase.procedureTagIds = ["ic-struct-tavr"]
+                newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
+            } else if i == 1 {
+                newCase.procedureTagIds = ["ic-pci-stent"]
+                newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
+            }
+            newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
+            newCase.attestedAt = caseDate.addingTimeInterval(3600) // 1 hour later
+
             modelContext.insert(newCase)
         }
 
@@ -689,6 +809,52 @@ struct SettingsView: View {
         }
 
         try? modelContext.save()
+
+        // Check and award badges for the dev data
+        checkAndAwardBadgesForIndividual(fellowId: individualUserId)
+    }
+
+    private func checkAndAwardBadgesForIndividual(fellowId: UUID) {
+        // Fetch all cases and existing badges for badge checking
+        let allCasesForCheck = (try? modelContext.fetch(FetchDescriptor<CaseEntry>())) ?? []
+        let existingBadges = (try? modelContext.fetch(FetchDescriptor<BadgeEarned>())) ?? []
+            .filter { $0.fellowId == fellowId }
+
+        // Get attested cases for this fellow
+        let fellowAttestedCases = allCasesForCheck.filter {
+            $0.ownerId == fellowId &&
+            $0.attestationStatus == .attested &&
+            !$0.isArchived
+        }.sorted { $0.createdAt > $1.createdAt }
+
+        guard let triggeringCase = fellowAttestedCases.first else { return }
+
+        // Check and award new badges
+        let newBadges = BadgeService.shared.checkAndAwardBadges(
+            for: fellowId,
+            attestedCase: triggeringCase,
+            allCases: allCasesForCheck,
+            existingBadges: existingBadges,
+            modelContext: modelContext
+        )
+
+        // Create notifications for earned badges
+        for earned in newBadges {
+            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                let notification = Procedus.Notification(
+                    userId: fellowId,
+                    title: "Achievement Unlocked!",
+                    message: "You earned the \"\(badge.title)\" badge!",
+                    notificationType: NotificationType.badgeEarned.rawValue,
+                    caseId: nil
+                )
+                modelContext.insert(notification)
+            }
+        }
+
+        if !newBadges.isEmpty {
+            try? modelContext.save()
+        }
     }
 
     private func resetIndividualDevData() {
@@ -696,7 +862,7 @@ struct SettingsView: View {
         let individualUserId = getOrCreateIndividualUserId()
 
         // Delete attendings created by individual mode (Simpson doctors)
-        let devAttendingNames = ["Dr. Julius Hibbert", "Dr. Nick Riviera", "Dr. Marvin Monroe"]
+        let devAttendingNames = ["Dr. Nick Riviera", "Dr. Julius Hibbert", "Dr. Marvin Monroe"]
         for attending in attendings where devAttendingNames.contains(attending.name) {
             modelContext.delete(attending)
         }
@@ -707,10 +873,24 @@ struct SettingsView: View {
             modelContext.delete(facility)
         }
 
-        // Delete cases with dev notes
+        // Delete cases owned by individual user that have sample notes
+        let sampleNotePatterns = ["Successful PCI", "Diagnostic cath", "Right heart cath", "Elective PCI",
+                                   "Complex bifurcation", "Chronic total occlusion", "Impella-supported",
+                                   "STEMI activation", "Structural case", "EP study", "TTE showing",
+                                   "Stress echo", "TEE for afib", "Carotid ultrasound", "Lower extremity",
+                                   "Renal artery", "AAA surveillance", "Bubble study", "Dobutamine stress",
+                                   "Right heart catheterization"]
         let allCases = (try? modelContext.fetch(FetchDescriptor<CaseEntry>())) ?? []
-        for caseEntry in allCases where caseEntry.ownerId == individualUserId && (caseEntry.notes?.contains("auto-generated") ?? false) {
-            modelContext.delete(caseEntry)
+        for caseEntry in allCases where caseEntry.ownerId == individualUserId {
+            if let notes = caseEntry.notes, sampleNotePatterns.contains(where: { notes.contains($0) }) {
+                modelContext.delete(caseEntry)
+            }
+        }
+
+        // Delete badges earned by individual user
+        let allBadges = (try? modelContext.fetch(FetchDescriptor<BadgeEarned>())) ?? []
+        for badge in allBadges where badge.fellowId == individualUserId {
+            modelContext.delete(badge)
         }
 
         try? modelContext.save()
@@ -818,15 +998,28 @@ struct SettingsView: View {
                     showingAttendingsList = true
                 }
 
-                // Hospitals Row
+                // Facilities Row
                 SettingsPillRow(
                     icon: "building.2.fill",
                     iconColor: Color(red: 0.2, green: 0.4, blue: 0.8),
-                    title: "Hospitals",
+                    title: "Facilities",
                     badge: activeFacilitiesCount > 0 ? .count(activeFacilitiesCount) : nil,
                     showChevron: true
                 ) {
                     showingFacilitiesList = true
+                }
+
+                // Default Facility Row (only show if there are facilities)
+                if activeFacilitiesCount > 0 {
+                    SettingsPillRow(
+                        icon: "star.fill",
+                        iconColor: .yellow,
+                        title: "Default Facility",
+                        subtitle: defaultFacilityName,
+                        showChevron: true
+                    ) {
+                        showingDefaultFacilityPicker = true
+                    }
                 }
 
                 // PROCEDURES Section
@@ -898,6 +1091,16 @@ struct SettingsView: View {
                 ) {
                     showingExportOptions = true
                 }
+
+                // ACHIEVEMENTS Section
+                SectionHeader(title: "ACHIEVEMENTS")
+
+                SettingsPillToggle(
+                    icon: "trophy.fill",
+                    iconColor: .yellow,
+                    title: "Badges & Achievements",
+                    isOn: $badgesEnabled
+                )
 
                 // NOTIFICATIONS Section
                 SectionHeader(title: "NOTIFICATIONS")
@@ -1053,6 +1256,20 @@ struct SettingsView: View {
                 ) {
                     showingAbout = true
                 }
+
+                // Migration Section (for fellows only)
+                if appState.userRole == .fellow {
+                    SectionHeader(title: "PROGRAM MIGRATION")
+
+                    SettingsPillRow(
+                        icon: "arrow.triangle.branch",
+                        iconColor: .orange,
+                        title: "Switch to Individual Mode",
+                        showChevron: true
+                    ) {
+                        showingInstitutionalToIndividualMigration = true
+                    }
+                }
             }
 
             // Sign Out (for all roles)
@@ -1103,6 +1320,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showingFellowIdentityPicker) {
             FellowIdentityPickerSheet(fellows: activeFellows)
         }
+        .fullScreenCover(isPresented: $showingInstitutionalToIndividualMigration) {
+            InstitutionalToIndividualMigrationView()
+        }
         .sheet(isPresented: $showingAttendingIdentityPicker) {
             AttendingIdentityPickerSheet(attendings: activeAttendingsForSelection)
         }
@@ -1117,6 +1337,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingFacilitiesList) {
             FacilitiesListSheet()
+        }
+        .sheet(isPresented: $showingDefaultFacilityPicker) {
+            DefaultFacilityPickerSheet(facilities: facilities)
         }
         .sheet(isPresented: $showingCustomProcedures) {
             CustomProceduresListSheet()
@@ -1386,6 +1609,67 @@ struct NotificationFrequencyPicker: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(selectedFrequency.displayName)
+                        .font(.caption)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundColor(Color(UIColor.tertiaryLabel))
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Case Logging Reminder Time Picker
+
+struct CaseLoggingReminderTimePicker: View {
+    @Binding var selectedHour: Int
+
+    private var timeString: String {
+        let hour12 = selectedHour % 12 == 0 ? 12 : selectedHour % 12
+        let ampm = selectedHour < 12 ? "AM" : "PM"
+        return "\(hour12):00 \(ampm)"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Image(systemName: "clock.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.orange)
+                .frame(width: 28, height: 28)
+
+            // Title
+            Text("Reminder Time")
+                .font(.body)
+                .fontWeight(.medium)
+                .foregroundColor(Color(UIColor.label))
+
+            Spacer()
+
+            // Slider representation as a menu
+            Menu {
+                ForEach(6..<23) { hour in
+                    Button {
+                        selectedHour = hour
+                    } label: {
+                        let hour12 = hour % 12 == 0 ? 12 : hour % 12
+                        let ampm = hour < 12 ? "AM" : "PM"
+                        HStack {
+                            Text("\(hour12):00 \(ampm)")
+                            if selectedHour == hour {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(timeString)
                         .font(.caption)
                         .foregroundColor(Color(UIColor.secondaryLabel))
                     Image(systemName: "chevron.up.chevron.down")
@@ -1998,13 +2282,13 @@ struct FacilitiesListSheet: View {
             .overlay {
                 if facilities.isEmpty {
                     ContentUnavailableView(
-                        "No Hospitals",
+                        "No Facilities",
                         systemImage: "building.2",
-                        description: Text("Add hospitals where you perform procedures.")
+                        description: Text("Add facilities where you perform procedures.")
                     )
                 }
             }
-            .navigationTitle("Hospitals")
+            .navigationTitle("Facilities")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -3501,7 +3785,7 @@ struct AddEditFacilitySheet: View {
                     Text("Short name is displayed in compact views (e.g., 'TMC' for Texas Medical Center)")
                 }
             }
-            .navigationTitle(facility == nil ? "Add Hospital" : "Edit Hospital")
+            .navigationTitle(facility == nil ? "Add Facility" : "Edit Facility")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if let fac = facility {

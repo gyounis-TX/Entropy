@@ -637,6 +637,11 @@ struct QuickRateCaseRow: View {
 
             // Compact rating boxes for each rating field
             if !ratingFields.isEmpty {
+                Text("Quick Evaluate")
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
+
                 ForEach(ratingFields.prefix(2)) { field in
                     HStack(spacing: 4) {
                         Text(field.title)
@@ -722,7 +727,7 @@ struct AttestationQueueCaseRow: View {
     private var categoryBubbles: [ProcedureCategory] {
         var categories = Set<ProcedureCategory>()
         for tagId in caseEntry.procedureTagIds {
-            if let procedure = SpecialtyPackCatalog.findProcedure(by: tagId) {
+            if SpecialtyPackCatalog.findProcedure(by: tagId) != nil {
                 for pack in SpecialtyPackCatalog.allPacks {
                     for packCategory in pack.categories {
                         if packCategory.procedures.contains(where: { $0.id == tagId }) {
@@ -790,6 +795,7 @@ struct AttestationQueueCaseRow: View {
 struct AttendingAttestationDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("badgesEnabled") private var badgesEnabled = true
 
     let caseEntry: CaseEntry
     let attestorId: UUID?
@@ -1287,6 +1293,9 @@ extension AttendingAttestationDetailSheet {
     }
 
     private func checkAndAwardBadges(for fellowId: UUID) {
+        // Skip badge checking if badges are disabled
+        guard badgesEnabled else { return }
+
         // Fetch all cases for this fellow
         let casesDescriptor = FetchDescriptor<CaseEntry>()
         guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }

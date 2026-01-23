@@ -32,6 +32,8 @@ struct ProcedusApp: App {
             FellowProcedureGroup.self,
             Badge.self,
             BadgeEarned.self,
+            CaseMedia.self,
+            SearchTermSuggestion.self,
         ])
         
         let modelConfiguration = ModelConfiguration(

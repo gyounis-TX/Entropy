@@ -11,6 +11,8 @@ struct BadgeCelebrationView: View {
     @State private var showContent = false
     @State private var iconScale: CGFloat = 0.5
     @State private var glowOpacity: Double = 0
+    @State private var confettiParticles: [ConfettiParticle] = []
+    @State private var showConfetti = false
 
     private var tierColor: Color {
         BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.primary
@@ -26,6 +28,12 @@ struct BadgeCelebrationView: View {
             Color.black.opacity(0.7)
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
+
+            // Confetti layer
+            if showConfetti {
+                ConfettiView(particles: confettiParticles, tierColor: tierColor)
+                    .ignoresSafeArea()
+            }
 
             // Badge celebration card
             VStack(spacing: 24) {
@@ -119,17 +127,89 @@ struct BadgeCelebrationView: View {
             .padding(32)
         }
         .onAppear {
-            // Animate in
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-                iconScale = 1.0
+            // Get screen width from window scene (iOS 26+ compatible)
+            let screenWidth: CGFloat = {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    return windowScene.screen.bounds.width
+                }
+                return 400 // Fallback width
+            }()
+
+            // Generate confetti particles
+            confettiParticles = (0..<50).map { _ in
+                ConfettiParticle(
+                    x: CGFloat.random(in: 0...screenWidth),
+                    y: -20,
+                    size: CGFloat.random(in: 6...12),
+                    color: [tierColor, .yellow, .orange, .pink, .purple, .cyan].randomElement() ?? tierColor,
+                    rotation: Double.random(in: 0...360),
+                    velocity: CGFloat.random(in: 150...350)
+                )
             }
 
-            withAnimation(.easeOut(duration: 0.8)) {
-                glowOpacity = 1.0
-            }
+            // Show confetti first
+            showConfetti = true
 
-            withAnimation(.easeOut(duration: 0.5).delay(0.2)) {
-                showContent = true
+            // Then animate the badge content
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                    iconScale = 1.0
+                }
+
+                withAnimation(.easeOut(duration: 0.8)) {
+                    glowOpacity = 1.0
+                }
+
+                withAnimation(.easeOut(duration: 0.5).delay(0.2)) {
+                    showContent = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Confetti Particle
+
+struct ConfettiParticle: Identifiable {
+    let id = UUID()
+    var x: CGFloat
+    var y: CGFloat
+    let size: CGFloat
+    let color: Color
+    let rotation: Double
+    let velocity: CGFloat
+}
+
+// MARK: - Confetti View
+
+struct ConfettiView: View {
+    let particles: [ConfettiParticle]
+    let tierColor: Color
+
+    @State private var animationProgress: CGFloat = 0
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+
+                for particle in particles {
+                    let progress = min(1.0, CGFloat(elapsed.truncatingRemainder(dividingBy: 3)))
+                    let y = particle.y + (particle.velocity * progress * 3)
+                    let x = particle.x + CGFloat(sin(Double(progress) * .pi * 2 + particle.rotation)) * 30
+
+                    if y < size.height + 50 {
+                        var contextCopy = context
+                        contextCopy.translateBy(x: x, y: y)
+                        contextCopy.rotate(by: .degrees(particle.rotation + Double(progress) * 360))
+
+                        let rect = CGRect(x: -particle.size/2, y: -particle.size/2, width: particle.size, height: particle.size * 0.6)
+                        contextCopy.fill(
+                            Path(roundedRect: rect, cornerRadius: 2),
+                            with: .color(particle.color.opacity(1 - Double(progress) * 0.5))
+                        )
+                    }
+                }
             }
         }
     }

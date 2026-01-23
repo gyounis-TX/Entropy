@@ -5,7 +5,8 @@
 import Foundation
 
 /// Defines the conditions required to earn a badge
-struct BadgeCriteria: Codable, Equatable {
+/// Note: Manual JSON encoding/decoding to avoid Swift 6 MainActor isolation issues with Codable
+struct BadgeCriteria: Equatable, Sendable {
 
     // MARK: - Procedure Targeting
 
@@ -77,6 +78,33 @@ struct BadgeCriteria: Codable, Equatable {
 
     // MARK: - Convenience Initializers
 
+    /// Create criteria for first procedure (any operator role)
+    static func firstProcedure(procedureTagId: String) -> BadgeCriteria {
+        BadgeCriteria(
+            procedureTagId: procedureTagId,
+            minimumCount: 1,
+            requiresPrimaryOperator: false
+        )
+    }
+
+    /// Create criteria for first procedure (any operator role, any of multiple procedures)
+    static func firstProcedure(anyOf procedureTagIds: [String]) -> BadgeCriteria {
+        BadgeCriteria(
+            procedureTagIds: procedureTagIds,
+            minimumCount: 1,
+            requiresPrimaryOperator: false
+        )
+    }
+
+    /// Create criteria for first procedure in a category (any operator role)
+    static func firstProcedureInCategory(category: String) -> BadgeCriteria {
+        BadgeCriteria(
+            category: category,
+            minimumCount: 1,
+            requiresPrimaryOperator: false
+        )
+    }
+
     /// Create criteria for first procedure as primary operator
     static func firstAsPrimary(procedureTagId: String) -> BadgeCriteria {
         BadgeCriteria(
@@ -132,5 +160,51 @@ struct BadgeCriteria: Codable, Equatable {
             minimumCount: 1,
             minimumUniqueProcedures: uniqueProcedureCount
         )
+    }
+
+    // MARK: - Manual JSON Encoding/Decoding (Swift 6 compatible)
+
+    /// Decode from JSON string
+    static func fromJson(_ json: String) -> BadgeCriteria? {
+        guard let data = json.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        return BadgeCriteria(
+            procedureTagId: dict["procedureTagId"] as? String,
+            procedureTagIds: dict["procedureTagIds"] as? [String],
+            category: dict["category"] as? String,
+            categories: dict["categories"] as? [String],
+            minimumCount: dict["minimumCount"] as? Int ?? 1,
+            countInterval: dict["countInterval"] as? Int,
+            requiresPrimaryOperator: dict["requiresPrimaryOperator"] as? Bool ?? false,
+            withinDays: dict["withinDays"] as? Int,
+            academicYearOnly: dict["academicYearOnly"] as? Bool ?? false,
+            minimumUniqueProcedures: dict["minimumUniqueProcedures"] as? Int
+        )
+    }
+
+    /// Encode to JSON string
+    func toJson() -> String {
+        var dict: [String: Any] = [
+            "minimumCount": minimumCount,
+            "requiresPrimaryOperator": requiresPrimaryOperator,
+            "academicYearOnly": academicYearOnly
+        ]
+
+        if let procedureTagId = procedureTagId { dict["procedureTagId"] = procedureTagId }
+        if let procedureTagIds = procedureTagIds { dict["procedureTagIds"] = procedureTagIds }
+        if let category = category { dict["category"] = category }
+        if let categories = categories { dict["categories"] = categories }
+        if let countInterval = countInterval { dict["countInterval"] = countInterval }
+        if let withinDays = withinDays { dict["withinDays"] = withinDays }
+        if let minimumUniqueProcedures = minimumUniqueProcedures { dict["minimumUniqueProcedures"] = minimumUniqueProcedures }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
     }
 }

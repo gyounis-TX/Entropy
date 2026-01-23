@@ -505,31 +505,26 @@ struct ImportProcedureLogView: View {
         
         defer { url.stopAccessingSecurityScopedResource() }
         
-        do {
-            guard let parseResult = try ProcedureLogImporter.shared.parseFile(at: url) else {
-                errorMessage = "Failed to parse file"
-                isProcessing = false
-                return
-            }
-            let (parsedHeaders, parsedRows) = parseResult
-            
-            guard !parsedHeaders.isEmpty else {
-                errorMessage = "The file appears to be empty or has no headers"
-                isProcessing = false
-                return
-            }
-            
-            headers = parsedHeaders
-            dataRows = parsedRows
-            
-            // Auto-detect columns
-            columnMapping = ProcedureLogImporter.shared.autoDetectColumns(headers: headers)
-            
-            importStep = .mapColumns
-        } catch {
-            errorMessage = "Failed to parse file: \(error.localizedDescription)"
+        guard let parseResult = ProcedureLogImporter.shared.parseFile(at: url) else {
+            errorMessage = "Failed to parse file"
+            isProcessing = false
+            return
         }
-        
+        let (parsedHeaders, parsedRows) = parseResult
+
+        guard !parsedHeaders.isEmpty else {
+            errorMessage = "The file appears to be empty or has no headers"
+            isProcessing = false
+            return
+        }
+
+        headers = parsedHeaders
+        dataRows = parsedRows
+
+        // Auto-detect columns
+        columnMapping = ProcedureLogImporter.shared.autoDetectColumns(headers: headers)
+
+        importStep = .mapColumns
         isProcessing = false
     }
     

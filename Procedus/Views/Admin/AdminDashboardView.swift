@@ -25,6 +25,7 @@ struct AdminDashboardView: View {
     @Query private var evaluationFields: [EvaluationField]
 
     @AppStorage("adminName") private var adminNameStorage = ""
+    @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
 
     @State private var showingNotifications = false
     @State private var showingInviteCodes = false
@@ -41,10 +42,30 @@ struct AdminDashboardView: View {
 
     private var currentProgram: Program? { programs.first }
 
-    // Admin doesn't receive notifications - they send them to others
-    // This count shows only admin-specific notifications (currently none)
+    /// Get admin users in the system
+    private var adminUsers: [User] {
+        allUsers.filter { $0.role == .admin }
+    }
+
+    /// Get the currently selected admin user
+    private var currentAdmin: User? {
+        if let adminId = UUID(uuidString: selectedAdminIdString),
+           let admin = adminUsers.first(where: { $0.id == adminId }) {
+            return admin
+        }
+        return adminUsers.first
+    }
+
+    /// Admin receives replies to messages they sent
+    /// Count unread notifications where admin is the recipient
     private var unreadNotificationCount: Int {
-        0  // Admin role sends notifications, doesn't receive them
+        guard let adminId = currentAdmin?.id else { return 0 }
+        return notifications.filter { notification in
+            notification.userId == adminId &&
+            !notification.isRead &&
+            !notification.isCleared &&
+            notification.notificationType == NotificationType.programUpdate.rawValue
+        }.count
     }
 
     private var fellowCount: Int {
@@ -138,7 +159,7 @@ struct AdminDashboardView: View {
                 }
             }
             .sheet(isPresented: $showingNotifications) {
-                 NotificationsSheet(role: .admin, userId: nil)
+                 NotificationsSheet(role: .admin, userId: currentAdmin?.id)
             }
             .sheet(isPresented: $showingInviteCodes) {
                 InviteCodesSheet()
@@ -564,6 +585,7 @@ struct AdminDashboardView: View {
         // Create attendings - track IDs as we create
         var createdAttendingIds: [UUID] = []
         let attendingData = [
+            ("Dr. Nick", "Riviera", "drnick@springfield.com"),
             ("Ned", "Flanders", "ned@springfield.com"),
             ("Moe", "Szyslak", "moe@springfield.com"),
             ("Apu", "Nahasapeemapetilon", "apu@springfield.com")
@@ -696,21 +718,44 @@ struct AdminDashboardView: View {
                 )
                 newCase.programId = program.id
 
-                let numProcedures = Int.random(in: 1...3)
-                newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
+                // Ensure first case has TAVR for badge testing, others random
+                if i == 0 {
+                    newCase.procedureTagIds = ["ic-struct-tavr"]
+                    newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
+                } else if i == 1 {
+                    // Second case: PCI for badge testing
+                    newCase.procedureTagIds = ["ic-pci-stent"]
+                    newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
+                } else {
+                    let numProcedures = Int.random(in: 1...3)
+                    newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
+                }
                 newCase.createdAt = caseDate
                 newCase.caseTypeRaw = CaseType.invasive.rawValue
 
                 let numAccessSites = Int.random(in: 1...2)
                 newCase.accessSiteIds = Array(icAccessSites.shuffled().prefix(numAccessSites)).map { $0.rawValue }
-                newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
+                // Only set random operator position for cases after the first two (which are set above)
+                if i > 1 {
+                    newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
+                }
                 newCase.notes = sampleNotes[i]
-                newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+
+                // Make some cases attested (older cases, ~60%), some pending (recent cases, ~40%)
+                // First 2 cases are always attested for badge testing
+                let isAttested = i < 2 || (weeksAgo > 4 && Int.random(in: 0...100) < 60)
+                if isAttested {
+                    newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
+                    newCase.attestedAt = caseDate.addingTimeInterval(Double.random(in: 3600...86400)) // 1-24 hours later
+                    newCase.attestorId = createdAttendingIds.randomElement()
+                } else {
+                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+                }
 
                 modelContext.insert(newCase)
 
-                // Create attestation notification for attending
-                if let attendingId = newCase.attendingId {
+                // Create attestation notification for attending (only for pending cases)
+                if let attendingId = newCase.attendingId, !isAttested {
                     let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
                     let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
                         SpecialtyPackCatalog.findProcedure(by: tagId)?.title
@@ -718,8 +763,8 @@ struct AdminDashboardView: View {
                     let procedureList = procedureTitles.prefix(3).joined(separator: ", ")
                     let suffix = procedureTitles.count > 3 ? " + \(procedureTitles.count - 3) more" : ""
                     let message = procedureTitles.isEmpty ?
-                        "\(fellowName) submitted a case with \(newCase.procedureTagIds.count) procedure(s) for your attestation." :
-                        "\(fellowName) submitted a case with \(procedureList)\(suffix) for your attestation."
+                        "\(fellowName) submitted a case of \(newCase.procedureTagIds.count) procedure(s) for your attestation." :
+                        "\(fellowName) submitted a case of \(procedureList)\(suffix) for your attestation."
 
                     let notification = Procedus.Notification(
                         userId: attendingId,
@@ -764,7 +809,61 @@ struct AdminDashboardView: View {
         }
 
         try? modelContext.save()
+
+        // Check and award badges for all fellows (for the attested cases we just created)
+        for fellowId in createdFellowIds {
+            checkAndAwardBadgesForFellow(fellowId, programId: program.id)
+        }
+
         devDataPopulated = true
+    }
+
+    private func checkAndAwardBadgesForFellow(_ fellowId: UUID, programId: UUID) {
+        // Fetch all cases
+        let casesDescriptor = FetchDescriptor<CaseEntry>()
+        guard let allCasesForCheck = try? modelContext.fetch(casesDescriptor) else { return }
+
+        // Fetch existing badges for this fellow
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>(
+            predicate: #Predicate<BadgeEarned> { $0.fellowId == fellowId }
+        )
+        let existingBadges = (try? modelContext.fetch(badgesDescriptor)) ?? []
+
+        // Get the most recent attested case for this fellow to use as the triggering case
+        let fellowAttestedCases = allCasesForCheck.filter {
+            ($0.ownerId == fellowId || $0.fellowId == fellowId) &&
+            $0.attestationStatus == .attested &&
+            !$0.isArchived
+        }.sorted { $0.createdAt > $1.createdAt }
+
+        guard let triggeringCase = fellowAttestedCases.first else { return }
+
+        // Check and award new badges
+        let newBadges = BadgeService.shared.checkAndAwardBadges(
+            for: fellowId,
+            attestedCase: triggeringCase,
+            allCases: allCasesForCheck,
+            existingBadges: existingBadges,
+            modelContext: modelContext
+        )
+
+        // Create notifications for earned badges
+        for earned in newBadges {
+            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                let notification = Procedus.Notification(
+                    userId: fellowId,
+                    title: "Achievement Unlocked!",
+                    message: "You earned the \"\(badge.title)\" badge!",
+                    notificationType: NotificationType.badgeEarned.rawValue,
+                    caseId: nil
+                )
+                modelContext.insert(notification)
+            }
+        }
+
+        if !newBadges.isEmpty {
+            try? modelContext.save()
+        }
     }
     #endif
 }
@@ -952,42 +1051,214 @@ struct AdminStatCard: View {
 
 struct ProcedureCountsView: View {
     @Query private var allCases: [CaseEntry]
+    @Query private var allUsers: [User]
+    @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
+    @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
+    @Query(filter: #Predicate<CustomAccessSite> { !$0.isArchived }) private var customAccessSites: [CustomAccessSite]
+    @Query(filter: #Predicate<CustomComplication> { !$0.isArchived }) private var customComplications: [CustomComplication]
 
-    private var procedureCounts: [(procedure: String, count: Int)] {
-        var counts: [String: Int] = [:]
+    @State private var expandedProcedures: Set<String> = []
+
+    private var fellows: [User] {
+        allUsers.filter { $0.role == .fellow }
+    }
+
+    private var procedureData: [(procedureId: String, procedureTitle: String, cases: [CaseEntry])] {
+        var procCases: [String: (title: String, cases: [CaseEntry])] = [:]
         for caseEntry in allCases {
             for procedureId in caseEntry.procedureTagIds {
                 let title = SpecialtyPackCatalog.findProcedureTitle(for: procedureId) ?? procedureId
-                counts[title, default: 0] += 1
+                if procCases[procedureId] == nil {
+                    procCases[procedureId] = (title: title, cases: [])
+                }
+                procCases[procedureId]?.cases.append(caseEntry)
             }
         }
-        return counts.map { ($0.key, $0.value) }.sorted { $0.count > $1.count }
+        return procCases.map { (procedureId: $0.key, procedureTitle: $0.value.title, cases: $0.value.cases) }
+            .sorted { $0.cases.count > $1.cases.count }
     }
 
     var body: some View {
         List {
-            if procedureCounts.isEmpty {
+            if procedureData.isEmpty {
                 ContentUnavailableView(
                     "No Procedures",
                     systemImage: "list.clipboard",
                     description: Text("No procedures have been logged yet.")
                 )
             } else {
-                ForEach(procedureCounts, id: \.procedure) { item in
-                    HStack {
-                        Text(item.procedure)
-                            .font(.subheadline)
-                        Spacer()
-                        Text("\(item.count)")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
+                ForEach(procedureData, id: \.procedureId) { item in
+                    DisclosureGroup(
+                        isExpanded: Binding(
+                            get: { expandedProcedures.contains(item.procedureId) },
+                            set: { isExpanded in
+                                if isExpanded {
+                                    expandedProcedures.insert(item.procedureId)
+                                } else {
+                                    expandedProcedures.remove(item.procedureId)
+                                }
+                            }
+                        )
+                    ) {
+                        ForEach(item.cases.sorted { $0.createdAt > $1.createdAt }) { caseEntry in
+                            ProcedureCaseDetailRow(
+                                caseEntry: caseEntry,
+                                fellows: fellows,
+                                attendings: attendings,
+                                facilities: facilities,
+                                customAccessSites: customAccessSites,
+                                customComplications: customComplications
+                            )
+                        }
+                    } label: {
+                        HStack {
+                            Text(item.procedureTitle)
+                                .font(.subheadline)
+                            Spacer()
+                            Text("\(item.cases.count)")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
         }
         .navigationTitle("Procedure Counts")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Procedure Case Detail Row (Read-Only)
+
+private struct ProcedureCaseDetailRow: View {
+    let caseEntry: CaseEntry
+    let fellows: [User]
+    let attendings: [Attending]
+    let facilities: [TrainingFacility]
+    let customAccessSites: [CustomAccessSite]
+    let customComplications: [CustomComplication]
+
+    private var fellowName: String {
+        if let fellow = fellows.first(where: { $0.id == caseEntry.ownerId }) {
+            return fellow.displayName
+        }
+        return "Unknown Fellow"
+    }
+
+    private var attendingName: String {
+        guard let attendingId = caseEntry.attendingId else { return "Not assigned" }
+        if let attending = attendings.first(where: { $0.id == attendingId }) {
+            return attending.name
+        }
+        return "Unknown"
+    }
+
+    private var facilityName: String {
+        guard let facilityId = caseEntry.facilityId else { return "Not specified" }
+        if let facility = facilities.first(where: { $0.id == facilityId }) {
+            return facility.name
+        }
+        return "Unknown"
+    }
+
+    private var accessSiteNames: [String] {
+        caseEntry.accessSiteIds.compactMap { siteId in
+            if let builtIn = AccessSite(rawValue: siteId) {
+                return builtIn.rawValue
+            } else if let custom = customAccessSites.first(where: { $0.id.uuidString == siteId }) {
+                return custom.title
+            }
+            return nil
+        }
+    }
+
+    private var complicationNames: [String] {
+        caseEntry.complicationIds.compactMap { compId in
+            if let builtIn = Complication(rawValue: compId) {
+                return builtIn.rawValue
+            } else if let custom = customComplications.first(where: { $0.id.uuidString == compId }) {
+                return custom.title
+            }
+            return nil
+        }
+    }
+
+    private var caseDate: String {
+        caseEntry.createdAt.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Header: Fellow + Date
+            HStack {
+                Text(fellowName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Spacer()
+                Text(caseDate)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            // Attending & Facility
+            HStack(spacing: 12) {
+                Label(attendingName, systemImage: "person.fill")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                Label(facilityName, systemImage: "building.2.fill")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            // Access Sites
+            if !accessSiteNames.isEmpty {
+                HStack {
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                    Text(accessSiteNames.joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Complications
+            if !complicationNames.isEmpty {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                    Text(complicationNames.joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                }
+            }
+
+            // Operator Position
+            if let position = caseEntry.operatorPosition {
+                HStack {
+                    Image(systemName: "person.badge.key.fill")
+                        .font(.caption2)
+                        .foregroundColor(.purple)
+                    Text(position.displayName)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Notes preview
+            if let notes = caseEntry.notes, !notes.isEmpty {
+                Text(notes)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .italic()
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.leading, 8)
     }
 }
 
@@ -6131,6 +6402,12 @@ struct ExportEvaluationSheet: View {
 
 struct ExportDataView: View {
     @Query private var allUsers: [User]
+    @Query private var allCases: [CaseEntry]
+    @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
+    @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
+    @Query private var evaluationFields: [EvaluationField]
+    @Query(filter: #Predicate<CustomAccessSite> { !$0.isArchived }) private var customAccessSites: [CustomAccessSite]
+    @Query(filter: #Predicate<CustomComplication> { !$0.isArchived }) private var customComplications: [CustomComplication]
 
     @State private var exportType = "log"
     @State private var exportFormat = "csv"
@@ -6146,15 +6423,21 @@ struct ExportDataView: View {
                 Picker("Export Type", selection: $exportType) {
                     Text("Procedure Log").tag("log")
                     Text("Procedure Counts").tag("counts")
+                    Text("Evaluations").tag("evaluations")
                 }
                 .pickerStyle(.segmented)
             } header: {
                 Text("Export Type")
             } footer: {
-                if exportType == "log" {
+                switch exportType {
+                case "log":
                     Text("Detailed list of procedures by date, attending, and outcome.")
-                } else {
+                case "counts":
                     Text("Totals grouped by procedure and category.")
+                case "evaluations":
+                    Text("Summary of attending evaluations and feedback.")
+                default:
+                    Text("")
                 }
             }
 
@@ -6204,11 +6487,193 @@ struct ExportDataView: View {
     }
 
     private func exportAll() {
-        // Implementation would use ExportService
+        for fellow in fellows {
+            exportForFellow(fellow)
+        }
     }
 
     private func exportForFellow(_ fellow: User) {
-        // Implementation would use ExportService
+        let fellowCases = allCases.filter { $0.fellowId == fellow.id || $0.ownerId == fellow.id }
+        let safeName = fellow.displayName.replacingOccurrences(of: " ", with: "_")
+        var url: URL?
+
+        switch exportType {
+        case "log":
+            let rows = buildExportRows(for: fellowCases, fellowName: fellow.displayName)
+            switch exportFormat {
+            case "csv":
+                url = ExportService.shared.exportToCSV(rows: rows, filename: "\(safeName)_log")
+            case "excel":
+                url = ExportService.shared.exportToExcel(rows: rows, filename: "\(safeName)_log")
+            case "pdf":
+                url = ExportService.shared.exportToPDF(rows: rows, fellowName: fellow.displayName, title: "Procedure Log")
+            default: break
+            }
+
+        case "counts":
+            let rows = buildCountRows(for: fellowCases)
+            switch exportFormat {
+            case "csv":
+                url = ExportService.shared.exportProcedureCountsToCSV(rows: rows, filename: "\(safeName)_counts")
+            case "excel":
+                url = ExportService.shared.exportProcedureCountsToExcel(rows: rows, fellowName: fellow.displayName, totalCases: fellowCases.count, dateRange: "All Time")
+            case "pdf":
+                url = ExportService.shared.exportProcedureCountsToPDF(rows: rows, fellowName: fellow.displayName, dateRange: "All Time")
+            default: break
+            }
+
+        case "evaluations":
+            let exportData = buildEvaluationExportData(for: fellowCases, fellowName: fellow.displayName)
+            switch exportFormat {
+            case "csv":
+                url = ExportService.shared.exportEvaluationSummaryToCSV(exportData, filename: "\(safeName)_evaluations.csv")
+            case "excel":
+                url = ExportService.shared.exportEvaluationSummaryToExcel(exportData, filename: "\(safeName)_evaluations.xls")
+            case "pdf":
+                url = ExportService.shared.exportEvaluationSummaryToPDF(exportData, filename: "\(safeName)_evaluations.pdf")
+            default: break
+            }
+
+        default: break
+        }
+
+        if let url = url {
+            ShareSheetPresenter.present(url: url)
+        }
+    }
+
+    private func buildExportRows(for cases: [CaseEntry], fellowName: String) -> [ExportService.CaseExportRow] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+
+        return cases.map { caseEntry in
+            let attendingName = attendings.first(where: { $0.id == caseEntry.attendingId })?.name ?? "N/A"
+            let facilityName = facilities.first(where: { $0.id == caseEntry.facilityId })?.name ?? "N/A"
+            let procedures = caseEntry.procedureTagIds.compactMap { SpecialtyPackCatalog.findProcedureTitle(for: $0) }.joined(separator: "; ")
+
+            let accessSites = caseEntry.accessSiteIds.compactMap { siteId -> String? in
+                if let builtIn = AccessSite(rawValue: siteId) {
+                    return builtIn.rawValue
+                } else if let custom = customAccessSites.first(where: { $0.id.uuidString == siteId }) {
+                    return custom.title
+                }
+                return nil
+            }.joined(separator: "; ")
+
+            let complications = caseEntry.complicationIds.compactMap { compId -> String? in
+                if let builtIn = Complication(rawValue: compId) {
+                    return builtIn.rawValue
+                } else if let custom = customComplications.first(where: { $0.id.uuidString == compId }) {
+                    return custom.title
+                }
+                return nil
+            }.joined(separator: "; ")
+
+            return ExportService.CaseExportRow(
+                fellowName: fellowName,
+                attendingName: attendingName,
+                facilityName: facilityName,
+                weekBucket: caseEntry.weekBucket,
+                procedures: procedures,
+                procedureCount: caseEntry.procedureTagIds.count,
+                accessSites: accessSites,
+                complications: complications,
+                outcome: caseEntry.outcome.rawValue,
+                attestationStatus: caseEntry.attestationStatus.rawValue,
+                attestedDate: caseEntry.attestedAt.map { dateFormatter.string(from: $0) } ?? "N/A",
+                createdDate: dateFormatter.string(from: caseEntry.createdAt)
+            )
+        }
+    }
+
+    private func buildCountRows(for cases: [CaseEntry]) -> [ExportService.ProcedureCountRow] {
+        var counts: [String: (category: String, count: Int)] = [:]
+
+        for caseEntry in cases {
+            for procId in caseEntry.procedureTagIds {
+                let title = SpecialtyPackCatalog.findProcedureTitle(for: procId) ?? procId
+                let category = SpecialtyPackCatalog.findCategory(for: procId)?.rawValue ?? "Other"
+                if counts[title] == nil {
+                    counts[title] = (category: category, count: 0)
+                }
+                counts[title]?.count += 1
+            }
+        }
+
+        return counts.map { ExportService.ProcedureCountRow(category: $0.value.category, procedure: $0.key, count: $0.value.count) }
+            .sorted {
+                // Sort by category first, then by procedure name within category
+                if $0.category != $1.category {
+                    return $0.category < $1.category
+                }
+                return $0.procedure < $1.procedure
+            }
+    }
+
+    private func buildEvaluationExportData(for cases: [CaseEntry], fellowName: String) -> ExportService.EvaluationExportData {
+        var metrics: [ExportService.EvaluationExportData.FieldMetric] = []
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+
+        for field in evaluationFields.sorted(by: { $0.displayOrder < $1.displayOrder }) {
+            var count = 0
+            var ratingSum = 0.0
+            var ratingCount = 0
+
+            for caseEntry in cases {
+                let responses = caseEntry.evaluationResponses
+                if let value = responses[field.id.uuidString] {
+                    if field.fieldType == .rating {
+                        if let rating = Double(value) {
+                            ratingSum += rating
+                            ratingCount += 1
+                        }
+                    } else {
+                        if value == "true" {
+                            count += 1
+                        }
+                    }
+                }
+            }
+
+            let average: Double? = field.fieldType == .rating && ratingCount > 0 ? ratingSum / Double(ratingCount) : nil
+            let percentage: Double
+            if field.fieldType == .rating {
+                percentage = average != nil ? (average! / 5.0) * 100 : 0
+            } else {
+                percentage = cases.isEmpty ? 0 : (Double(count) / Double(cases.count)) * 100
+            }
+
+            metrics.append(ExportService.EvaluationExportData.FieldMetric(
+                title: field.title,
+                fieldType: field.fieldType == .rating ? "rating" : "checkbox",
+                average: average,
+                count: field.fieldType == .rating ? ratingCount : count,
+                total: cases.count,
+                percentage: percentage
+            ))
+        }
+
+        var comments: [ExportService.EvaluationExportData.CommentEntry] = []
+        for caseEntry in cases.sorted(by: { $0.createdAt > $1.createdAt }) {
+            if let comment = caseEntry.evaluationComment, !comment.isEmpty {
+                let attendingName = attendings.first(where: { $0.id == caseEntry.attestorId })?.name ?? "Unknown"
+                comments.append(ExportService.EvaluationExportData.CommentEntry(
+                    comment: comment,
+                    attendingName: attendingName,
+                    date: caseEntry.createdAt,
+                    formattedDate: dateFormatter.string(from: caseEntry.createdAt)
+                ))
+            }
+        }
+
+        return ExportService.EvaluationExportData(
+            fellowName: fellowName,
+            dateRange: "All Time",
+            totalEvaluations: cases.count,
+            fieldMetrics: metrics,
+            comments: comments
+        )
     }
 }
 
@@ -6515,18 +6980,18 @@ struct SendProgramUpdateSheet: View {
         let senderId = currentAdmin?.id
         let senderName = currentAdmin?.displayName ?? "Program Admin"
 
-        // Get recipient user IDs based on target audience
-        let recipientIds: [UUID]
+        // Get recipient user IDs based on target audience (use Set to prevent duplicates)
+        let recipientIds: Set<UUID>
         switch targetAudience {
         case .all:
-            recipientIds = (fellows + attendings).map { $0.id }
+            recipientIds = Set((fellows + attendings).map { $0.id })
         case .fellowsOnly:
-            recipientIds = fellows.map { $0.id }
+            recipientIds = Set(fellows.map { $0.id })
         case .attendingsOnly:
-            recipientIds = attendings.map { $0.id }
+            recipientIds = Set(attendings.map { $0.id })
         }
 
-        // Create notification records for each recipient
+        // Create notification records for each unique recipient
         for userId in recipientIds {
             let notification = Procedus.Notification(
                 userId: userId,
@@ -6561,8 +7026,15 @@ struct NotificationsSheet: View {
     let role: UserRole
     let userId: UUID?
 
-    @State private var selectedCategory: NotificationCategory = .attestations
+    @State private var selectedCategory: NotificationCategory
     @State private var notificationToReply: Procedus.Notification?
+
+    init(role: UserRole, userId: UUID?) {
+        self.role = role
+        self.userId = userId
+        // Admin only sees Messages, not Attestations
+        _selectedCategory = State(initialValue: role == .admin ? .messages : .attestations)
+    }
 
     /// Get the current user for reply functionality
     private var currentUser: User? {
@@ -6657,8 +7129,8 @@ struct NotificationsSheet: View {
     }
 
     private var allRelevantNotifications: [Procedus.Notification] {
-        // Admin role doesn't receive notifications - they only send them
-        // If no userId provided for non-admin, return empty
+        // For admin role: show messages where they are the recipient (replies from fellows/attendings)
+        // For other roles: show notifications where userId matches one of the related IDs
         guard userId != nil, !relatedIds.isEmpty else { return [] }
         return notifications
             .filter { notification in
@@ -6688,15 +7160,22 @@ struct NotificationsSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Category Picker - simplified to avoid rendering bugs with counts
-                Picker("Category", selection: $selectedCategory) {
-                    Text(attestationCount > 0 ? "Attestations (\(attestationCount))" : "Attestations")
-                        .tag(NotificationCategory.attestations)
-                    Text(messagesCount > 0 ? "Messages (\(messagesCount))" : "Messages")
-                        .tag(NotificationCategory.messages)
+                // Category Picker - admin only sees Messages, others see both
+                if role == .admin {
+                    // Admin only has messages (replies from others)
+                    Text("Messages")
+                        .font(.headline)
+                        .padding()
+                } else {
+                    Picker("Category", selection: $selectedCategory) {
+                        Text(attestationCount > 0 ? "Attestations (\(attestationCount))" : "Attestations")
+                            .tag(NotificationCategory.attestations)
+                        Text(messagesCount > 0 ? "Messages (\(messagesCount))" : "Messages")
+                            .tag(NotificationCategory.messages)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding()
                 }
-                .pickerStyle(.segmented)
-                .padding()
 
                 // Clear Attestations button for attending role
                 if role == .attending && !attestationNotifications.isEmpty && selectedCategory == .attestations {
@@ -6961,6 +7440,9 @@ struct ReplyToMessageSheet: View {
     private func sendReply() {
         guard let recipientId = originalNotification.senderId else { return }
         isSending = true
+
+        // Mark the original notification as read when replying
+        originalNotification.isRead = true
 
         // Create reply notification for the original sender
         let replyNotification = Procedus.Notification(
