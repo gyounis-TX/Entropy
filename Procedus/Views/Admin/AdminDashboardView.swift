@@ -5279,6 +5279,11 @@ struct AttestationDashboardView: View {
             }
         } header: {
             Text("Cases (\(filteredCases.count))")
+        } footer: {
+            if filteredCases.contains(where: { $0.attestationStatus == .pending || $0.attestationStatus == .requested }) {
+                Text("Tip: Long-press or swipe right on a pending case to proxy attest on behalf of an attending.")
+                    .font(.caption2)
+            }
         }
     }
 
@@ -5293,6 +5298,16 @@ struct AttestationDashboardView: View {
                         Label("Proxy Attest", systemImage: "checkmark.seal")
                     }
                     .tint(.blue)
+                }
+            }
+            .contextMenu {
+                if caseEntry.attestationStatus == .pending || caseEntry.attestationStatus == .requested {
+                    Button {
+                        caseForProxy = caseEntry
+                        showingProxyAttestation = true
+                    } label: {
+                        Label("Proxy Attest", systemImage: "checkmark.seal")
+                    }
                 }
             }
     }
