@@ -330,8 +330,9 @@ struct IndividualAddEditCaseView: View {
 
                 notesSection
 
-                // Media Section (Edit mode only - case must exist first)
+                // Media Section
                 if isEditing, let existing = existingCase {
+                    // Edit mode: show full media section
                     Section {
                         CaseMediaSection(
                             caseId: existing.id,
@@ -344,6 +345,24 @@ struct IndividualAddEditCaseView: View {
                     } footer: {
                         Text("Add images or videos. PHI will be detected and must be redacted.")
                             .font(.caption2)
+                    }
+                } else if !isEditing {
+                    // New case: show hint about adding media after saving
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "photo.badge.plus")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Attachments")
+                                    .font(.subheadline)
+                                Text("Save case first, then add images/videos")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
 

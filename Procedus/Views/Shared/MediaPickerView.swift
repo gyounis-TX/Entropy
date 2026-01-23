@@ -174,7 +174,7 @@ struct MediaPickerView: View {
 
         let result = MediaPickerResult(image: image, videoURL: nil, mediaType: .image)
         onMediaSelected(result)
-        dismiss()
+        // Don't dismiss - let the parent flow handle navigation
     }
 
     // MARK: - Process Selected Item
@@ -199,7 +199,7 @@ struct MediaPickerView: View {
                 isProcessing = false
                 let result = MediaPickerResult(image: image, videoURL: nil, mediaType: .image)
                 onMediaSelected(result)
-                dismiss()
+                // Don't dismiss - let the parent flow handle navigation
                 return
             }
         }
@@ -221,7 +221,7 @@ struct MediaPickerView: View {
             isProcessing = false
             let result = MediaPickerResult(image: nil, videoURL: movie.url, mediaType: .video)
             onMediaSelected(result)
-            dismiss()
+            // Don't dismiss - let the parent flow handle navigation
             return
         }
 
