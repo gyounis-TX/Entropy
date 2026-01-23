@@ -7,7 +7,15 @@ import SwiftData
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("badgesEnabled") private var badgesEnabled = true
+    @AppStorage("badgesLastViewedAt") private var badgesLastViewedAt: Double = 0
+    @Query private var earnedBadges: [BadgeEarned]
+
+    private var newBadgeCount: Int {
+        let lastViewed = Date(timeIntervalSince1970: badgesLastViewedAt)
+        return earnedBadges.filter { $0.earnedAt > lastViewed }.count
+    }
 
     var body: some View {
         Group {
@@ -36,6 +44,11 @@ struct RootView: View {
                     Label("Log", systemImage: "list.clipboard")
                 }
 
+            MyImageLibraryView()
+                .tabItem {
+                    Label("Images", systemImage: "photo.on.rectangle.angled")
+                }
+
             AnalyticsView()
                 .tabItem {
                     Label("Analytics", systemImage: "chart.bar")
@@ -43,9 +56,13 @@ struct RootView: View {
 
             if badgesEnabled {
                 BadgeDashboardView()
+                    .onAppear {
+                        badgesLastViewedAt = Date().timeIntervalSince1970
+                    }
                     .tabItem {
                         Label("Badges", systemImage: "trophy")
                     }
+                    .badge(newBadgeCount > 0 ? newBadgeCount : 0)
             }
 
             SettingsView()
@@ -65,6 +82,16 @@ struct RootView: View {
                         Label("Log", systemImage: "list.clipboard")
                     }
 
+                MyImageLibraryView()
+                    .tabItem {
+                        Label("My Images", systemImage: "photo")
+                    }
+
+                SharedImageLibraryView()
+                    .tabItem {
+                        Label("Teaching", systemImage: "person.2.fill")
+                    }
+
                 AnalyticsView()
                     .tabItem {
                         Label("Analytics", systemImage: "chart.bar")
@@ -72,9 +99,13 @@ struct RootView: View {
 
                 if badgesEnabled {
                     BadgeDashboardView()
+                        .onAppear {
+                            badgesLastViewedAt = Date().timeIntervalSince1970
+                        }
                         .tabItem {
                             Label("Badges", systemImage: "trophy")
                         }
+                        .badge(newBadgeCount > 0 ? newBadgeCount : 0)
                 }
 
                 SettingsView()
@@ -82,12 +113,17 @@ struct RootView: View {
                         Label("Settings", systemImage: "gearshape")
                     }
             }
-            
+
         case .attending:
             TabView {
                 AttestationQueueView()
                     .tabItem {
                         Label("Attestation", systemImage: "checkmark.seal")
+                    }
+
+                SharedImageLibraryView()
+                    .tabItem {
+                        Label("Teaching", systemImage: "person.2.fill")
                     }
 
                 AttendingAnalyticsView()

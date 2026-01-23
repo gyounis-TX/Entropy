@@ -1527,8 +1527,8 @@ struct IndividualAddEditCaseView: View {
 
         try? modelContext.save()
 
-        // Check if badges are enabled
-        let badgesEnabled = UserDefaults.standard.bool(forKey: "badgesEnabled")
+        // Check if badges are enabled (default to true if not set)
+        let badgesEnabled = UserDefaults.standard.object(forKey: "badgesEnabled") as? Bool ?? true
 
         // Check for newly earned badges if this is a new case (not editing) and badges are enabled
         if !isEditing && badgesEnabled, let caseId = savedCaseId {

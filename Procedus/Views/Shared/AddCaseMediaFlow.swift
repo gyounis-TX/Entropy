@@ -29,6 +29,7 @@ struct AddCaseMediaFlow: View {
 
     @State private var flowState: MediaFlowState = .picker
     @State private var errorMessage: String?
+    @State private var showingError = false
     @State private var searchTerms: [String] = []
     @State private var isSharedWithFellowship = false
 
@@ -112,15 +113,14 @@ struct AddCaseMediaFlow: View {
                 )
             }
         }
-        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+        .alert("Error", isPresented: $showingError) {
             Button("OK") {
                 errorMessage = nil
+                showingError = false
                 flowState = .picker
             }
         } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
+            Text(errorMessage ?? "An unknown error occurred")
         }
     }
 
@@ -185,6 +185,7 @@ struct AddCaseMediaFlow: View {
         if result.textWasDetected {
             // For videos with PHI, we can't easily redact - show error
             errorMessage = "Video contains text that may include PHI. Please remove the text before uploading, or use an image instead."
+            showingError = true
             try? FileManager.default.removeItem(at: videoURL)
         } else {
             // No PHI detected, proceed to labels
@@ -197,6 +198,7 @@ struct AddCaseMediaFlow: View {
     private func saveImage(_ image: UIImage, wasRedacted: Bool) {
         guard let saveResult = MediaStorageService.shared.saveImage(image, forCaseId: caseId) else {
             errorMessage = "Failed to save image"
+            showingError = true
             return
         }
 
@@ -231,6 +233,7 @@ struct AddCaseMediaFlow: View {
             dismiss()
         } catch {
             errorMessage = "Failed to save media record: \(error.localizedDescription)"
+            showingError = true
         }
     }
 
@@ -240,6 +243,7 @@ struct AddCaseMediaFlow: View {
     private func saveVideo(_ videoURL: URL) async {
         guard let saveResult = await MediaStorageService.shared.saveVideo(from: videoURL, forCaseId: caseId) else {
             errorMessage = "Failed to save video"
+            showingError = true
             return
         }
 
@@ -277,6 +281,7 @@ struct AddCaseMediaFlow: View {
             dismiss()
         } catch {
             errorMessage = "Failed to save media record: \(error.localizedDescription)"
+            showingError = true
         }
     }
 }

@@ -48,6 +48,8 @@ struct SettingsView: View {
     @AppStorage("caseLoggingReminderEnabled") private var caseLoggingReminderEnabled = false
     @AppStorage("caseLoggingReminderHour") private var caseLoggingReminderHour = 17 // 5 PM default
     @AppStorage("allowCellularMediaUpload") private var allowCellularMediaUpload = false
+    @AppStorage("teachingFilesAlertsEnabled") private var teachingFilesAlertsEnabled = true
+    @AppStorage("attestationSummaryEnabled") private var attestationSummaryEnabled = false
     @State private var showingNotificationsSheet = false
 
     // Achievement settings
@@ -74,6 +76,10 @@ struct SettingsView: View {
 
     // Fellowship specialty picker
     @State private var showingFellowshipSpecialtyPicker = false
+
+    // Image library views
+    @State private var showingMyGallery = false
+    @State private var showingTeachingFiles = false
 
     private var unreadNotificationCount: Int {
         guard let userId = appState.currentUser?.id else { return 0 }
@@ -303,28 +309,16 @@ struct SettingsView: View {
                 showingAttendingsList = true
             }
 
-            // Facilities Row
+            // Facilities Row (consolidated - includes default selection)
             SettingsPillRow(
                 icon: "building.2.fill",
                 iconColor: Color(red: 0.2, green: 0.4, blue: 0.8),
                 title: "Facilities",
+                subtitle: defaultFacilityName != "Not Set" ? defaultFacilityName : nil,
                 badge: activeFacilitiesCount > 0 ? .count(activeFacilitiesCount) : nil,
                 showChevron: true
             ) {
                 showingFacilitiesList = true
-            }
-
-            // Default Facility Row (only show if there are facilities)
-            if activeFacilitiesCount > 0 {
-                SettingsPillRow(
-                    icon: "star.fill",
-                    iconColor: .yellow,
-                    title: "Default Facility",
-                    subtitle: defaultFacilityName,
-                    showChevron: true
-                ) {
-                    showingDefaultFacilityPicker = true
-                }
             }
 
             // PROCEDURES Section
@@ -373,6 +367,37 @@ struct SettingsView: View {
             ) {
                 showingCustomProcedureDetails = true
             }
+
+            // IMAGES Section
+            SectionHeader(title: "IMAGES")
+
+            // My Gallery Row
+            SettingsPillRow(
+                icon: "photo.on.rectangle.angled",
+                iconColor: .blue,
+                title: "My Gallery",
+                showChevron: true
+            ) {
+                showingMyGallery = true
+            }
+
+            // Teaching Files Row
+            SettingsPillRow(
+                icon: "person.2.fill",
+                iconColor: .purple,
+                title: "Teaching Files",
+                showChevron: true
+            ) {
+                showingTeachingFiles = true
+            }
+
+            // Cellular Upload Toggle
+            SettingsPillToggle(
+                icon: "antenna.radiowaves.left.and.right",
+                iconColor: .green,
+                title: "Upload on Cellular",
+                isOn: $allowCellularMediaUpload
+            )
 
             // IMPORT/EXPORT Section
             SectionHeader(title: "IMPORT/EXPORT")
@@ -570,8 +595,25 @@ struct SettingsView: View {
         .sheet(isPresented: $showingFacilitiesList) {
             FacilitiesListSheet()
         }
-        .sheet(isPresented: $showingDefaultFacilityPicker) {
-            DefaultFacilityPickerSheet(facilities: facilities.filter { !$0.isArchived })
+        .fullScreenCover(isPresented: $showingMyGallery) {
+            NavigationStack {
+                MyImageLibraryView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showingMyGallery = false }
+                        }
+                    }
+            }
+        }
+        .fullScreenCover(isPresented: $showingTeachingFiles) {
+            NavigationStack {
+                SharedImageLibraryView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showingTeachingFiles = false }
+                        }
+                    }
+            }
         }
         .sheet(isPresented: $showingCustomProcedures) {
             CustomProceduresListSheet()
@@ -1069,6 +1111,37 @@ struct SettingsView: View {
                     showingCustomProcedureDetails = true
                 }
 
+                // IMAGES Section
+                SectionHeader(title: "IMAGES")
+
+                // My Gallery Row
+                SettingsPillRow(
+                    icon: "photo.on.rectangle.angled",
+                    iconColor: .blue,
+                    title: "My Gallery",
+                    showChevron: true
+                ) {
+                    showingMyGallery = true
+                }
+
+                // Teaching Files Row
+                SettingsPillRow(
+                    icon: "person.2.fill",
+                    iconColor: .purple,
+                    title: "Teaching Files",
+                    showChevron: true
+                ) {
+                    showingTeachingFiles = true
+                }
+
+                // Cellular Upload Toggle
+                SettingsPillToggle(
+                    icon: "antenna.radiowaves.left.and.right",
+                    iconColor: .green,
+                    title: "Upload on Cellular",
+                    isOn: $allowCellularMediaUpload
+                )
+
                 // IMPORT/EXPORT Section
                 SectionHeader(title: "IMPORT/EXPORT")
 
@@ -1139,6 +1212,42 @@ struct SettingsView: View {
                         )
                     )
                     .padding(.leading, 20)
+
+                    // Daily case logging reminder
+                    SettingsPillToggle(
+                        icon: "calendar.badge.clock",
+                        iconColor: .blue,
+                        title: "Daily Log Reminder",
+                        isOn: $caseLoggingReminderEnabled
+                    )
+                    .padding(.leading, 20)
+                    .onChange(of: caseLoggingReminderEnabled) { _, enabled in
+                        if enabled {
+                            scheduleLoggingReminder()
+                        } else {
+                            cancelLoggingReminder()
+                        }
+                    }
+
+                    if caseLoggingReminderEnabled {
+                        CaseLoggingReminderTimePicker(selectedHour: $caseLoggingReminderHour)
+                            .padding(.leading, 20)
+                            .onChange(of: caseLoggingReminderHour) { _, _ in
+                                scheduleLoggingReminder()
+                            }
+                    }
+                }
+
+                // Migration Section (switch to individual mode for graduating fellows)
+                SectionHeader(title: "PROGRAM MIGRATION")
+
+                SettingsPillRow(
+                    icon: "arrow.triangle.branch",
+                    iconColor: .orange,
+                    title: "Switch to Individual Mode",
+                    showChevron: true
+                ) {
+                    showingInstitutionalToIndividualMigration = true
                 }
 
                 // About Row
@@ -1204,6 +1313,30 @@ struct SettingsView: View {
                     showingSecuritySettings = true
                 }
 
+                // IMAGES Section (for attending)
+                if appState.userRole == .attending {
+                    SectionHeader(title: "IMAGES")
+
+                    // Teaching Files
+                    SettingsPillRow(
+                        icon: "person.2.fill",
+                        iconColor: .purple,
+                        title: "Teaching Files",
+                        subtitle: "Shared media library",
+                        showChevron: true
+                    ) {
+                        showingTeachingFiles = true
+                    }
+
+                    // Cellular Upload Toggle
+                    SettingsPillToggle(
+                        icon: "antenna.radiowaves.left.and.right",
+                        iconColor: .orange,
+                        title: "Allow Cellular Upload",
+                        isOn: $allowCellularUpload
+                    )
+                }
+
                 // Push Notifications Section (for admin/attending)
                 SectionHeader(title: "NOTIFICATIONS")
 
@@ -1218,12 +1351,30 @@ struct SettingsView: View {
                 // Role-specific notification options
                 if pushNotificationsEnabled {
                     if appState.userRole == .attending {
-                        // Attending: Pending Attestation Requests (no rejected cases option)
+                        // Pending Attestation Requests
                         SettingsPillToggle(
                             icon: "paperplane.fill",
                             iconColor: .blue,
                             title: "Pending Attestations",
                             isOn: $attestationAlertsEnabled
+                        )
+                        .padding(.leading, 20)
+
+                        // New Teaching Files
+                        SettingsPillToggle(
+                            icon: "photo.on.rectangle.angled",
+                            iconColor: .purple,
+                            title: "New Teaching Files",
+                            isOn: $teachingFilesAlertsEnabled
+                        )
+                        .padding(.leading, 20)
+
+                        // Daily Attestation Summary
+                        SettingsPillToggle(
+                            icon: "chart.bar.doc.horizontal",
+                            iconColor: .teal,
+                            title: "Daily Summary",
+                            isOn: $attestationSummaryEnabled
                         )
                         .padding(.leading, 20)
                     } else if appState.userRole == .admin {
@@ -1255,20 +1406,6 @@ struct SettingsView: View {
                     showChevron: true
                 ) {
                     showingAbout = true
-                }
-
-                // Migration Section (for fellows only)
-                if appState.userRole == .fellow {
-                    SectionHeader(title: "PROGRAM MIGRATION")
-
-                    SettingsPillRow(
-                        icon: "arrow.triangle.branch",
-                        iconColor: .orange,
-                        title: "Switch to Individual Mode",
-                        showChevron: true
-                    ) {
-                        showingInstitutionalToIndividualMigration = true
-                    }
                 }
             }
 
@@ -1338,8 +1475,25 @@ struct SettingsView: View {
         .sheet(isPresented: $showingFacilitiesList) {
             FacilitiesListSheet()
         }
-        .sheet(isPresented: $showingDefaultFacilityPicker) {
-            DefaultFacilityPickerSheet(facilities: facilities)
+        .fullScreenCover(isPresented: $showingMyGallery) {
+            NavigationStack {
+                MyImageLibraryView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showingMyGallery = false }
+                        }
+                    }
+            }
+        }
+        .fullScreenCover(isPresented: $showingTeachingFiles) {
+            NavigationStack {
+                SharedImageLibraryView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showingTeachingFiles = false }
+                        }
+                    }
+            }
         }
         .sheet(isPresented: $showingCustomProcedures) {
             CustomProceduresListSheet()
@@ -2243,11 +2397,12 @@ struct AttendingsListSheet: View {
     }
 }
 
-// MARK: - Facilities List Sheet
+// MARK: - Facilities List Sheet (Consolidated with Default Selection)
 
 struct FacilitiesListSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }, sort: \TrainingFacility.name) private var facilities: [TrainingFacility]
 
     @State private var showingAddSheet = false
@@ -2256,28 +2411,70 @@ struct FacilitiesListSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(facilities) { facility in
-                    Button {
-                        facilityToEdit = facility
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(facility.name)
-                                    .foregroundColor(Color(UIColor.label))
-                                if let shortName = facility.shortName, !shortName.isEmpty {
-                                    Text(shortName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                // Default facility section
+                if !facilities.isEmpty {
+                    Section {
+                        ForEach(facilities) { facility in
+                            Button {
+                                appState.defaultFacilityId = facility.id
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(facility.name)
+                                            .foregroundColor(Color(UIColor.label))
+                                        if let shortName = facility.shortName, !shortName.isEmpty {
+                                            Text(shortName)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    if appState.defaultFacilityId == facility.id {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(ProcedusTheme.primary)
+                                    } else {
+                                        Image(systemName: "circle")
+                                            .foregroundColor(Color(UIColor.tertiaryLabel))
+                                    }
                                 }
                             }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(Color(UIColor.tertiaryLabel))
                         }
+                    } header: {
+                        Text("Default for New Cases")
+                    } footer: {
+                        Text("Tap to set default. This facility will be pre-selected when logging new cases.")
                     }
                 }
-                .onDelete(perform: deleteFacility)
+
+                // Manage facilities section
+                Section {
+                    ForEach(facilities) { facility in
+                        Button {
+                            facilityToEdit = facility
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(facility.name)
+                                        .foregroundColor(Color(UIColor.label))
+                                    if let shortName = facility.shortName, !shortName.isEmpty {
+                                        Text(shortName)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "pencil")
+                                    .font(.caption)
+                                    .foregroundColor(Color(UIColor.tertiaryLabel))
+                            }
+                        }
+                    }
+                    .onDelete(perform: deleteFacility)
+                } header: {
+                    Text("Manage Facilities")
+                } footer: {
+                    Text("Swipe left to delete. Tap to edit.")
+                }
             }
             .overlay {
                 if facilities.isEmpty {

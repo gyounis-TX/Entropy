@@ -807,11 +807,19 @@ struct AttendingAttestationDetailSheet: View {
     let evaluationsRequired: Bool
     let freeTextEnabled: Bool
 
+    @Query private var allCaseMedia: [CaseMedia]
+
     /// Evaluation responses keyed by field ID
     /// Values: "true"/"false" for checkboxes, "1"-"5" for ratings
     @State private var evaluationResponses: [UUID: String] = [:]
     @State private var evaluationComment = ""
     @State private var showingRejectSheet = false
+    @State private var selectedMedia: CaseMedia?
+
+    /// Media attached to this case
+    private var caseMediaItems: [CaseMedia] {
+        allCaseMedia.filter { $0.caseEntryId == caseEntry.id }
+    }
 
     /// Active (non-archived) evaluation fields, sorted by display order
     private var activeEvaluationFields: [EvaluationField] {
@@ -866,6 +874,12 @@ struct AttendingAttestationDetailSheet: View {
 
                     // Procedures List
                     proceduresSection
+
+                    // Media Section (if case has media)
+                    if !caseMediaItems.isEmpty {
+                        Divider()
+                        mediaSection
+                    }
 
                     // Evaluation Section (if enabled)
                     if evaluationsEnabled {
@@ -948,6 +962,29 @@ struct AttendingAttestationDetailSheet: View {
                         .font(.subheadline)
                 }
             }
+        }
+    }
+
+    // MARK: - Media Section
+
+    private var mediaSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Media (\(caseMediaItems.count))")
+                .font(.headline)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(caseMediaItems) { media in
+                        AttestationMediaThumbnail(media: media)
+                            .onTapGesture {
+                                selectedMedia = media
+                            }
+                    }
+                }
+            }
+        }
+        .sheet(item: $selectedMedia) { media in
+            AttestationMediaDetailView(media: media)
         }
     }
 
@@ -1471,6 +1508,97 @@ struct RejectAttestationSheet: View {
         dismiss()
         // Call completion handler to dismiss parent sheet too
         onRejectionComplete?()
+    }
+}
+
+// MARK: - Attestation Media Thumbnail
+
+struct AttestationMediaThumbnail: View {
+    let media: CaseMedia
+
+    private var thumbnailImage: UIImage? {
+        if let thumbnailPath = media.thumbnailPath {
+            return UIImage(contentsOfFile: thumbnailPath)
+        }
+        return UIImage(contentsOfFile: media.localPath)
+    }
+
+    var body: some View {
+        ZStack {
+            if let image = thumbnailImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 80, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(UIColor.tertiarySystemFill))
+                    .frame(width: 80, height: 80)
+                    .overlay {
+                        Image(systemName: media.mediaType == .video ? "video.fill" : "photo")
+                            .font(.title2)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                    }
+            }
+
+            // Video indicator
+            if media.mediaType == .video {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Image(systemName: "play.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .shadow(radius: 2)
+                            .padding(4)
+                    }
+                }
+            }
+        }
+        .frame(width: 80, height: 80)
+    }
+}
+
+// MARK: - Attestation Media Detail View
+
+struct AttestationMediaDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let media: CaseMedia
+
+    private var fullImage: UIImage? {
+        UIImage(contentsOfFile: media.localPath)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if let image = fullImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    VStack(spacing: 16) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        Text("Unable to load media")
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .foregroundColor(.white)
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+        }
     }
 }
 

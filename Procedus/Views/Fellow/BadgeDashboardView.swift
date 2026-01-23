@@ -117,7 +117,22 @@ struct BadgeDashboardView: View {
 
     private var summaryCard: some View {
         VStack(spacing: 16) {
+            // Info button in upper right
+            HStack {
+                Spacer()
+                Button {
+                    showingTierLegend = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.body)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                }
+            }
+
+            // Centered stats
             HStack(spacing: 32) {
+                Spacer()
+
                 VStack {
                     Text("\(myEarnedBadges.count)")
                         .font(.system(size: 36, weight: .bold))
@@ -138,24 +153,18 @@ struct BadgeDashboardView: View {
                         .font(.caption)
                         .foregroundStyle(ProcedusTheme.textSecondary)
                 }
+
+                Spacer()
             }
 
-            // Tier distribution with info button
+            // Tier distribution - centered
             HStack(spacing: 8) {
+                Spacer()
                 ForEach(BadgeTier.allCases) { tier in
                     let count = badgesForTier(tier).count
                     TierBadgeCount(tier: tier, count: count)
                 }
-
                 Spacer()
-
-                Button {
-                    showingTierLegend = true
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.body)
-                        .foregroundStyle(ProcedusTheme.textSecondary)
-                }
             }
         }
         .padding()
