@@ -1333,7 +1333,7 @@ struct SettingsView: View {
                         icon: "antenna.radiowaves.left.and.right",
                         iconColor: .orange,
                         title: "Allow Cellular Upload",
-                        isOn: $allowCellularUpload
+                        isOn: $allowCellularMediaUpload
                     )
                 }
 

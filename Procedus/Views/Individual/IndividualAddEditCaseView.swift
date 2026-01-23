@@ -64,6 +64,9 @@ struct IndividualAddEditCaseView: View {
     @State private var earnedBadges: [Badge] = []
     @State private var showingBadgeCelebration = false
 
+    // PHI detection state
+    @State private var notesPHIWarning: String?
+
     // Collapsible state - default ALL to COLLAPSED (closed)
     // We track what's EXPANDED (empty = all closed by default)
     @State private var expandedPackIds: Set<String> = []
@@ -1339,6 +1342,15 @@ struct IndividualAddEditCaseView: View {
                     .scrollContentBackground(.hidden)
                     .background(Color(UIColor.tertiarySystemGroupedBackground))
                     .cornerRadius(8)
+                    .onChange(of: caseNotes) { _, newValue in
+                        let result = PHITextValidator.shared.validate(newValue)
+                        notesPHIWarning = result.warningMessage
+                    }
+
+                // PHI Warning Banner
+                if let warning = notesPHIWarning {
+                    PHIWarningBanner(message: warning)
+                }
             }
         } header: {
             Text("Notes (Optional)")

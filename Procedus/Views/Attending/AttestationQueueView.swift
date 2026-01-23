@@ -815,6 +815,7 @@ struct AttendingAttestationDetailSheet: View {
     @State private var evaluationComment = ""
     @State private var showingRejectSheet = false
     @State private var selectedMedia: CaseMedia?
+    @State private var commentPHIWarning: String?
 
     /// Media attached to this case
     private var caseMediaItems: [CaseMedia] {
@@ -1220,6 +1221,15 @@ extension AttendingAttestationDetailSheet {
                 .padding(8)
                 .background(Color(UIColor.tertiarySystemFill))
                 .cornerRadius(8)
+                .onChange(of: evaluationComment) { _, newValue in
+                    let result = PHITextValidator.shared.validate(newValue)
+                    commentPHIWarning = result.warningMessage
+                }
+
+            // PHI Warning Banner
+            if let warning = commentPHIWarning {
+                PHIWarningBanner(message: warning)
+            }
         }
     }
 

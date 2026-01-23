@@ -176,6 +176,9 @@ struct AddEditCaseView: View {
     // Badge celebration state
     @State private var earnedBadges: [Badge] = []
     @State private var showingBadgeCelebration = false
+
+    // PHI detection state
+    @State private var notesPHIWarning: String?
     
     // Current fellow identity (from appState - more reliable than @AppStorage)
     private var currentFellowId: UUID? {
@@ -1536,6 +1539,15 @@ struct AddEditCaseView: View {
                     .scrollContentBackground(.hidden)
                     .background(Color(UIColor.tertiarySystemGroupedBackground))
                     .cornerRadius(8)
+                    .onChange(of: caseNotes) { _, newValue in
+                        let result = PHITextValidator.shared.validate(newValue)
+                        notesPHIWarning = result.warningMessage
+                    }
+
+                // PHI Warning Banner
+                if let warning = notesPHIWarning {
+                    PHIWarningBanner(message: warning)
+                }
             }
         } header: {
             Text("Notes (Optional)")
