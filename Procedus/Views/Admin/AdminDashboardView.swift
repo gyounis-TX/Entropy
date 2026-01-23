@@ -660,19 +660,35 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Create 20 sample cases (10 invasive + 10 noninvasive)
+        // Delete existing sample cases first
+        let existingCases = allCases.filter { $0.programId == program.id }
+        for existingCase in existingCases {
+            modelContext.delete(existingCase)
+        }
+
+        // Delete existing badges earned
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>()
+        if let existingBadges = try? modelContext.fetch(badgesDescriptor) {
+            for badge in existingBadges {
+                modelContext.delete(badge)
+            }
+        }
+
+        // Create 30 sample cases (10 interventional + 10 imaging + 10 EP)
         let calendar = Calendar.current
         let icPack = SpecialtyPackCatalog.pack(for: "interventional-cardiology")
         let invasiveProcedures = icPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
         let ciPack = SpecialtyPackCatalog.pack(for: "cardiac-imaging")
         let noninvasiveProcedures = ciPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
+        let epPack = SpecialtyPackCatalog.pack(for: "electrophysiology")
+        let epProcedures = epPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
 
         // Access sites for IC procedures
         let icAccessSites: [AccessSite] = [.femoral, .radial, .brachial, .pedal]
         let operatorPositions: [OperatorPosition] = [.primary, .secondary]
 
-        // Sample case notes
-        let sampleNotes = [
+        // Sample interventional case notes
+        let interventionalNotes = [
             "Successful PCI to mid-LAD with DES. Patient tolerated well. No complications.",
             "Diagnostic cath showed severe 3VD. Referred to CT surgery for CABG evaluation.",
             "Right heart cath for pulmonary HTN workup. Mean PA pressure 38mmHg.",
@@ -681,11 +697,12 @@ struct AdminDashboardView: View {
             "Chronic total occlusion attempt. Achieved antegrade crossing after 90 mins.",
             "Impella-supported high-risk PCI in patient with EF 20%. No hemodynamic issues.",
             "STEMI activation - door to balloon 45 minutes. Culprit LAD, good flow restored.",
-            "Structural case - TAVR workup. Anatomy suitable for transfemoral approach.",
-            "EP study for syncope workup. No inducible arrhythmias. Plan for ILR."
+            "TAVR for severe AS. Successful valve deployment with minimal paravalvular leak.",
+            "Rotational atherectomy for heavily calcified LAD. Good debulking achieved."
         ]
 
-        let noninvasiveNotes = [
+        // Sample imaging case notes
+        let imagingNotes = [
             "TTE showing preserved EF at 60%. No significant valvular disease.",
             "Stress echo with borderline ischemia in inferior wall. Correlation needed.",
             "TEE for afib cardioversion. No LAA thrombus identified. Cleared for DCCV.",
@@ -695,115 +712,190 @@ struct AdminDashboardView: View {
             "AAA surveillance - stable at 4.2cm. Continue annual monitoring.",
             "Bubble study positive. PFO identified. Consider closure if cryptogenic stroke.",
             "Dobutamine stress echo - no inducible ischemia at peak dose.",
-            "Right heart catheterization and TTE correlation for MR quantification."
+            "Strain imaging showing GLS of -18%. Normal LV function."
         ]
 
-        if !createdFellowIds.isEmpty && !createdAttendingIds.isEmpty && !createdFacilityIds.isEmpty && !invasiveProcedures.isEmpty {
-            // Spread cases over 3 years (156 weeks) for realistic analytics data
-            let threeYearsInWeeks = 156
+        // Sample EP case notes
+        let epNotes = [
+            "EP study for syncope workup. No inducible arrhythmias. Plan for ILR.",
+            "Successful SVT ablation. Slow pathway ablation for AVNRT. No recurrence.",
+            "Atrial flutter ablation with bidirectional block achieved. CTI ablated.",
+            "VT ablation in patient with ischemic cardiomyopathy. Good substrate mapping.",
+            "ICD implant for primary prevention. EF 30%, ischemic CM. No complications.",
+            "CRT-D upgrade for worsening heart failure. Successful CS lead placement.",
+            "Pacemaker generator change. Lead impedances stable. Programming optimized.",
+            "Cryoballoon PVI for paroxysmal AFib. All four veins isolated successfully.",
+            "AVNRT ablation with slow pathway modification. No AV block noted.",
+            "Leadless pacemaker implant. Micra placed in RV septum. Good parameters."
+        ]
 
-            // Create 10 invasive cases
-            for i in 0..<10 {
-                let weeksAgo = Int.random(in: 0...threeYearsInWeeks)
-                let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
-                let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+        if !createdFellowIds.isEmpty && !createdAttendingIds.isEmpty && !createdFacilityIds.isEmpty {
+            // Recent weeks for pending attestation
+            let recentWeeks = 4
 
-                let randomFellowId = createdFellowIds.randomElement()!
-                let newCase = CaseEntry(
-                    fellowId: randomFellowId,
-                    ownerId: randomFellowId,
-                    attendingId: createdAttendingIds.randomElement(),
-                    weekBucket: weekBucket,
-                    facilityId: createdFacilityIds.randomElement()
-                )
-                newCase.programId = program.id
-
-                // Ensure first case has TAVR for badge testing, others random
-                if i == 0 {
-                    newCase.procedureTagIds = ["ic-struct-tavr"]
-                    newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
-                } else if i == 1 {
-                    // Second case: PCI for badge testing
-                    newCase.procedureTagIds = ["ic-pci-stent"]
-                    newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
-                } else {
-                    let numProcedures = Int.random(in: 1...3)
-                    newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
-                }
-                newCase.createdAt = caseDate
-                newCase.caseTypeRaw = CaseType.invasive.rawValue
-
-                let numAccessSites = Int.random(in: 1...2)
-                newCase.accessSiteIds = Array(icAccessSites.shuffled().prefix(numAccessSites)).map { $0.rawValue }
-                // Only set random operator position for cases after the first two (which are set above)
-                if i > 1 {
-                    newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
-                }
-                newCase.notes = sampleNotes[i]
-
-                // Make some cases attested (older cases, ~60%), some pending (recent cases, ~40%)
-                // First 2 cases are always attested for badge testing
-                let isAttested = i < 2 || (weeksAgo > 4 && Int.random(in: 0...100) < 60)
-                if isAttested {
-                    newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
-                    newCase.attestedAt = caseDate.addingTimeInterval(Double.random(in: 3600...86400)) // 1-24 hours later
-                    newCase.attestorId = createdAttendingIds.randomElement()
-                } else {
-                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
-                }
-
-                modelContext.insert(newCase)
-
-                // Create attestation notification for attending (only for pending cases)
-                if let attendingId = newCase.attendingId, !isAttested {
-                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
-                    let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
-                        SpecialtyPackCatalog.findProcedure(by: tagId)?.title
-                    }
-                    let procedureList = procedureTitles.prefix(3).joined(separator: ", ")
-                    let suffix = procedureTitles.count > 3 ? " + \(procedureTitles.count - 3) more" : ""
-                    let message = procedureTitles.isEmpty ?
-                        "\(fellowName) submitted a case of \(newCase.procedureTagIds.count) procedure(s) for your attestation." :
-                        "\(fellowName) submitted a case of \(procedureList)\(suffix) for your attestation."
-
-                    let notification = Procedus.Notification(
-                        userId: attendingId,
-                        title: "New Case for Attestation",
-                        message: message,
-                        notificationType: NotificationType.attestationRequested.rawValue,
-                        caseId: newCase.id,
-                        attendingId: attendingId
-                    )
-                    notification.createdAt = caseDate  // Match the case creation date
-                    modelContext.insert(notification)
-                }
-            }
-
-            // Create 10 noninvasive cases (1 procedure per case as per imaging logging convention)
-            if !noninvasiveProcedures.isEmpty {
+            // =====================================
+            // Create 10 Interventional Cardiology cases - ALL pending attestation
+            // =====================================
+            if !invasiveProcedures.isEmpty {
                 for i in 0..<10 {
-                    let weeksAgo = Int.random(in: 0...threeYearsInWeeks)
+                    let weeksAgo = Int.random(in: 0...recentWeeks)
                     let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
                     let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
 
                     let randomFellowId = createdFellowIds.randomElement()!
+                    let attendingId = createdAttendingIds.randomElement()!
                     let newCase = CaseEntry(
                         fellowId: randomFellowId,
                         ownerId: randomFellowId,
-                        attendingId: nil,
+                        attendingId: attendingId,
                         weekBucket: weekBucket,
                         facilityId: createdFacilityIds.randomElement()
                     )
                     newCase.programId = program.id
 
-                    // Noninvasive cases have exactly 1 procedure per case (imaging study)
-                    newCase.procedureTagIds = [noninvasiveProcedures.randomElement()!]
+                    // Specific procedures for badge earning
+                    switch i {
+                    case 0: newCase.procedureTagIds = ["ic-struct-tavr"]  // TAVR badge
+                    case 1: newCase.procedureTagIds = ["ic-pci-stent"]    // PCI badge
+                    case 2: newCase.procedureTagIds = ["ic-diag-lhc", "ic-diag-coronary"]  // Diagnostic cath
+                    case 3: newCase.procedureTagIds = ["ic-pci-balloon", "ic-pci-stent"]   // Complex PCI
+                    case 4: newCase.procedureTagIds = ["ic-struct-mitraclip"]             // Structural
+                    case 5: newCase.procedureTagIds = ["ic-diag-rhc"]                     // RHC
+                    case 6: newCase.procedureTagIds = ["ic-periph-peripheral"]            // Peripheral
+                    case 7: newCase.procedureTagIds = ["ic-pci-cto"]                      // CTO
+                    case 8: newCase.procedureTagIds = ["ic-pci-rotablator"]               // Atherectomy
+                    default:
+                        let numProcedures = Int.random(in: 1...3)
+                        newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
+                    }
+
                     newCase.createdAt = caseDate
-                    newCase.caseTypeRaw = CaseType.noninvasive.rawValue
-                    newCase.attestationStatusRaw = AttestationStatus.notRequired.rawValue
-                    newCase.notes = noninvasiveNotes[i]
+                    newCase.caseTypeRaw = CaseType.invasive.rawValue
+                    newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
+
+                    let numAccessSites = Int.random(in: 1...2)
+                    newCase.accessSiteIds = Array(icAccessSites.shuffled().prefix(numAccessSites)).map { $0.rawValue }
+                    newCase.notes = interventionalNotes[i]
+
+                    // ALL pending for attestation
+                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
 
                     modelContext.insert(newCase)
+
+                    // Create attestation notification
+                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
+                    let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
+                        SpecialtyPackCatalog.findProcedure(by: tagId)?.title
+                    }
+                    let procedureList = procedureTitles.prefix(3).joined(separator: ", ")
+
+                    let notification = Procedus.Notification(
+                        userId: attendingId,
+                        title: "New Case for Attestation",
+                        message: "\(fellowName) submitted: \(procedureList)",
+                        notificationType: NotificationType.attestationRequested.rawValue,
+                        caseId: newCase.id,
+                        attendingId: attendingId
+                    )
+                    notification.createdAt = caseDate
+                    modelContext.insert(notification)
+                }
+            }
+
+            // =====================================
+            // Create 10 Imaging cases - ALL pending attestation
+            // =====================================
+            if !noninvasiveProcedures.isEmpty {
+                for i in 0..<10 {
+                    let weeksAgo = Int.random(in: 0...recentWeeks)
+                    let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+                    let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+
+                    let randomFellowId = createdFellowIds.randomElement()!
+                    let attendingId = createdAttendingIds.randomElement()!
+                    let newCase = CaseEntry(
+                        fellowId: randomFellowId,
+                        ownerId: randomFellowId,
+                        attendingId: attendingId,
+                        weekBucket: weekBucket,
+                        facilityId: createdFacilityIds.randomElement()
+                    )
+                    newCase.programId = program.id
+
+                    // One imaging procedure per case
+                    newCase.procedureTagIds = [noninvasiveProcedures[i % noninvasiveProcedures.count]]
+                    newCase.createdAt = caseDate
+                    newCase.caseTypeRaw = CaseType.noninvasive.rawValue
+                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+                    newCase.notes = imagingNotes[i]
+
+                    modelContext.insert(newCase)
+
+                    // Create attestation notification
+                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
+                    let procedureTitle = SpecialtyPackCatalog.findProcedure(by: newCase.procedureTagIds.first!)?.title ?? "Imaging Study"
+
+                    let notification = Procedus.Notification(
+                        userId: attendingId,
+                        title: "New Case for Attestation",
+                        message: "\(fellowName) submitted: \(procedureTitle)",
+                        notificationType: NotificationType.attestationRequested.rawValue,
+                        caseId: newCase.id,
+                        attendingId: attendingId
+                    )
+                    notification.createdAt = caseDate
+                    modelContext.insert(notification)
+                }
+            }
+
+            // =====================================
+            // Create 10 EP cases - ALL pending attestation
+            // =====================================
+            if !epProcedures.isEmpty {
+                for i in 0..<10 {
+                    let weeksAgo = Int.random(in: 0...recentWeeks)
+                    let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+                    let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+
+                    let randomFellowId = createdFellowIds.randomElement()!
+                    let attendingId = createdAttendingIds.randomElement()!
+                    let newCase = CaseEntry(
+                        fellowId: randomFellowId,
+                        ownerId: randomFellowId,
+                        attendingId: attendingId,
+                        weekBucket: weekBucket,
+                        facilityId: createdFacilityIds.randomElement()
+                    )
+                    newCase.programId = program.id
+
+                    // EP procedures - one or two per case
+                    let numProcedures = Int.random(in: 1...2)
+                    newCase.procedureTagIds = Array(epProcedures.shuffled().prefix(numProcedures))
+                    newCase.createdAt = caseDate
+                    newCase.caseTypeRaw = CaseType.invasive.rawValue
+                    newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
+                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+                    newCase.notes = epNotes[i]
+
+                    modelContext.insert(newCase)
+
+                    // Create attestation notification
+                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
+                    let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
+                        SpecialtyPackCatalog.findProcedure(by: tagId)?.title
+                    }
+                    let procedureList = procedureTitles.prefix(2).joined(separator: ", ")
+
+                    let notification = Procedus.Notification(
+                        userId: attendingId,
+                        title: "New Case for Attestation",
+                        message: "\(fellowName) submitted: \(procedureList)",
+                        notificationType: NotificationType.attestationRequested.rawValue,
+                        caseId: newCase.id,
+                        attendingId: attendingId
+                    )
+                    notification.createdAt = caseDate
+                    modelContext.insert(notification)
                 }
             }
         }
