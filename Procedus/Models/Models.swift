@@ -27,6 +27,8 @@ final class Program {
     var requireAttestationForMigratedCases: Bool
     var trainingProgramLength: Int
     var fellowshipSpecialtyRaw: String?
+    var allowSimpleDutyHours: Bool  // When false, fellows must use comprehensive shift tracking
+    var earliestPGYLevel: Int  // Earliest PGY year for fellows (default 4, range 1-10)
     var createdAt: Date
     var updatedAt: Date
 
@@ -59,6 +61,8 @@ final class Program {
         self.requireAttestationForMigratedCases = false
         self.trainingProgramLength = 3  // Default 3-year fellowship
         self.fellowshipSpecialtyRaw = nil
+        self.allowSimpleDutyHours = true  // Allow simple mode by default
+        self.earliestPGYLevel = 4  // Default PGY4 (most fellowships start after 3-year residency)
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -953,6 +957,7 @@ final class CaseMedia {
     var searchTerms: [String]                // User-defined labels
     var isSharedWithFellowship: Bool         // If true, visible in Teaching Files
     var caseDate: Date?
+    var comment: String?                     // User comment on the media
 
     // PHI Detection
     var textDetectionRan: Bool
@@ -1003,6 +1008,7 @@ final class CaseMedia {
         self.searchTerms = []
         self.isSharedWithFellowship = false
         self.caseDate = nil
+        self.comment = nil
         self.textDetectionRan = false
         self.textWasDetected = false
         self.detectedTextRegions = nil
@@ -1040,5 +1046,268 @@ final class SearchTermSuggestion {
     func recordUsage() {
         usageCount += 1
         lastUsedAt = Date()
+    }
+}
+
+// MARK: - Duty Hours Entry
+
+@Model
+final class DutyHoursEntry {
+    @Attribute(.unique) var id: UUID
+    var userId: UUID                         // Fellow's user ID or ownerId
+    var programId: UUID?                     // For institutional mode
+    var weekBucket: String                   // e.g., "2024-W03"
+    var hours: Double                        // Hours worked that week
+    var notes: String?                       // Optional notes
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        userId: UUID,
+        programId: UUID? = nil,
+        weekBucket: String,
+        hours: Double,
+        notes: String? = nil
+    ) {
+        self.id = UUID()
+        self.userId = userId
+        self.programId = programId
+        self.weekBucket = weekBucket
+        self.hours = hours
+        self.notes = notes
+        self.createdAt = Date()
+        self.updatedAt = Date()
+    }
+
+    /// Week bucket display label (e.g., "Jan 1–7, 2024")
+    var weekLabel: String {
+        weekBucket.toWeekTimeframeLabel()
+    }
+}
+
+// MARK: - Duty Hours Shift (Comprehensive Tracking)
+
+@Model
+final class DutyHoursShift {
+    @Attribute(.unique) var id: UUID
+    var userId: UUID                         // Fellow's user ID
+    var programId: UUID?                     // For institutional mode
+    var weekBucket: String                   // Links to existing system e.g., "2024-W03"
+
+    // Shift timing
+    var shiftDate: Date                      // Date of the shift
+    var startTime: Date                      // Shift start time
+    var endTime: Date?                       // Shift end time (nil if still active)
+
+    // Shift details
+    var shiftTypeRaw: String                 // DutyHoursShiftType raw value
+    var locationRaw: String                  // DutyHoursShiftLocation raw value
+    var isActiveShift: Bool                  // True if currently clocked in
+
+    // Break tracking
+    var breakMinutes: Int                    // Total break time in minutes
+    var breakPeriodsJSON: String?            // JSON array of break periods
+
+    // Calculated hours
+    var totalHours: Double                   // Total hours including breaks
+    var effectiveHours: Double               // Hours minus breaks
+
+    // At-home call tracking
+    var wasCalledIn: Bool                    // For at-home call, was trainee called in?
+    var calledInAt: Date?                    // Time called in (if applicable)
+
+    // Notes
+    var notes: String?
+
+    // Timestamps
+    var createdAt: Date
+    var updatedAt: Date
+
+    // MARK: - Computed Properties
+
+    @Transient var shiftType: DutyHoursShiftType {
+        get { DutyHoursShiftType(rawValue: shiftTypeRaw) ?? .regular }
+        set { shiftTypeRaw = newValue.rawValue }
+    }
+
+    @Transient var location: DutyHoursShiftLocation {
+        get { DutyHoursShiftLocation(rawValue: locationRaw) ?? .inHouse }
+        set { locationRaw = newValue.rawValue }
+    }
+
+    /// Duration of shift in hours (live calculation if still active)
+    @Transient var durationHours: Double {
+        let end = endTime ?? Date()
+        let duration = end.timeIntervalSince(startTime)
+        return max(0, duration / 3600.0)
+    }
+
+    /// Duration minus breaks
+    @Transient var effectiveDurationHours: Double {
+        max(0, durationHours - (Double(breakMinutes) / 60.0))
+    }
+
+    init(
+        userId: UUID,
+        programId: UUID? = nil,
+        shiftDate: Date,
+        startTime: Date,
+        shiftType: DutyHoursShiftType = .regular,
+        location: DutyHoursShiftLocation = .inHouse
+    ) {
+        self.id = UUID()
+        self.userId = userId
+        self.programId = programId
+        self.weekBucket = shiftDate.toWeekBucket()
+        self.shiftDate = shiftDate
+        self.startTime = startTime
+        self.endTime = nil
+        self.shiftTypeRaw = shiftType.rawValue
+        self.locationRaw = location.rawValue
+        self.isActiveShift = true
+        self.breakMinutes = 0
+        self.breakPeriodsJSON = nil
+        self.totalHours = 0
+        self.effectiveHours = 0
+        self.wasCalledIn = false
+        self.calledInAt = nil
+        self.notes = nil
+        self.createdAt = Date()
+        self.updatedAt = Date()
+    }
+
+    /// Clock out and calculate final hours
+    func clockOut(at time: Date = Date()) {
+        self.endTime = time
+        self.isActiveShift = false
+        self.totalHours = durationHours
+        self.effectiveHours = effectiveDurationHours
+        self.updatedAt = Date()
+    }
+
+    /// Add break time
+    func addBreak(minutes: Int) {
+        self.breakMinutes += minutes
+        self.updatedAt = Date()
+    }
+}
+
+// MARK: - Duty Hours Violation
+
+@Model
+final class DutyHoursViolation {
+    @Attribute(.unique) var id: UUID
+    var userId: UUID                         // Fellow who has the violation
+    var programId: UUID?                     // For institutional mode
+    var weekBucket: String                   // Week when violation occurred
+
+    // Violation details
+    var violationTypeRaw: String             // DutyHoursViolationType raw value
+    var severityRaw: String                  // ViolationSeverity raw value
+    var actualValue: Double                  // Actual value that violated limit
+    var limitValue: Double                   // The ACGME limit that was exceeded
+
+    // Period of violation
+    var periodStart: Date                    // Start of violation period
+    var periodEnd: Date                      // End of violation period
+
+    // Resolution
+    var isResolved: Bool
+    var resolvedAt: Date?
+    var resolutionNotes: String?
+    var resolvedByUserId: UUID?              // Admin who resolved it
+
+    // Timestamps
+    var detectedAt: Date
+    var createdAt: Date
+    var updatedAt: Date
+
+    // MARK: - Computed Properties
+
+    @Transient var violationType: DutyHoursViolationType {
+        get { DutyHoursViolationType(rawValue: violationTypeRaw) ?? .weeklyHoursExceeded }
+        set { violationTypeRaw = newValue.rawValue }
+    }
+
+    @Transient var severity: ViolationSeverity {
+        get { ViolationSeverity(rawValue: severityRaw) ?? .minor }
+        set { severityRaw = newValue.rawValue }
+    }
+
+    init(
+        userId: UUID,
+        programId: UUID? = nil,
+        weekBucket: String,
+        violationType: DutyHoursViolationType,
+        severity: ViolationSeverity,
+        actualValue: Double,
+        limitValue: Double,
+        periodStart: Date,
+        periodEnd: Date
+    ) {
+        self.id = UUID()
+        self.userId = userId
+        self.programId = programId
+        self.weekBucket = weekBucket
+        self.violationTypeRaw = violationType.rawValue
+        self.severityRaw = severity.rawValue
+        self.actualValue = actualValue
+        self.limitValue = limitValue
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
+        self.isResolved = false
+        self.resolvedAt = nil
+        self.resolutionNotes = nil
+        self.resolvedByUserId = nil
+        self.detectedAt = Date()
+        self.createdAt = Date()
+        self.updatedAt = Date()
+    }
+
+    /// Mark violation as resolved
+    func resolve(by adminId: UUID, notes: String?) {
+        self.isResolved = true
+        self.resolvedAt = Date()
+        self.resolvedByUserId = adminId
+        self.resolutionNotes = notes
+        self.updatedAt = Date()
+    }
+}
+
+// MARK: - Media Comment (Comments on Teaching Files)
+
+@Model
+final class MediaComment {
+    @Attribute(.unique) var id: UUID
+    var mediaId: UUID                        // FK to CaseMedia
+    var authorId: UUID                       // User who wrote the comment
+    var authorName: String                   // Display name
+    var authorRoleRaw: String                // "fellow" or "attending"
+    var text: String
+    var createdAt: Date
+    var updatedAt: Date
+    var isDeleted: Bool
+
+    @Transient var authorRole: UserRole? {
+        get { UserRole(rawValue: authorRoleRaw) }
+        set { authorRoleRaw = newValue?.rawValue ?? "fellow" }
+    }
+
+    init(
+        mediaId: UUID,
+        authorId: UUID,
+        authorName: String,
+        authorRole: UserRole,
+        text: String
+    ) {
+        self.id = UUID()
+        self.mediaId = mediaId
+        self.authorId = authorId
+        self.authorName = authorName
+        self.authorRoleRaw = authorRole.rawValue
+        self.text = text
+        self.createdAt = Date()
+        self.updatedAt = Date()
+        self.isDeleted = false
     }
 }

@@ -13,12 +13,14 @@ struct DetectedTextRegion: Codable, Identifiable {
     let text: String
     let boundingBox: CGRect  // Normalized coordinates (0-1)
     let confidence: Float
+    let isHandwritten: Bool
 
-    init(text: String, boundingBox: CGRect, confidence: Float) {
+    init(text: String, boundingBox: CGRect, confidence: Float, isHandwritten: Bool = false) {
         self.id = UUID()
         self.text = text
         self.boundingBox = boundingBox
         self.confidence = confidence
+        self.isHandwritten = isHandwritten
     }
 
     /// Convert Vision coordinates (origin bottom-left) to UIKit coordinates (origin top-left)
@@ -30,6 +32,15 @@ struct DetectedTextRegion: Codable, Identifiable {
             height: boundingBox.height * imageSize.height
         )
     }
+
+    /// Check if text is in the top-right corner (PHI label region for diagrams)
+    /// Vision uses bottom-left origin, so top-right in UIKit means high Y value (top in Vision coords)
+    var isInTopRightCorner: Bool {
+        // Top 30% of image and right 40% of image (in Vision coordinates, y is from bottom)
+        let topThreshold: CGFloat = 0.7  // Vision y=0.7 means top 30% of image
+        let rightThreshold: CGFloat = 0.6  // Vision x=0.6 means right 40% of image
+        return boundingBox.origin.y >= topThreshold && boundingBox.origin.x >= rightThreshold
+    }
 }
 
 /// Result of text detection scan
@@ -37,6 +48,7 @@ struct TextDetectionResult {
     let textWasDetected: Bool
     let regions: [DetectedTextRegion]
     let averageConfidence: Double
+    let isHandDrawnDiagram: Bool
 
     var regionsJson: String? {
         guard !regions.isEmpty else { return nil }
@@ -45,7 +57,7 @@ struct TextDetectionResult {
         return String(data: data, encoding: .utf8)
     }
 
-    static let noTextDetected = TextDetectionResult(textWasDetected: false, regions: [], averageConfidence: 0)
+    static let noTextDetected = TextDetectionResult(textWasDetected: false, regions: [], averageConfidence: 0, isHandDrawnDiagram: false)
 }
 
 @MainActor
@@ -115,9 +127,11 @@ final class TextDetectionService {
     // MARK: - Text Detection for Images
 
     /// Detect text in an image
-    /// - Parameter image: The image to scan
+    /// - Parameters:
+    ///   - image: The image to scan
+    ///   - isHandDrawnDiagram: If true, only flag text in top-right corner (patient label area)
     /// - Returns: TextDetectionResult with detected regions (excluding allowlisted terms)
-    func detectText(in image: UIImage) async -> TextDetectionResult {
+    func detectText(in image: UIImage, isHandDrawnDiagram: Bool = false) async -> TextDetectionResult {
         guard let cgImage = image.cgImage else {
             return .noTextDetected
         }
@@ -130,13 +144,14 @@ final class TextDetectionService {
                     return
                 }
 
-                let regions = self.processObservations(observations)
+                let (regions, detectedAsDiagram) = self.processObservations(observations, isHandDrawnDiagram: isHandDrawnDiagram)
                 let avgConfidence = regions.isEmpty ? 0 : Double(regions.map { $0.confidence }.reduce(0, +)) / Double(regions.count)
 
                 continuation.resume(returning: TextDetectionResult(
                     textWasDetected: !regions.isEmpty,
                     regions: regions,
-                    averageConfidence: avgConfidence
+                    averageConfidence: avgConfidence,
+                    isHandDrawnDiagram: detectedAsDiagram
                 ))
             }
 
@@ -153,8 +168,14 @@ final class TextDetectionService {
     }
 
     /// Process Vision observations and filter out allowlisted text
-    private func processObservations(_ observations: [VNRecognizedTextObservation]) -> [DetectedTextRegion] {
-        var regions: [DetectedTextRegion] = []
+    /// - Parameters:
+    ///   - observations: Vision text observations
+    ///   - isHandDrawnDiagram: If true, only include text in top-right corner
+    /// - Returns: Tuple of (filtered regions, whether image appears to be a hand-drawn diagram)
+    private func processObservations(_ observations: [VNRecognizedTextObservation], isHandDrawnDiagram: Bool) -> ([DetectedTextRegion], Bool) {
+        var allRegions: [DetectedTextRegion] = []
+        var handwrittenCount = 0
+        var printedCount = 0
 
         for observation in observations {
             guard let candidate = observation.topCandidates(1).first else { continue }
@@ -164,17 +185,84 @@ final class TextDetectionService {
             // Skip empty or very short text
             guard text.count >= 2 else { continue }
 
+            // Detect if text appears to be handwritten based on confidence and characteristics
+            // Handwriting typically has lower confidence (< 0.7) and more variable spacing
+            let isHandwritten = isLikelyHandwritten(text: text, confidence: candidate.confidence)
+
+            if isHandwritten {
+                handwrittenCount += 1
+            } else {
+                printedCount += 1
+            }
+
             // Check if text is allowlisted
             if isAllowlisted(text) { continue }
 
-            regions.append(DetectedTextRegion(
+            allRegions.append(DetectedTextRegion(
                 text: text,
                 boundingBox: observation.boundingBox,
-                confidence: candidate.confidence
+                confidence: candidate.confidence,
+                isHandwritten: isHandwritten
             ))
         }
 
-        return regions
+        // Determine if image is a hand-drawn diagram
+        // Heuristic: majority of text is handwritten, or user explicitly indicated
+        let appearsToBeHandDrawn = isHandDrawnDiagram || (handwrittenCount > printedCount && handwrittenCount >= 3)
+
+        // Filter regions based on diagram detection
+        let filteredRegions: [DetectedTextRegion]
+        if appearsToBeHandDrawn {
+            // For hand-drawn diagrams, only flag text in the top-right corner (patient label area)
+            // Handwritten text elsewhere (annotations, labels on diagram) should be excluded
+            filteredRegions = allRegions.filter { region in
+                // Always flag printed text (could be patient stickers/labels)
+                if !region.isHandwritten {
+                    return true
+                }
+                // For handwritten text, only flag if it's in the top-right corner
+                return region.isInTopRightCorner
+            }
+        } else {
+            // For regular images, flag all non-allowlisted text
+            filteredRegions = allRegions
+        }
+
+        return (filteredRegions, appearsToBeHandDrawn)
+    }
+
+    /// Determine if text appears to be handwritten
+    private func isLikelyHandwritten(text: String, confidence: Float) -> Bool {
+        // Handwriting detection heuristics:
+        // 1. Lower recognition confidence (Vision struggles with handwriting)
+        // 2. Irregular capitalization or mixed case typical of quick notes
+        // 3. Short words/abbreviations common in diagram labels
+
+        // Low confidence often indicates handwriting
+        if confidence < 0.65 {
+            return true
+        }
+
+        // Mixed case within words (like "RCa" or "LmAin") suggests handwriting
+        let words = text.split(separator: " ")
+        for word in words where word.count >= 3 {
+            var hasLower = false
+            var hasUpper = false
+            for (index, char) in word.enumerated() where index > 0 {
+                if char.isUppercase { hasUpper = true }
+                if char.isLowercase { hasLower = true }
+            }
+            if hasLower && hasUpper {
+                return true
+            }
+        }
+
+        // Very short text (1-3 chars) at moderate confidence could be handwritten labels
+        if text.count <= 3 && confidence < 0.85 {
+            return true
+        }
+
+        return false
     }
 
     /// Check if text matches allowlist (safe to keep)
@@ -255,7 +343,8 @@ final class TextDetectionService {
         return TextDetectionResult(
             textWasDetected: !allRegions.isEmpty,
             regions: allRegions,
-            averageConfidence: avgConfidence
+            averageConfidence: avgConfidence,
+            isHandDrawnDiagram: false  // Videos are not hand-drawn diagrams
         )
     }
 

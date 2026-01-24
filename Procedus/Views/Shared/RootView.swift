@@ -8,14 +8,6 @@ import SwiftData
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
-    @AppStorage("badgesEnabled") private var badgesEnabled = true
-    @AppStorage("badgesLastViewedAt") private var badgesLastViewedAt: Double = 0
-    @Query private var earnedBadges: [BadgeEarned]
-
-    private var newBadgeCount: Int {
-        let lastViewed = Date(timeIntervalSince1970: badgesLastViewedAt)
-        return earnedBadges.filter { $0.earnedAt > lastViewed }.count
-    }
 
     var body: some View {
         Group {
@@ -36,122 +28,463 @@ struct RootView: View {
         }
     }
     
+    @State private var individualSelectedTab: FellowTab = .log
+
     @ViewBuilder
     private var individualTabView: some View {
-        TabView {
-            IndividualLogView()
-                .tabItem {
-                    Label("Log", systemImage: "list.clipboard")
-                }
-
-            MyImageLibraryView()
-                .tabItem {
-                    Label("Images", systemImage: "photo.on.rectangle.angled")
-                }
-
-            AnalyticsView()
-                .tabItem {
-                    Label("Analytics", systemImage: "chart.bar")
-                }
-
-            if badgesEnabled {
-                BadgeDashboardView()
-                    .onAppear {
-                        badgesLastViewedAt = Date().timeIntervalSince1970
-                    }
-                    .tabItem {
-                        Label("Badges", systemImage: "trophy")
-                    }
-                    .badge(newBadgeCount > 0 ? newBadgeCount : 0)
-            }
-
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape")
-                }
-        }
-    }
-
-    @ViewBuilder
-    private var institutionalTabView: some View {
-        switch appState.userRole {
-        case .fellow:
-            TabView {
+        FellowContentWrapper(selectedTab: $individualSelectedTab) {
+            TabView(selection: $individualSelectedTab) {
                 IndividualLogView()
                     .tabItem {
-                        Label("Log", systemImage: "list.clipboard")
+                        Label("Case Log", systemImage: "list.clipboard")
                     }
+                    .tag(FellowTab.log)
 
                 MyImageLibraryView()
                     .tabItem {
-                        Label("My Gallery", systemImage: "photo")
+                        Label("Images", systemImage: "photo.on.rectangle.angled")
                     }
-
-                SharedImageLibraryView()
-                    .tabItem {
-                        Label("Teaching", systemImage: "person.2.fill")
-                    }
+                    .tag(FellowTab.images)
 
                 AnalyticsView()
                     .tabItem {
                         Label("Analytics", systemImage: "chart.bar")
                     }
+                    .tag(FellowTab.analytics)
 
-                if badgesEnabled {
-                    BadgeDashboardView()
-                        .onAppear {
-                            badgesLastViewedAt = Date().timeIntervalSince1970
-                        }
-                        .tabItem {
-                            Label("Badges", systemImage: "trophy")
-                        }
-                        .badge(newBadgeCount > 0 ? newBadgeCount : 0)
-                }
-
-                SettingsView()
+                DutyHoursView()
                     .tabItem {
-                        Label("Settings", systemImage: "gearshape")
+                        Label("Hours", systemImage: "clock")
                     }
+                    .tag(FellowTab.hours)
+            }
+        }
+    }
+
+    @State private var institutionalFellowSelectedTab: FellowTab = .log
+
+    @ViewBuilder
+    private var institutionalTabView: some View {
+        switch appState.userRole {
+        case .fellow:
+            FellowContentWrapper(selectedTab: $institutionalFellowSelectedTab) {
+                TabView(selection: $institutionalFellowSelectedTab) {
+                    IndividualLogView()
+                        .tabItem {
+                            Label("Case Log", systemImage: "list.clipboard")
+                        }
+                        .tag(FellowTab.log)
+
+                    MyImageLibraryView()
+                        .tabItem {
+                            Label("Images", systemImage: "photo.on.rectangle.angled")
+                        }
+                        .tag(FellowTab.images)
+
+                    AnalyticsView()
+                        .tabItem {
+                            Label("Analytics", systemImage: "chart.bar")
+                        }
+                        .tag(FellowTab.analytics)
+
+                    DutyHoursView()
+                        .tabItem {
+                            Label("Hours", systemImage: "clock")
+                        }
+                        .tag(FellowTab.hours)
+                }
             }
 
         case .attending:
-            TabView {
-                AttestationQueueView()
-                    .tabItem {
-                        Label("Attestation", systemImage: "checkmark.seal")
-                    }
+            AttendingContentWrapper {
+                TabView {
+                    AttestationQueueView()
+                        .tabItem {
+                            Label("Attestation", systemImage: "checkmark.seal")
+                        }
 
-                SharedImageLibraryView()
-                    .tabItem {
-                        Label("Teaching", systemImage: "person.2.fill")
-                    }
+                    AttendingImageLibraryView()
+                        .tabItem {
+                            Label("Images", systemImage: "photo.on.rectangle.angled")
+                        }
 
-                AttendingAnalyticsView()
-                    .tabItem {
-                        Label("Analytics", systemImage: "chart.bar")
-                    }
-
-                SettingsView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gearshape")
-                    }
+                    AttendingAnalyticsView()
+                        .tabItem {
+                            Label("Analytics", systemImage: "chart.bar")
+                        }
+                }
             }
             
         case .admin:
-            TabView {
-                AdminDashboardView()
-                    .tabItem {
-                        Label("Admin", systemImage: "gear.badge")
-                    }
-
-                SettingsView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gearshape")
-                    }
+            AdminContentWrapper {
+                TabView {
+                    AdminDashboardView()
+                        .tabItem {
+                            Label("Admin", systemImage: "gear.badge")
+                        }
+                }
             }
         }
     }
 }
+
+// MARK: - Fellow Tab Enum
+
+enum FellowTab: Int, Hashable {
+    case log = 0
+    case images = 1
+    case analytics = 2
+    case hours = 3
+}
+
+// MARK: - Fellow Content Wrapper (Unified Top Bar)
+
+struct FellowContentWrapper<Content: View>: View {
+    @Binding var selectedTab: FellowTab
+    @ViewBuilder let content: () -> Content
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+    @Query private var notifications: [Procedus.Notification]
+    @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
+    @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
+    @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
+
+    @State private var showingSettings = false
+    @State private var showingNotifications = false
+    @State private var showingAddCase = false
+    @State private var showingExportOptions = false
+
+    /// Only show add case and export buttons on the Log tab
+    private var showCaseLogActions: Bool {
+        selectedTab == .log
+    }
+
+    private var currentUserId: UUID {
+        if appState.isIndividualMode {
+            let key = "individualUserUUID"
+            if let uuidString = UserDefaults.standard.string(forKey: key),
+               let uuid = UUID(uuidString: uuidString) {
+                return uuid
+            }
+            let newUUID = UUID()
+            UserDefaults.standard.set(newUUID.uuidString, forKey: key)
+            return newUUID
+        }
+        return appState.selectedFellowId ?? appState.currentUser?.id ?? UUID()
+    }
+
+    private var unreadNotificationCount: Int {
+        return notifications.filter { $0.userId == currentUserId && !$0.isRead && !$0.isCleared }.count
+    }
+
+    private var myCases: [CaseEntry] {
+        allCases.filter { $0.ownerId == currentUserId || $0.fellowId == currentUserId }
+    }
+
+    // Colors for light/dark mode
+    private var barBackgroundColor: Color {
+        colorScheme == .dark ? Color(UIColor.secondarySystemBackground) : .white
+    }
+
+    private var inactiveIconColor: Color {
+        colorScheme == .dark ? Color(UIColor.secondaryLabel) : Color(UIColor.darkGray)
+    }
+
+    private var activeIconColor: Color {
+        ProcedusTheme.primary
+    }
+
+    /// Settings gear color - Fellow blue
+    private var settingsGearColor: Color {
+        ProcedusTheme.primary
+    }
+
+    private var dividerColor: Color {
+        colorScheme == .dark ? Color(UIColor.separator) : Color(UIColor.separator)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Main content (TabView) - pushed down to make room for top bar
+            content()
+                .padding(.top, 64)
+
+            // Unified top bar
+            unifiedTopBar
+        }
+        .sheet(isPresented: $showingNotifications) {
+            NotificationsSheet(role: appState.isIndividualMode ? .fellow : appState.userRole, userId: currentUserId)
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingSettings = false }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: $showingAddCase) {
+            IndividualAddEditCaseView(weekBucket: CaseEntry.makeWeekBucket(for: Date()))
+        }
+        .sheet(isPresented: $showingExportOptions) {
+            FellowExportSheet(
+                cases: myCases,
+                fellowName: appState.currentUser?.fullName ?? "Fellow",
+                attendings: Array(attendings),
+                facilities: Array(facilities)
+            )
+        }
+    }
+
+    // MARK: - Unified Top Bar
+
+    private var unifiedTopBar: some View {
+        HStack(spacing: 12) {
+            // Left: Notification logo + Settings gear
+            HStack(spacing: 10) {
+                NotificationBellButton(
+                    role: .fellow,
+                    badgeCount: unreadNotificationCount
+                ) {
+                    showingNotifications = true
+                }
+
+                // Settings gear icon (Fellow blue)
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(settingsGearColor)
+                        .frame(width: 28, height: 28)
+                }
+            }
+
+            Spacer()
+
+            // Right: Export and Add buttons (only on Log tab)
+            if showCaseLogActions {
+                HStack(spacing: 16) {
+                    Button {
+                        showingExportOptions = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 18))
+                            .foregroundStyle(myCases.isEmpty ? inactiveIconColor.opacity(0.5) : inactiveIconColor)
+                    }
+                    .disabled(myCases.isEmpty)
+
+                    Button {
+                        showingAddCase = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(activeIconColor)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            barBackgroundColor
+                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
+// MARK: - Attending Content Wrapper (Unified Top Bar)
+
+struct AttendingContentWrapper<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+    @Query private var notifications: [Procedus.Notification]
+
+    @State private var showingSettings = false
+    @State private var showingNotifications = false
+
+    private var currentUserId: UUID {
+        appState.currentUser?.id ?? UUID()
+    }
+
+    private var unreadNotificationCount: Int {
+        return notifications.filter { $0.userId == currentUserId && !$0.isRead && !$0.isCleared }.count
+    }
+
+    // Colors for light/dark mode
+    private var barBackgroundColor: Color {
+        colorScheme == .dark ? Color(UIColor.secondarySystemBackground) : .white
+    }
+
+    private var inactiveIconColor: Color {
+        colorScheme == .dark ? Color(UIColor.secondaryLabel) : Color(UIColor.darkGray)
+    }
+
+    /// Settings gear color - Attending green
+    private var settingsGearColor: Color {
+        ProcedusTheme.success
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Main content (TabView) - pushed down to make room for top bar
+            content()
+                .padding(.top, 64)
+
+            // Unified top bar
+            attendingTopBar
+        }
+        .sheet(isPresented: $showingNotifications) {
+            NotificationsSheet(role: .attending, userId: currentUserId)
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingSettings = false }
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - Attending Top Bar
+
+    private var attendingTopBar: some View {
+        HStack(spacing: 12) {
+            // Left: Notification logo + Settings gear
+            HStack(spacing: 10) {
+                NotificationBellButton(
+                    role: .attending,
+                    badgeCount: unreadNotificationCount
+                ) {
+                    showingNotifications = true
+                }
+
+                // Settings gear icon (Attending green)
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(settingsGearColor)
+                        .frame(width: 28, height: 28)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            barBackgroundColor
+                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
+// MARK: - Admin Content Wrapper (Unified Top Bar)
+
+struct AdminContentWrapper<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+    @Query private var notifications: [Procedus.Notification]
+
+    @State private var showingSettings = false
+    @State private var showingNotifications = false
+
+    private var currentUserId: UUID {
+        appState.currentUser?.id ?? UUID()
+    }
+
+    private var unreadNotificationCount: Int {
+        return notifications.filter { $0.userId == currentUserId && !$0.isRead && !$0.isCleared }.count
+    }
+
+    // Colors for light/dark mode
+    private var barBackgroundColor: Color {
+        colorScheme == .dark ? Color(UIColor.secondarySystemBackground) : .white
+    }
+
+    private var inactiveIconColor: Color {
+        colorScheme == .dark ? Color(UIColor.secondaryLabel) : Color(UIColor.darkGray)
+    }
+
+    /// Settings gear color - Admin pink
+    private var settingsGearColor: Color {
+        Color.pink
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Main content (TabView) - pushed down to make room for top bar
+            content()
+                .padding(.top, 64)
+
+            // Unified top bar
+            adminTopBar
+        }
+        .sheet(isPresented: $showingNotifications) {
+            NotificationsSheet(role: .admin, userId: currentUserId)
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingSettings = false }
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - Admin Top Bar
+
+    private var adminTopBar: some View {
+        HStack(spacing: 12) {
+            // Left: Notification logo + Settings gear
+            HStack(spacing: 10) {
+                NotificationBellButton(
+                    role: .admin,
+                    badgeCount: unreadNotificationCount
+                ) {
+                    showingNotifications = true
+                }
+
+                // Settings gear icon (Admin pink)
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(settingsGearColor)
+                        .frame(width: 28, height: 28)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            barBackgroundColor
+                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
 
 // MARK: - Onboarding View
 
@@ -164,11 +497,12 @@ struct OnboardingView: View {
         VStack(spacing: 32) {
             Spacer()
 
-            Image(systemName: "stethoscope.circle.fill")
-                .font(.system(size: 100))
-                .foregroundStyle(ProcedusTheme.primary)
+            Image("LumenusLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 150, height: 150)
 
-            Text("Welcome to Procedus")
+            Text("Welcome to Lumenus")
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
@@ -754,635 +1088,6 @@ struct RoleBadge: View {
         case .fellow: return .blue
         case .attending: return .green
         case .admin: return .purple
-        }
-    }
-}
-
-// MARK: - Attending Queue View
-
-struct AttendingQueueView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppState.self) private var appState
-    @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
-    @Query private var allUsers: [User]
-    @Query private var notifications: [Procedus.Notification]
-    @Query private var programs: [Program]
-
-    @State private var showingNotifications = false
-    @State private var showingAttestAllConfirm = false
-    #if DEBUG
-    @State private var showAllPending = true
-    #endif
-
-    private var currentProgram: Program? { programs.first }
-
-    private var evaluationsRequired: Bool {
-        currentProgram?.evaluationsEnabled == true && currentProgram?.evaluationsRequired == true
-    }
-
-    private var pendingCases: [CaseEntry] {
-        #if DEBUG
-        if showAllPending {
-            return allCases.filter {
-                $0.attestationStatus == .pending || $0.attestationStatus == .requested
-            }
-        }
-        #endif
-        // In production, only show cases where this attending is the supervisor
-        guard let currentUserId = appState.currentUser?.id else { return [] }
-        return allCases.filter {
-            ($0.attestationStatus == .pending || $0.attestationStatus == .requested) &&
-            $0.supervisorId == currentUserId
-        }
-    }
-
-    private var unreadNotificationCount: Int {
-        guard let userId = appState.currentUser?.id else { return 0 }
-        return notifications.filter { $0.userId == userId && !$0.isRead }.count
-    }
-
-    private func fellowName(for caseEntry: CaseEntry) -> String {
-        allUsers.first { $0.id == caseEntry.fellowId || $0.id == caseEntry.ownerId }?.lastName ?? "Unknown"
-    }
-
-    // Get unique procedure categories for a case
-    private func procedureCategories(for caseEntry: CaseEntry) -> [ProcedureCategory] {
-        var seen = Set<ProcedureCategory>()
-        var result: [ProcedureCategory] = []
-        for procedureId in caseEntry.procedureTagIds {
-            if let category = SpecialtyPackCatalog.findCategory(for: procedureId) {
-                if !seen.contains(category) {
-                    seen.insert(category)
-                    result.append(category)
-                }
-            }
-        }
-        return result
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Notification bell header
-                    HStack {
-                        Button {
-                            showingNotifications = true
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.green.opacity(0.2))
-                                    .frame(width: 44, height: 44)
-
-                                if unreadNotificationCount > 0 {
-                                    Text("\(unreadNotificationCount)")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.green)
-                                } else {
-                                    Image(systemName: "bell.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(.green)
-                                }
-                            }
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-
-                    // Title
-                    HStack {
-                        Text("Attestations")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-
-                    #if DEBUG
-                    // Debug toggle
-                    HStack {
-                        Text("Show ALL pending (debug)")
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                        Spacer()
-                        Toggle("", isOn: $showAllPending)
-                            .labelsHidden()
-                    }
-                    .padding(.horizontal, 16)
-                    #endif
-
-                    if pendingCases.isEmpty {
-                        ContentUnavailableView(
-                            "No Pending Cases",
-                            systemImage: "checkmark.seal",
-                            description: Text("All cases have been attested")
-                        )
-                        .padding(.top, 60)
-                    } else {
-                        // Info section with Attest All button
-                        VStack(spacing: 12) {
-                            HStack(alignment: .top, spacing: 16) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("\(pendingCases.count) pending attestations")
-                                        .font(.headline)
-                                        .fontWeight(.bold)
-                                    if evaluationsRequired {
-                                        Text("Tap a case to review and complete required evaluations")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                    } else {
-                                        Text("Tap a case to review individually, or attest all at once")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-
-                                Spacer()
-
-                                // Attest All button (hidden when evaluations required)
-                                if !evaluationsRequired && pendingCases.count > 1 {
-                                    Button {
-                                        showingAttestAllConfirm = true
-                                    } label: {
-                                        VStack(spacing: 4) {
-                                            Text("Attest All")
-                                                .font(.headline)
-                                                .fontWeight(.bold)
-                                            Text("I supervised")
-                                                .font(.caption)
-                                            Text("these cases")
-                                                .font(.caption)
-                                        }
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 12)
-                                        .background(Color.green)
-                                        .cornerRadius(12)
-                                    }
-                                }
-                            }
-
-                            // Show info message when evaluations are required
-                            if evaluationsRequired && pendingCases.count > 1 {
-                                HStack {
-                                    Image(systemName: "info.circle.fill")
-                                        .foregroundColor(.blue)
-                                    Text("Bulk attestation disabled — evaluations are required")
-                                        .font(.caption)
-                                        .foregroundColor(Color(UIColor.secondaryLabel))
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
-
-                        // Cases list
-                        VStack(spacing: 0) {
-                            ForEach(Array(pendingCases.enumerated()), id: \.element.id) { index, caseEntry in
-                                NavigationLink {
-                                    AttestationDetailView(caseEntry: caseEntry)
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        // Fellow name
-                                        Text(fellowName(for: caseEntry))
-                                            .font(.body)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(Color(UIColor.label))
-
-                                        // Category bubbles
-                                        HStack(spacing: 4) {
-                                            ForEach(procedureCategories(for: caseEntry).prefix(3), id: \.self) { category in
-                                                CategoryBubble(category: category, size: 24)
-                                            }
-                                        }
-
-                                        Spacer()
-
-                                        // Date range
-                                        Text(caseEntry.weekBucket.toWeekTimeframeLabel())
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
-                                }
-
-                                if index < pendingCases.count - 1 {
-                                    Divider().padding(.leading, 16)
-                                }
-                            }
-                        }
-                        .background(Color(UIColor.secondarySystemBackground))
-                        .cornerRadius(12)
-                        .padding(.horizontal, 16)
-                    }
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 32)
-            }
-            .background(Color(UIColor.systemBackground))
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showingNotifications) {
-                NotificationsSheet(role: .attending, userId: appState.currentUser?.id)
-            }
-            .alert("Attest All Cases?", isPresented: $showingAttestAllConfirm) {
-                Button("Cancel", role: .cancel) {}
-                Button("Attest All") {
-                    attestAllCases()
-                }
-            } message: {
-                Text("This will attest all \(pendingCases.count) pending cases. You are confirming that you supervised all these cases.")
-            }
-        }
-    }
-
-    private func attestAllCases() {
-        guard let userId = appState.currentUser?.id else { return }
-        for caseEntry in pendingCases {
-            caseEntry.attestationStatus = .attested
-            caseEntry.attestedAt = Date()
-            caseEntry.attestorId = userId
-        }
-        try? modelContext.save()
-    }
-}
-
-// MARK: - Attestation Detail View
-
-struct AttestationDetailView: View {
-    let caseEntry: CaseEntry
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppState.self) private var appState
-    @Query private var allUsers: [User]
-    @Query private var attendings: [Attending]
-    @Query private var facilities: [TrainingFacility]
-
-    @State private var comment = ""
-    @State private var showingRejectDialog = false
-    @State private var rejectionReason = ""
-
-    private var fellowName: String {
-        allUsers.first { $0.id == caseEntry.fellowId || $0.id == caseEntry.ownerId }?.displayName ?? "Unknown Fellow"
-    }
-
-    private var attendingName: String {
-        attendings.first { $0.id == caseEntry.attendingId }?.name ?? ""
-    }
-
-    private var facilityName: String {
-        facilities.first { $0.id == caseEntry.facilityId }?.name ?? ""
-    }
-
-    // Get unique procedure categories for this case
-    private var procedureCategories: [ProcedureCategory] {
-        var seen = Set<ProcedureCategory>()
-        var result: [ProcedureCategory] = []
-        for procedureId in caseEntry.procedureTagIds {
-            if let category = SpecialtyPackCatalog.findCategory(for: procedureId) {
-                if !seen.contains(category) {
-                    seen.insert(category)
-                    result.append(category)
-                }
-            }
-        }
-        return result
-    }
-
-    var body: some View {
-        Form {
-            // Case Information
-            Section {
-                HStack {
-                    Text("Fellow")
-                    Spacer()
-                    Text(fellowName)
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Week")
-                    Spacer()
-                    Text(caseEntry.weekBucket.toWeekTimeframeLabel())
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Procedures")
-                    Spacer()
-                    HStack(spacing: 4) {
-                        ForEach(procedureCategories.prefix(5), id: \.self) { category in
-                            CategoryBubble(category: category, size: 20)
-                        }
-                        Text("\(caseEntry.procedureTagIds.count)")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                if !facilityName.isEmpty {
-                    HStack {
-                        Text("Facility")
-                        Spacer()
-                        Text(facilityName)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                HStack {
-                    Text("Outcome")
-                    Spacer()
-                    Text(caseEntry.outcome.rawValue)
-                        .foregroundColor(.secondary)
-                }
-            } header: {
-                Text("Case Details")
-            }
-
-            // Comment Section
-            Section {
-                TextField("Add a comment...", text: $comment, axis: .vertical)
-                    .lineLimit(3...6)
-            } header: {
-                Text("Comment (Optional)")
-            }
-
-            // Attest Button - Green, prominent
-            Section {
-                Button {
-                    attestCase()
-                } label: {
-                    VStack(spacing: 4) {
-                        HStack {
-                            Image(systemName: "checkmark.seal.fill")
-                            Text("Attest")
-                                .fontWeight(.bold)
-                        }
-                        .font(.headline)
-                        Text("I supervised this trainee for this case")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.green)
-                    .cornerRadius(10)
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            }
-
-            // Reject Button
-            Section {
-                Button {
-                    showingRejectDialog = true
-                } label: {
-                    HStack {
-                        Image(systemName: "xmark.seal.fill")
-                        Text("Reject Case")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .navigationTitle("Review Case")
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("Reject Case", isPresented: $showingRejectDialog) {
-            TextField("Reason for rejection", text: $rejectionReason)
-            Button("Cancel", role: .cancel) {
-                rejectionReason = ""
-            }
-            Button("Reject", role: .destructive) {
-                rejectCase()
-            }
-            .disabled(rejectionReason.trimmingCharacters(in: .whitespaces).isEmpty)
-        } message: {
-            Text("Please provide a reason for rejecting this case. The fellow will be notified.")
-        }
-    }
-
-    private func attestCase() {
-        guard let userId = appState.currentUser?.id else { return }
-        caseEntry.attestationStatus = .attested
-        caseEntry.attestedAt = Date()
-        caseEntry.attestorId = userId
-        caseEntry.attestationComment = comment.isEmpty ? nil : comment
-        try? modelContext.save()
-
-        // Check and award badges for the fellow
-        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
-            checkAndAwardBadges(for: fellowId)
-        }
-
-        dismiss()
-    }
-
-    private func rejectCase() {
-        guard let userId = appState.currentUser?.id else { return }
-        caseEntry.attestationStatus = .rejected
-        caseEntry.rejectionReason = rejectionReason.trimmingCharacters(in: .whitespaces)
-        caseEntry.attestorId = userId
-        caseEntry.attestationComment = comment.isEmpty ? nil : comment
-
-        // Create database notification for the fellow
-        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
-            let reason = rejectionReason.trimmingCharacters(in: .whitespaces)
-            let notification = Procedus.Notification(
-                userId: fellowId,
-                title: "Case Rejected",
-                message: "Your case was rejected. Reason: \(reason.prefix(200))",
-                notificationType: NotificationType.caseRejected.rawValue,
-                caseId: caseEntry.id
-            )
-            modelContext.insert(notification)
-        }
-
-        try? modelContext.save()
-        dismiss()
-    }
-
-    private func checkAndAwardBadges(for fellowId: UUID) {
-        let casesDescriptor = FetchDescriptor<CaseEntry>()
-        guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
-
-        let badgesDescriptor = FetchDescriptor<BadgeEarned>(
-            predicate: #Predicate<BadgeEarned> { $0.fellowId == fellowId }
-        )
-        let existingBadges = (try? modelContext.fetch(badgesDescriptor)) ?? []
-
-        let newBadges = BadgeService.shared.checkAndAwardBadges(
-            for: fellowId,
-            attestedCase: caseEntry,
-            allCases: allCases,
-            existingBadges: existingBadges,
-            modelContext: modelContext
-        )
-
-        for earned in newBadges {
-            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Procedus.Notification(
-                    userId: fellowId,
-                    title: "Achievement Unlocked!",
-                    message: "You earned the \"\(badge.title)\" badge!",
-                    notificationType: NotificationType.badgeEarned.rawValue,
-                    caseId: nil
-                )
-                modelContext.insert(notification)
-            }
-        }
-
-        if !newBadges.isEmpty {
-            try? modelContext.save()
-        }
-    }
-}
-
-// MARK: - Simple Attestation Detail View (Backward Compatibility)
-
-struct SimpleAttestationDetailView: View {
-    let caseEntry: CaseEntry
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Environment(AppState.self) private var appState
-
-    @State private var comment = ""
-    @State private var showingRejectDialog = false
-    @State private var rejectionReason = ""
-
-    var body: some View {
-        Form {
-            Section("Case Details") {
-                LabeledContent("Week", value: caseEntry.weekBucket.toWeekTimeframeLabel())
-                LabeledContent("Procedures", value: "\(caseEntry.procedureTagIds.count)")
-                LabeledContent("Outcome", value: caseEntry.outcome.rawValue)
-            }
-
-            Section("Comment (Optional)") {
-                TextField("Add a comment...", text: $comment, axis: .vertical)
-                    .lineLimit(3...6)
-            }
-
-            Section {
-                Button {
-                    attestCase()
-                } label: {
-                    VStack(spacing: 4) {
-                        HStack {
-                            Image(systemName: "checkmark.seal.fill")
-                            Text("Attest")
-                                .fontWeight(.bold)
-                        }
-                        Text("I supervised this trainee for this case")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.green)
-                    .cornerRadius(10)
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            }
-
-            Section {
-                Button {
-                    showingRejectDialog = true
-                } label: {
-                    HStack {
-                        Image(systemName: "xmark.seal.fill")
-                        Text("Reject Case")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .navigationTitle("Review Case")
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("Reject Case", isPresented: $showingRejectDialog) {
-            TextField("Reason for rejection", text: $rejectionReason)
-            Button("Cancel", role: .cancel) {
-                rejectionReason = ""
-            }
-            Button("Reject", role: .destructive) {
-                rejectCase()
-            }
-            .disabled(rejectionReason.trimmingCharacters(in: .whitespaces).isEmpty)
-        } message: {
-            Text("Please provide a reason for rejecting this case. The fellow will be notified.")
-        }
-    }
-
-    private func attestCase() {
-        guard let userId = appState.currentUser?.id else { return }
-        caseEntry.attestationStatus = .attested
-        caseEntry.attestedAt = Date()
-        caseEntry.attestorId = userId
-        caseEntry.attestationComment = comment.isEmpty ? nil : comment
-        try? modelContext.save()
-
-        // Check and award badges for the fellow
-        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
-            checkAndAwardBadges(for: fellowId)
-        }
-
-        dismiss()
-    }
-
-    private func rejectCase() {
-        guard let userId = appState.currentUser?.id else { return }
-        caseEntry.attestationStatus = .rejected
-        caseEntry.rejectionReason = rejectionReason.trimmingCharacters(in: .whitespaces)
-        caseEntry.attestorId = userId
-        caseEntry.attestationComment = comment.isEmpty ? nil : comment
-
-        // Create database notification for the fellow
-        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
-            let reason = rejectionReason.trimmingCharacters(in: .whitespaces)
-            let notification = Procedus.Notification(
-                userId: fellowId,
-                title: "Case Rejected",
-                message: "Your case was rejected. Reason: \(reason.prefix(200))",
-                notificationType: NotificationType.caseRejected.rawValue,
-                caseId: caseEntry.id
-            )
-            modelContext.insert(notification)
-        }
-
-        try? modelContext.save()
-        dismiss()
-    }
-
-    private func checkAndAwardBadges(for fellowId: UUID) {
-        let casesDescriptor = FetchDescriptor<CaseEntry>()
-        guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
-
-        let badgesDescriptor = FetchDescriptor<BadgeEarned>(
-            predicate: #Predicate<BadgeEarned> { $0.fellowId == fellowId }
-        )
-        let existingBadges = (try? modelContext.fetch(badgesDescriptor)) ?? []
-
-        let newBadges = BadgeService.shared.checkAndAwardBadges(
-            for: fellowId,
-            attestedCase: caseEntry,
-            allCases: allCases,
-            existingBadges: existingBadges,
-            modelContext: modelContext
-        )
-
-        for earned in newBadges {
-            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Procedus.Notification(
-                    userId: fellowId,
-                    title: "Achievement Unlocked!",
-                    message: "You earned the \"\(badge.title)\" badge!",
-                    notificationType: NotificationType.badgeEarned.rawValue,
-                    caseId: nil
-                )
-                modelContext.insert(notification)
-            }
-        }
-
-        if !newBadges.isEmpty {
-            try? modelContext.save()
         }
     }
 }

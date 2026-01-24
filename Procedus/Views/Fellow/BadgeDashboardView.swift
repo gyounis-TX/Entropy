@@ -16,6 +16,75 @@ struct BadgeDashboardView: View {
     @State private var showingBadgeDetail: Badge? = nil
     @State private var showingTierLegend = false
 
+    // MARK: - COCATS Competency Definitions
+
+    struct COCATSCompetency: Identifiable {
+        let id: String
+        let name: String
+        let shortName: String
+        let iconName: String
+        let color: Color
+        let procedureTagIds: [String]
+        let levels: [(level: Int, threshold: Int)]
+    }
+
+    private static let cocatsCompetencies: [COCATSCompetency] = [
+        COCATSCompetency(
+            id: "echo",
+            name: "Echocardiography",
+            shortName: "Echo",
+            iconName: "waveform.path.ecg.rectangle",
+            color: .blue,
+            procedureTagIds: ["ci-echo-tte", "ci-echo-tte-contrast", "ci-echo-tee", "ci-echo-stress"],
+            levels: [(1, 150), (2, 300), (3, 750)]
+        ),
+        COCATSCompetency(
+            id: "nuclear",
+            name: "Nuclear Cardiology",
+            shortName: "Nuclear",
+            iconName: "atom",
+            color: .green,
+            procedureTagIds: ["ci-nuc-spect", "ci-nuc-pet", "ci-nuc-mpi", "ci-stress-nuclear"],
+            levels: [(1, 50), (2, 200), (3, 500)]
+        ),
+        COCATSCompetency(
+            id: "ct",
+            name: "Cardiac CT",
+            shortName: "CT",
+            iconName: "viewfinder.circle",
+            color: .orange,
+            procedureTagIds: ["ci-ct-calcium", "ci-ct-cta", "ci-ct-cardiac"],
+            levels: [(1, 25), (2, 150), (3, 300)]
+        ),
+        COCATSCompetency(
+            id: "mri",
+            name: "Cardiac MRI",
+            shortName: "MRI",
+            iconName: "circle.hexagongrid",
+            color: .purple,
+            procedureTagIds: ["ci-mri-cardiac"],
+            levels: [(1, 25), (2, 150), (3, 300)]
+        ),
+        COCATSCompetency(
+            id: "cath",
+            name: "Diagnostic Cath",
+            shortName: "Cath",
+            iconName: "heart.text.square",
+            color: .red,
+            procedureTagIds: ["ic-dx-lhc", "ic-dx-rhc", "ic-dx-coro", "ic-dx-lv", "ic-dx-ao"],
+            levels: [(1, 50), (2, 300)]
+        ),
+        COCATSCompetency(
+            id: "pci",
+            name: "PCI",
+            shortName: "PCI",
+            iconName: "heart.fill",
+            color: .pink,
+            procedureTagIds: ["ic-pci-stent", "ic-pci-poba", "ic-pci-dcb", "ic-pci-rotablator", "ic-pci-orbital", "ic-pci-laser", "ic-pci-ivl", "ic-pci-thrombectomy"],
+            levels: [(3, 250)]
+        )
+    ]
+
     // MARK: - Computed Properties
 
     private var currentFellowId: UUID? {
@@ -44,6 +113,11 @@ struct BadgeDashboardView: View {
         return newUUID
     }
 
+    private var myCases: [CaseEntry] {
+        guard let fellowId = currentFellowId else { return [] }
+        return allCases.filter { $0.ownerId == fellowId || $0.fellowId == fellowId }
+    }
+
     private var myEarnedBadges: [BadgeEarned] {
         guard let fellowId = currentFellowId else { return [] }
         return earnedBadges
@@ -60,19 +134,24 @@ struct BadgeDashboardView: View {
         }
     }
 
-    private var filteredBadges: [Badge] {
+    /// Only earned badges for display, sorted newest first
+    private var earnedBadgesForDisplay: [Badge] {
+        let earnedIds = Set(myEarnedBadges.map { $0.badgeId })
         let allBadges = BadgeCatalog.allBadges()
+
+        // Filter to only earned badges
+        var badges = allBadges.filter { earnedIds.contains($0.id) }
+
+        // Apply category filter if selected
         if let category = selectedCategory {
-            return allBadges.filter { $0.badgeType == category }
+            badges = badges.filter { $0.badgeType == category }
         }
-        // Show a curated list when no filter
-        return allBadges.filter { badge in
-            // Show first procedure badges (any role and primary) and first few milestones
-            badge.badgeType == .firstProcedure ||
-            badge.badgeType == .firstAsPrimary ||
-            badge.badgeType == .totalCases ||
-            badge.badgeType == .diversity ||
-            (badge.badgeType == .milestone && badge.tier == BadgeTier.bronze.rawValue)
+
+        // Sort by earned date (newest first) using myEarnedBadges order
+        return badges.sorted { badge1, badge2 in
+            let earned1 = myEarnedBadges.first { $0.badgeId == badge1.id }
+            let earned2 = myEarnedBadges.first { $0.badgeId == badge2.id }
+            return (earned1?.earnedAt ?? Date.distantPast) > (earned2?.earnedAt ?? Date.distantPast)
         }
     }
 
@@ -83,6 +162,48 @@ struct BadgeDashboardView: View {
             cases: allCases,
             earnedBadges: myEarnedBadges
         )
+    }
+
+    /// Calculate progress for each COCATS competency
+    private func competencyProgress(for competency: COCATSCompetency) -> (count: Int, currentLevel: Int, nextLevel: Int?, nextThreshold: Int?, percentage: Double) {
+        // Count procedures matching this competency
+        var count = 0
+        for caseEntry in myCases {
+            for tagId in caseEntry.procedureTagIds {
+                if competency.procedureTagIds.contains(tagId) {
+                    count += 1
+                }
+            }
+        }
+
+        // Determine current level and next target
+        var currentLevel = 0
+        var nextLevel: Int? = nil
+        var nextThreshold: Int? = nil
+
+        for (level, threshold) in competency.levels {
+            if count >= threshold {
+                currentLevel = level
+            } else {
+                nextLevel = level
+                nextThreshold = threshold
+                break
+            }
+        }
+
+        // Calculate percentage toward next level
+        let percentage: Double
+        if let nextThresh = nextThreshold {
+            let previousThreshold = competency.levels.first { $0.level == currentLevel }?.threshold ?? 0
+            let range = nextThresh - previousThreshold
+            let progress = count - previousThreshold
+            percentage = range > 0 ? min(1.0, Double(progress) / Double(range)) : 0
+        } else {
+            // Already at max level
+            percentage = 1.0
+        }
+
+        return (count, currentLevel, nextLevel, nextThreshold, percentage)
     }
 
     // MARK: - Body
@@ -97,11 +218,13 @@ struct BadgeDashboardView: View {
                         recentBadgesSection
                     }
 
+                    cocatsProgressSection
+
                     if !progressData.isEmpty {
                         progressSection
                     }
 
-                    allBadgesSection
+                    earnedBadgesSection
                 }
                 .padding()
             }
@@ -211,6 +334,33 @@ struct BadgeDashboardView: View {
         }
     }
 
+    // MARK: - COCATS Progress Section
+
+    private var cocatsProgressSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("COCATS Competencies")
+                .font(.headline)
+                .foregroundStyle(ProcedusTheme.textPrimary)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 16) {
+                ForEach(Self.cocatsCompetencies) { competency in
+                    let progress = competencyProgress(for: competency)
+                    COCATSProgressCircle(
+                        competency: competency,
+                        count: progress.count,
+                        currentLevel: progress.currentLevel,
+                        nextLevel: progress.nextLevel,
+                        nextThreshold: progress.nextThreshold,
+                        percentage: progress.percentage
+                    )
+                }
+            }
+            .padding()
+            .background(ProcedusTheme.cardBackground)
+            .cornerRadius(16)
+        }
+    }
+
     // MARK: - Progress Section
 
     private var progressSection: some View {
@@ -230,9 +380,9 @@ struct BadgeDashboardView: View {
         }
     }
 
-    // MARK: - All Badges Section
+    // MARK: - Earned Badges Section
 
-    private var allBadgesSection: some View {
+    private var earnedBadgesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Achievements")
                 .font(.headline)
@@ -242,7 +392,7 @@ struct BadgeDashboardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     BadgeCategoryPill(
-                        title: "Featured",
+                        title: "All",
                         isSelected: selectedCategory == nil
                     ) {
                         selectedCategory = nil
@@ -259,14 +409,30 @@ struct BadgeDashboardView: View {
                 }
             }
 
-            // Badge grid
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 16) {
-                ForEach(filteredBadges, id: \.id) { badge in
-                    let isEarned = myEarnedBadges.contains { $0.badgeId == badge.id }
-                    BadgeGridItem(badge: badge, isEarned: isEarned)
-                        .onTapGesture {
-                            showingBadgeDetail = badge
-                        }
+            // Only show earned badges, sorted newest first
+            if earnedBadgesForDisplay.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "trophy")
+                        .font(.system(size: 40))
+                        .foregroundStyle(ProcedusTheme.textTertiary)
+                    Text("No badges earned yet")
+                        .font(.subheadline)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                    Text("Complete cases to earn achievements!")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 16) {
+                    ForEach(earnedBadgesForDisplay, id: \.id) { badge in
+                        let earned = myEarnedBadges.first { $0.badgeId == badge.id }
+                        EarnedBadgeGridItem(badge: badge, earnedAt: earned?.earnedAt)
+                            .onTapGesture {
+                                showingBadgeDetail = badge
+                            }
+                    }
                 }
             }
         }
@@ -278,6 +444,64 @@ struct BadgeDashboardView: View {
         myEarnedBadges.filter { earned in
             BadgeCatalog.badge(withId: earned.badgeId)?.tier == tier.rawValue
         }
+    }
+}
+
+// MARK: - COCATS Progress Circle
+
+struct COCATSProgressCircle: View {
+    let competency: BadgeDashboardView.COCATSCompetency
+    let count: Int
+    let currentLevel: Int
+    let nextLevel: Int?
+    let nextThreshold: Int?
+    let percentage: Double
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                // Background circle
+                Circle()
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 6)
+                    .frame(width: 60, height: 60)
+
+                // Progress arc
+                Circle()
+                    .trim(from: 0, to: percentage)
+                    .stroke(competency.color, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .frame(width: 60, height: 60)
+                    .rotationEffect(.degrees(-90))
+
+                // Icon and count
+                VStack(spacing: 0) {
+                    Image(systemName: competency.iconName)
+                        .font(.system(size: 16))
+                        .foregroundStyle(competency.color)
+                    Text("\(count)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(ProcedusTheme.textPrimary)
+                }
+            }
+
+            Text(competency.shortName)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundStyle(ProcedusTheme.textPrimary)
+
+            // Level indicator
+            HStack(spacing: 2) {
+                Text("L\(currentLevel)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(currentLevel > 0 ? competency.color : ProcedusTheme.textTertiary)
+
+                if let nextThresh = nextThreshold {
+                    Text("/\(nextThresh)")
+                        .font(.system(size: 9))
+                        .foregroundStyle(ProcedusTheme.textTertiary)
+                }
+            }
+        }
+        .frame(width: 90, height: 110)
     }
 }
 
@@ -314,7 +538,46 @@ struct BadgeCard: View {
     }
 }
 
-// MARK: - Badge Grid Item
+// MARK: - Earned Badge Grid Item (only for earned badges, shows date)
+
+struct EarnedBadgeGridItem: View {
+    let badge: Badge
+    let earnedAt: Date?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .fill(tierColor.opacity(0.2))
+                    .frame(width: 60, height: 60)
+
+                Image(systemName: badge.iconName)
+                    .font(.system(size: 24))
+                    .foregroundStyle(tierColor)
+            }
+
+            Text(badge.title)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(ProcedusTheme.textPrimary)
+
+            if let date = earnedAt {
+                Text(date, style: .date)
+                    .font(.system(size: 9))
+                    .foregroundStyle(ProcedusTheme.textTertiary)
+            }
+        }
+        .frame(width: 100, height: 110)
+    }
+
+    private var tierColor: Color {
+        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.textSecondary
+    }
+}
+
+// MARK: - Badge Grid Item (legacy, keeping for compatibility)
 
 struct BadgeGridItem: View {
     let badge: Badge

@@ -16,7 +16,6 @@ struct AdminDashboardView: View {
     @Query private var allUsers: [User]
     @Query private var attendings: [Attending]
     @Query private var facilities: [TrainingFacility]
-    @Query private var notifications: [Procedus.Notification]
     @Query private var customCategories: [CustomCategory]
     @Query private var customProcedures: [CustomProcedure]
     @Query private var customAccessSites: [CustomAccessSite]
@@ -27,7 +26,6 @@ struct AdminDashboardView: View {
     @AppStorage("adminName") private var adminNameStorage = ""
     @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
 
-    @State private var showingNotifications = false
     @State private var showingInviteCodes = false
     @State private var showingClearDataConfirmation = false
     @State private var showingPopulateDevConfirmation = false
@@ -39,6 +37,11 @@ struct AdminDashboardView: View {
     @State private var showingCustomProcedureDetails = false
     @State private var showingExportSheet = false
     @State private var showingProgramMessage = false
+
+    // Dashboard navigation state for floating bar
+    @State private var showingAttestationDashboard = false
+    @State private var showingEvaluationDashboard = false
+    @State private var showingDutyHoursDashboard = false
 
     private var currentProgram: Program? { programs.first }
 
@@ -54,18 +57,6 @@ struct AdminDashboardView: View {
             return admin
         }
         return adminUsers.first
-    }
-
-    /// Admin receives replies to messages they sent
-    /// Count unread notifications where admin is the recipient
-    private var unreadNotificationCount: Int {
-        guard let adminId = currentAdmin?.id else { return 0 }
-        return notifications.filter { notification in
-            notification.userId == adminId &&
-            !notification.isRead &&
-            !notification.isCleared &&
-            notification.notificationType == NotificationType.programUpdate.rawValue
-        }.count
     }
 
     private var fellowCount: Int {
@@ -121,46 +112,35 @@ struct AdminDashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 0) {
-                    // Header with badge
-                    headerSection
+                VStack(spacing: 12) {
+                    // Statistics Section
+                    statisticsSection
 
-                    VStack(spacing: 12) {
-                        // Statistics Section
-                        statisticsSection
+                    // Management Section
+                    managementSection
 
-                        // Management Section
-                        managementSection
+                    // Dashboards Section
+                    dashboardsSection
 
-                        // Reports Section
-                        reportsSection
+                    // Communications Section
+                    communicationsSection
 
-                        // Access Section
-                        accessSection
+                    // Reports Section
+                    reportsSection
 
-                        // Communications Section
-                        communicationsSection
+                    // Access Section
+                    accessSection
 
-                        #if DEBUG
-                        // Developer Tools Section
-                        developerToolsSection
-                        #endif
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 32)
+                    #if DEBUG
+                    // Developer Tools Section
+                    developerToolsSection
+                    #endif
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 100) // Extra padding for floating bar
             }
             .background(Color(UIColor.systemBackground))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Admin")
-                        .font(.headline)
-                }
-            }
-            .sheet(isPresented: $showingNotifications) {
-                 NotificationsSheet(role: .admin, userId: currentAdmin?.id)
-            }
+            .navigationBarHidden(true)
             .sheet(isPresented: $showingInviteCodes) {
                 InviteCodesSheet()
             }
@@ -191,43 +171,81 @@ struct AdminDashboardView: View {
             .sheet(isPresented: $showingProgramMessage) {
                 SendProgramUpdateSheet()
             }
+            // Dashboard Floating Bar
+            .overlay(alignment: .bottom) {
+                dashboardFloatingBar
+            }
+            .navigationDestination(isPresented: $showingAttestationDashboard) {
+                AttestationDashboardView()
+            }
+            .navigationDestination(isPresented: $showingEvaluationDashboard) {
+                EvaluationSummaryView()
+            }
+            .navigationDestination(isPresented: $showingDutyHoursDashboard) {
+                DutyHoursDashboardView()
+            }
         }
     }
 
-    // MARK: - Header Section
+    // MARK: - Dashboard Floating Bar
 
-    private var headerSection: some View {
-        HStack {
-            // Admin notification bell (purple for admin role)
-            Button {
-                showingNotifications = true
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color.purple)  // Purple for admin
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: "bell.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-
-                    // Notification count badge in center of bell
-                    if unreadNotificationCount > 0 {
-                        Text("\(unreadNotificationCount)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.purple)
-                            .padding(4)
-                            .background(Circle().fill(.white))
-                            .offset(y: 2)  // Centered in bell
+    private var dashboardFloatingBar: some View {
+        HStack(spacing: 0) {
+            // Attestation Dashboard Button
+            Button { showingAttestationDashboard = true } label: {
+                VStack(spacing: 4) {
+                    ZStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.green)
+                        if pendingCases > 0 {
+                            Text("\(min(pendingCases, 99))")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(.orange))
+                                .offset(x: 12, y: -8)
+                        }
                     }
+                    Text("Attestation")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity)
             }
 
-            Spacer()
+            // Evaluation Dashboard Button
+            Button { showingEvaluationDashboard = true } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.yellow)
+                    Text("Evaluations")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            // Duty Hours Dashboard Button
+            Button { showingDutyHoursDashboard = true } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "clock.badge.checkmark.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.orange)
+                    Text("Duty Hours")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.vertical, 12)
+        .background(
+            Color(UIColor.secondarySystemBackground)
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -4)
+        )
     }
 
     // MARK: - Statistics Section
@@ -303,18 +321,46 @@ struct AdminDashboardView: View {
         }
     }
 
+    // MARK: - Dashboards Section
+
+    private var dashboardsSection: some View {
+        VStack(spacing: 8) {
+            AdminSectionHeader(title: "DASHBOARDS")
+
+            NavigationLink { AttestationDashboardView() } label: {
+                AdminPillRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Attestation Dashboard", statusBadge: pendingCases > 0 ? "\(pendingCases) pending" : nil, statusColor: .orange)
+            }
+
+            NavigationLink { EvaluationSummaryView() } label: {
+                AdminPillRow(icon: "star.fill", iconColor: .yellow, title: "Evaluation Dashboard")
+            }
+
+            NavigationLink { DutyHoursDashboardView() } label: {
+                AdminPillRow(icon: "clock.badge.checkmark.fill", iconColor: .orange, title: "Duty Hours Dashboard")
+            }
+        }
+    }
+
+    // MARK: - Communications Section
+
+    private var communicationsSection: some View {
+        VStack(spacing: 8) {
+            AdminSectionHeader(title: "COMMUNICATIONS")
+
+            Button { showingProgramMessage = true } label: {
+                AdminPillRow(icon: "paperplane.fill", iconColor: .blue, title: "Send Message")
+            }
+        }
+    }
+
     // MARK: - Reports Section
 
     private var reportsSection: some View {
         VStack(spacing: 8) {
             AdminSectionHeader(title: "REPORTS")
 
-            NavigationLink { AttestationDashboardView() } label: {
-                AdminPillRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Attestation Dashboard", statusBadge: pendingCases > 0 ? "\(pendingCases) pending" : nil, statusColor: .orange)
-            }
-
             NavigationLink { AdminCaseLogView() } label: {
-                AdminPillRow(icon: "doc.text.fill", iconColor: .blue, title: "Case Log", subtitle: "\(totalCases) cases")
+                AdminPillRow(icon: "doc.text.fill", iconColor: .blue, title: "Case Log")
             }
 
             NavigationLink { ProcedureCountsView() } label: {
@@ -323,10 +369,6 @@ struct AdminDashboardView: View {
 
             NavigationLink { ReportsByFellowView() } label: {
                 AdminPillRow(icon: "person.2.fill", iconColor: .blue, title: "Reports by Fellow")
-            }
-
-            NavigationLink { EvaluationSummaryView() } label: {
-                AdminPillRow(icon: "star.fill", iconColor: .yellow, title: "Evaluation Summary")
             }
 
             NavigationLink { ExportDataView() } label: {
@@ -343,18 +385,6 @@ struct AdminDashboardView: View {
 
             Button { showingInviteCodes = true } label: {
                 AdminPillRow(icon: "qrcode", iconColor: .purple, title: "Manage Invite Codes")
-            }
-        }
-    }
-
-    // MARK: - Communications Section
-
-    private var communicationsSection: some View {
-        VStack(spacing: 8) {
-            AdminSectionHeader(title: "COMMUNICATIONS")
-
-            Button { showingProgramMessage = true } label: {
-                AdminPillRow(icon: "paperplane.fill", iconColor: .blue, title: "Send Message")
             }
         }
     }
@@ -398,7 +428,7 @@ struct AdminDashboardView: View {
                 AdminPillRow(icon: "trash.fill", iconColor: .red, title: "Clear All Cases & Attestations", subtitle: "\(totalCases) cases", showChevron: false)
             }
 
-            Text("Dev program includes: 3 cardiology packs, 3 fellows (Simpsons), 3 attendings, 2 facilities, evaluations enabled, and a custom procedure.")
+            Text("Dev program includes: 3 cardiology packs, 6 fellows (3 active PGY4-6, 3 graduated), 4 attendings, 2 facilities, mandatory evaluations, duty hours, and realistic procedure counts for badge testing.")
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 4)
@@ -456,12 +486,37 @@ struct AdminDashboardView: View {
             modelContext.delete(field)
         }
 
+        // Delete duty hours entries
+        let dutyHoursDescriptor = FetchDescriptor<DutyHoursEntry>()
+        if let dutyHours = try? modelContext.fetch(dutyHoursDescriptor) {
+            for entry in dutyHours {
+                modelContext.delete(entry)
+            }
+        }
+
+        // Delete badges
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>()
+        if let badges = try? modelContext.fetch(badgesDescriptor) {
+            for badge in badges {
+                modelContext.delete(badge)
+            }
+        }
+
+        // Delete case media
+        let mediaDescriptor = FetchDescriptor<CaseMedia>()
+        if let mediaItems = try? modelContext.fetch(mediaDescriptor) {
+            for media in mediaItems {
+                modelContext.delete(media)
+            }
+        }
+
         // Reset program to fresh state
         if let program = currentProgram {
             program.name = ""
             program.institutionName = ""
             program.specialtyPackIds = []
             program.evaluationsEnabled = false
+            program.evaluationsRequired = false
             program.updatedAt = Date()
         }
 
@@ -505,11 +560,14 @@ struct AdminDashboardView: View {
         // Set fellowship specialty to Cardiology
         program.fellowshipSpecialty = .cardiology
 
-        // Enable evaluations with default settings
+        // Enable evaluations with MANDATORY at attestation
         program.evaluationsEnabled = true
+        program.evaluationsRequired = true  // Mandatory evaluations at attestation
         program.updatedAt = Date()
 
-        // Create facilities - track IDs as we create
+        let calendar = Calendar.current
+
+        // Create facilities
         var createdFacilityIds: [UUID] = []
         let facilityNames = [
             ("University Hospital", "UH"),
@@ -527,7 +585,7 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Create admin users - Cindy Crabapple and Lionel Hutz
+        // Create admin users
         let adminData = [
             ("Cindy", "Crabapple", "crabapple@springfield.com"),
             ("Lionel", "Hutz", "hutz@springfield.com")
@@ -550,39 +608,7 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Clean up old admin with wrong email
-        if let oldAdmin = allUsers.first(where: { $0.email == "krabappel@springfield.com" }) {
-            oldAdmin.email = "crabapple@springfield.com"
-            oldAdmin.firstName = "Cindy"
-            oldAdmin.lastName = "Crabapple"
-        }
-
-        // Create fellows (Simpsons) - track IDs as we create
-        var createdFellowIds: [UUID] = []
-        let fellowData = [
-            ("Homer", "Simpson", "homer@springfield.com", 3),
-            ("Marge", "Simpson", "marge@springfield.com", 2),
-            ("Bart", "Simpson", "bart@springfield.com", 1)
-        ]
-        for (first, last, email, year) in fellowData {
-            if let existing = allUsers.first(where: { $0.email == email }) {
-                createdFellowIds.append(existing.id)
-            } else {
-                let fellow = User(
-                    email: email,
-                    firstName: first,
-                    lastName: last,
-                    role: .fellow,
-                    accountMode: .institutional,
-                    programId: program.id,
-                    trainingYear: year
-                )
-                modelContext.insert(fellow)
-                createdFellowIds.append(fellow.id)
-            }
-        }
-
-        // Create attendings - track IDs as we create
+        // Create attendings
         var createdAttendingIds: [UUID] = []
         let attendingData = [
             ("Dr. Nick", "Riviera", "drnick@springfield.com"),
@@ -594,13 +620,11 @@ struct AdminDashboardView: View {
             if let existing = attendings.first(where: { $0.firstName == first && $0.lastName == last }) {
                 createdAttendingIds.append(existing.id)
             } else {
-                // Create Attending record
                 let attending = Attending(firstName: first, lastName: last)
                 attending.programId = program.id
                 modelContext.insert(attending)
                 createdAttendingIds.append(attending.id)
 
-                // Create linked User for login
                 if !allUsers.contains(where: { $0.email == email }) {
                     let user = User(
                         email: email,
@@ -616,298 +640,595 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Create custom category
-        if !customCategories.contains(where: { $0.name == "Custom Procedures" }) {
-            let category = CustomCategory(
-                name: "Custom Procedures",
-                letter: "C",
-                colorHex: "#8B5CF6",
-                programId: program.id
-            )
-            modelContext.insert(category)
+        // =========================================
+        // DELETE EXISTING DEV DATA
+        // =========================================
+        let existingCases = allCases.filter { $0.programId == program.id }
+        for existingCase in existingCases { modelContext.delete(existingCase) }
 
-            // Create custom procedure in that category
-            let customProc = CustomProcedure(
-                title: "Test Procedure",
-                category: .other,
-                programId: program.id,
-                creatorId: nil
-            )
-            customProc.customCategoryId = category.id
-            modelContext.insert(customProc)
+        let badgesDescriptor = FetchDescriptor<BadgeEarned>()
+        if let existingBadges = try? modelContext.fetch(badgesDescriptor) {
+            for badge in existingBadges { modelContext.delete(badge) }
         }
 
-        // Create default evaluation fields if not exist
-        if evaluationFields.isEmpty {
+        let dutyHoursDescriptor = FetchDescriptor<DutyHoursEntry>()
+        if let existingHours = try? modelContext.fetch(dutyHoursDescriptor) {
+            for entry in existingHours where entry.programId == program.id { modelContext.delete(entry) }
+        }
+
+        // Delete existing evaluation responses
+        // (Note: EvaluationResponse would need to be fetched and deleted if the model exists)
+
+        // =========================================
+        // CREATE 3 ACTIVE FELLOWS: PGY4, PGY5, PGY6
+        // =========================================
+        var activeFellowIds: [UUID] = []
+        let activeFellowData: [(first: String, last: String, email: String, pgy: Int)] = [
+            ("Lisa", "Simpson", "lisa@springfield.com", 4),     // PGY4 - Beginner
+            ("Maggie", "Simpson", "maggie@springfield.com", 5), // PGY5 - 249 PCI
+            ("Bart", "Simpson", "bart@springfield.com", 6)      // PGY6 - 299 PCI
+        ]
+
+        for (first, last, email, pgy) in activeFellowData {
+            // Delete existing if present
+            if let existing = allUsers.first(where: { $0.email == email }) {
+                modelContext.delete(existing)
+            }
+
+            let fellow = User(
+                email: email,
+                firstName: first,
+                lastName: last,
+                role: .fellow,
+                accountMode: .institutional,
+                programId: program.id,
+                trainingYear: pgy
+            )
+            modelContext.insert(fellow)
+            activeFellowIds.append(fellow.id)
+        }
+
+        // =========================================
+        // CREATE 3 GRADUATED FELLOWS (Simpson characters with specializations)
+        // =========================================
+        var graduatedFellowIds: [UUID] = []
+        let graduatedFellowData: [(first: String, last: String, email: String, specialty: String)] = [
+            ("Seymour", "Skinner", "skinner@springfield.com", "EP"),        // EP Specialist
+            ("Groundskeeper", "Willie", "willie@springfield.com", "PCI"),   // Coronary Intervention
+            ("Milhouse", "VanHouten", "milhouse@springfield.com", "Echo")   // Noninvasive Cardio
+        ]
+
+        for (first, last, email, _) in graduatedFellowData {
+            if let existing = allUsers.first(where: { $0.email == email }) {
+                modelContext.delete(existing)
+            }
+
+            let fellow = User(
+                email: email,
+                firstName: first,
+                lastName: last,
+                role: .fellow,
+                accountMode: .institutional,
+                programId: program.id,
+                trainingYear: 6  // All graduated at PGY6
+            )
+            fellow.hasGraduated = true
+            fellow.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
+            modelContext.insert(fellow)
+            graduatedFellowIds.append(fellow.id)
+        }
+
+        // Create default evaluation fields if not exist, and capture their IDs for rating generation
+        let programIdForPredicate: UUID? = program.id
+        let existingEvalFieldsDescriptor = FetchDescriptor<EvaluationField>(
+            predicate: #Predicate<EvaluationField> { $0.programId == programIdForPredicate }
+        )
+        let existingEvalFields = (try? modelContext.fetch(existingEvalFieldsDescriptor)) ?? []
+        var evaluationFieldIds: [UUID] = []
+
+        if existingEvalFields.isEmpty {
             let defaultFields: [(title: String, description: String)] = [
-                ("Procedural Competence", "Technical skill execution, proper technique, appropriate equipment handling, and ability to complete procedure safely and efficiently."),
-                ("Clinical Judgment", "Appropriate patient selection, recognition of complications, ability to adapt to unexpected findings, and sound decision-making during the procedure."),
-                ("Documentation", "Accurate, complete, and timely documentation of the procedure, findings, complications, and follow-up plan."),
-                ("Professionalism", "Appropriate communication with team members, respectful patient interactions, and adherence to ethical standards."),
-                ("Communication", "Clear explanation of procedure to patient and family, effective team communication during procedure, and appropriate handoff to receiving team.")
+                ("Procedural Competence", "Technical skill execution and equipment handling."),
+                ("Clinical Judgment", "Patient selection and complication recognition."),
+                ("Documentation", "Accurate and complete procedure documentation."),
+                ("Professionalism", "Communication with team and patients."),
+                ("Communication", "Clear handoffs and patient education.")
             ]
             for (i, fieldInfo) in defaultFields.enumerated() {
                 let field = EvaluationField(
                     title: fieldInfo.title,
                     descriptionText: fieldInfo.description,
-                    fieldType: .rating,  // Use rating type for default fields
+                    fieldType: .rating,
                     isRequired: true,
                     displayOrder: i,
                     programId: program.id,
                     isDefault: true
                 )
                 modelContext.insert(field)
+                evaluationFieldIds.append(field.id)
+            }
+        } else {
+            evaluationFieldIds = existingEvalFields.map { $0.id }
+        }
+
+        try? modelContext.save()
+
+        // =========================================
+        // HELPER FUNCTION: Create attested case with evaluation
+        // =========================================
+        func createAttestedCase(
+            fellowId: UUID,
+            procedureIds: [String],
+            caseDate: Date,
+            caseType: CaseType,
+            notes: String,
+            accessSites: [String] = [],
+            complications: [String] = [],
+            operatorPosition: OperatorPosition = .primary
+        ) {
+            let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+            let attendingId = createdAttendingIds.randomElement()!
+
+            let newCase = CaseEntry(
+                fellowId: fellowId,
+                ownerId: fellowId,
+                attendingId: attendingId,
+                weekBucket: weekBucket,
+                facilityId: createdFacilityIds.randomElement()
+            )
+            newCase.programId = program.id
+            newCase.procedureTagIds = procedureIds
+            newCase.createdAt = caseDate
+            newCase.caseTypeRaw = caseType.rawValue
+            newCase.notes = notes
+            newCase.accessSiteIds = accessSites
+            newCase.complicationIds = complications
+            newCase.operatorPositionRaw = operatorPosition.rawValue
+
+            // Mark as attested
+            newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
+            newCase.attestedAt = caseDate.addingTimeInterval(3600)
+
+            // Add random evaluations (1-5 rating for each field)
+            var evalResponses: [String: String] = [:]
+            for fieldId in evaluationFieldIds {
+                let randomRating = Int.random(in: 3...5)  // Realistic ratings 3-5
+                evalResponses[fieldId.uuidString] = String(randomRating)
+            }
+            if let jsonData = try? JSONEncoder().encode(evalResponses),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                newCase.evaluationResponsesJson = jsonString
+            }
+            newCase.evaluationComment = "Good performance on this case."
+
+            modelContext.insert(newCase)
+        }
+
+        func createPendingCase(
+            fellowId: UUID,
+            procedureIds: [String],
+            caseDate: Date,
+            caseType: CaseType,
+            notes: String,
+            accessSites: [String] = [],
+            complications: [String] = [],
+            operatorPosition: OperatorPosition = .primary
+        ) {
+            let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+            let attendingId = createdAttendingIds.randomElement()!
+
+            let newCase = CaseEntry(
+                fellowId: fellowId,
+                ownerId: fellowId,
+                attendingId: attendingId,
+                weekBucket: weekBucket,
+                facilityId: createdFacilityIds.randomElement()
+            )
+            newCase.programId = program.id
+            newCase.procedureTagIds = procedureIds
+            newCase.createdAt = caseDate
+            newCase.caseTypeRaw = caseType.rawValue
+            newCase.notes = notes
+            newCase.accessSiteIds = accessSites
+            newCase.complicationIds = complications
+            newCase.operatorPositionRaw = operatorPosition.rawValue
+            newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+
+            modelContext.insert(newCase)
+        }
+
+        // =========================================
+        // ACCESS SITES & NOTES
+        // =========================================
+        let pciNotes = ["Successful PCI with DES.", "Complex intervention, good result.", "Elective PCI, no complications."]
+        let cathNotes = ["Diagnostic cath, normal coronaries.", "Moderate disease, medical management.", "Severe 3VD, referred to surgery."]
+        let echoNotes = ["TTE showing preserved EF.", "Stress echo negative for ischemia.", "TEE for structural assessment."]
+        let epNotes = ["EP study completed.", "Successful ablation.", "Device implant, good parameters."]
+
+        // =========================================
+        // PROCEDURE-SPECIFIC ACCESS SITES
+        // =========================================
+        // IC (Diagnostic Cath, PCI) - primarily radial (70%) or femoral (30%)
+        func randomICAccessSites() -> [String] {
+            return Int.random(in: 1...10) <= 7 ? ["Radial"] : ["Femoral"]
+        }
+
+        // EP Ablations - femoral for venous access, sometimes jugular
+        func randomEPAblationAccessSites() -> [String] {
+            return Int.random(in: 1...10) <= 8 ? ["Femoral"] : ["Femoral", "Jugular"]
+        }
+
+        // EP Devices (pacemakers, ICDs) - subclavian or axillary approach
+        func randomEPDeviceAccessSites() -> [String] {
+            let choices: [[String]] = [["Subclavian"], ["Axillary"], ["Subclavian", "Jugular"]]
+            return choices.randomElement()!
+        }
+
+        // =========================================
+        // PROCEDURE-SPECIFIC COMPLICATIONS
+        // =========================================
+        // PCI complications - 5% chance
+        let pciComplications = ["Bleeding", "Vascular Injury", "Hematoma", "MI", "Arrhythmia", "Renal/AKI", "Stroke/TIA"]
+        // Diagnostic cath complications - lighter (access site related)
+        let cathComplications = ["Bleeding", "Vascular Injury", "Hematoma", "Renal/AKI", "Allergic Reaction"]
+        // EP ablation complications
+        let epAblationComplications = ["Tamponade", "Stroke/TIA", "Arrhythmia", "Vascular Injury", "Bleeding", "Hematoma"]
+        // EP device complications
+        let epDeviceComplications = ["Pneumothorax", "Infection", "Hematoma", "Bleeding", "Arrhythmia"]
+
+        // Helper to get random complications with 5% chance
+        func maybeAddComplications(from pool: [String]) -> [String] {
+            if Int.random(in: 1...100) <= 5 {
+                // Pick 1-2 complications
+                let count = Int.random(in: 1...2)
+                return Array(pool.shuffled().prefix(count))
+            }
+            return []
+        }
+
+        // =========================================
+        // PGY4 BEGINNER - Lisa Simpson (few procedures)
+        // Fellowship year 1 (PGY4) - just starting (started 3 months ago)
+        // =========================================
+        let lisaId = activeFellowIds[0]
+
+        // 15 diagnostic caths (spread over 3 months)
+        for i in 0..<15 {
+            let weeksAgo = i / 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+            let isPending = i < 1  // Last 5% pending (1 of 15)
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: cathComplications)
+            if isPending {
+                createPendingCase(fellowId: lisaId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+            } else {
+                createAttestedCase(fellowId: lisaId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
             }
         }
 
-        // Delete existing sample cases first
-        let existingCases = allCases.filter { $0.programId == program.id }
-        for existingCase in existingCases {
-            modelContext.delete(existingCase)
+        // 5 PCI cases
+        for i in 0..<5 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: pciComplications)
+            createAttestedCase(fellowId: lisaId, procedureIds: ["ic-pci-stent"], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
         }
 
-        // Delete existing badges earned
-        let badgesDescriptor = FetchDescriptor<BadgeEarned>()
-        if let existingBadges = try? modelContext.fetch(badgesDescriptor) {
-            for badge in existingBadges {
-                modelContext.delete(badge)
+        // 20 echo cases (noninvasive - no access sites or complications)
+        for i in 0..<20 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
+            let isPending = i < 1
+            let procId = i % 2 == 0 ? "ci-echo-tte" : "ci-echo-stress"
+            if isPending {
+                createPendingCase(fellowId: lisaId, procedureIds: [procId], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+            } else {
+                createAttestedCase(fellowId: lisaId, procedureIds: [procId], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
             }
         }
 
-        // Create 30 sample cases (10 interventional + 10 imaging + 10 EP)
-        let calendar = Calendar.current
-        let icPack = SpecialtyPackCatalog.pack(for: "interventional-cardiology")
-        let invasiveProcedures = icPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
-        let ciPack = SpecialtyPackCatalog.pack(for: "cardiac-imaging")
-        let noninvasiveProcedures = ciPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
-        let epPack = SpecialtyPackCatalog.pack(for: "electrophysiology")
-        let epProcedures = epPack?.categories.flatMap { $0.procedures.map { $0.id } } ?? []
+        // =========================================
+        // PGY5 - Maggie Simpson (249 PCI + scattered procedures)
+        // Fellowship years 1-2 (started 15 months ago)
+        // =========================================
+        let maggieId = activeFellowIds[1]
 
-        // Access sites for IC procedures
-        let icAccessSites: [AccessSite] = [.femoral, .radial, .brachial, .pedal]
-        let operatorPositions: [OperatorPosition] = [.primary, .secondary]
-
-        // Sample interventional case notes
-        let interventionalNotes = [
-            "Successful PCI to mid-LAD with DES. Patient tolerated well. No complications.",
-            "Diagnostic cath showed severe 3VD. Referred to CT surgery for CABG evaluation.",
-            "Right heart cath for pulmonary HTN workup. Mean PA pressure 38mmHg.",
-            "Elective PCI to RCA. Used radial access with 6Fr guide. Good angiographic result.",
-            "Complex bifurcation lesion. Used 2-stent technique with good final result.",
-            "Chronic total occlusion attempt. Achieved antegrade crossing after 90 mins.",
-            "Impella-supported high-risk PCI in patient with EF 20%. No hemodynamic issues.",
-            "STEMI activation - door to balloon 45 minutes. Culprit LAD, good flow restored.",
-            "TAVR for severe AS. Successful valve deployment with minimal paravalvular leak.",
-            "Rotational atherectomy for heavily calcified LAD. Good debulking achieved."
-        ]
-
-        // Sample imaging case notes
-        let imagingNotes = [
-            "TTE showing preserved EF at 60%. No significant valvular disease.",
-            "Stress echo with borderline ischemia in inferior wall. Correlation needed.",
-            "TEE for afib cardioversion. No LAA thrombus identified. Cleared for DCCV.",
-            "Carotid ultrasound showing 50-69% stenosis on right. Medical management.",
-            "Lower extremity venous duplex negative for DVT bilaterally.",
-            "Renal artery duplex showing no significant stenosis. RAS excluded.",
-            "AAA surveillance - stable at 4.2cm. Continue annual monitoring.",
-            "Bubble study positive. PFO identified. Consider closure if cryptogenic stroke.",
-            "Dobutamine stress echo - no inducible ischemia at peak dose.",
-            "Strain imaging showing GLS of -18%. Normal LV function."
-        ]
-
-        // Sample EP case notes
-        let epNotes = [
-            "EP study for syncope workup. No inducible arrhythmias. Plan for ILR.",
-            "Successful SVT ablation. Slow pathway ablation for AVNRT. No recurrence.",
-            "Atrial flutter ablation with bidirectional block achieved. CTI ablated.",
-            "VT ablation in patient with ischemic cardiomyopathy. Good substrate mapping.",
-            "ICD implant for primary prevention. EF 30%, ischemic CM. No complications.",
-            "CRT-D upgrade for worsening heart failure. Successful CS lead placement.",
-            "Pacemaker generator change. Lead impedances stable. Programming optimized.",
-            "Cryoballoon PVI for paroxysmal AFib. All four veins isolated successfully.",
-            "AVNRT ablation with slow pathway modification. No AV block noted.",
-            "Leadless pacemaker implant. Micra placed in RV septum. Good parameters."
-        ]
-
-        if !createdFellowIds.isEmpty && !createdAttendingIds.isEmpty && !createdFacilityIds.isEmpty {
-            // Recent weeks for pending attestation
-            let recentWeeks = 4
-
-            // =====================================
-            // Create 10 Interventional Cardiology cases - ALL pending attestation
-            // =====================================
-            if !invasiveProcedures.isEmpty {
-                for i in 0..<10 {
-                    let weeksAgo = Int.random(in: 0...recentWeeks)
-                    let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
-                    let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
-
-                    let randomFellowId = createdFellowIds.randomElement()!
-                    let attendingId = createdAttendingIds.randomElement()!
-                    let newCase = CaseEntry(
-                        fellowId: randomFellowId,
-                        ownerId: randomFellowId,
-                        attendingId: attendingId,
-                        weekBucket: weekBucket,
-                        facilityId: createdFacilityIds.randomElement()
-                    )
-                    newCase.programId = program.id
-
-                    // Specific procedures for badge earning
-                    switch i {
-                    case 0: newCase.procedureTagIds = ["ic-struct-tavr"]  // TAVR badge
-                    case 1: newCase.procedureTagIds = ["ic-pci-stent"]    // PCI badge
-                    case 2: newCase.procedureTagIds = ["ic-diag-lhc", "ic-diag-coronary"]  // Diagnostic cath
-                    case 3: newCase.procedureTagIds = ["ic-pci-balloon", "ic-pci-stent"]   // Complex PCI
-                    case 4: newCase.procedureTagIds = ["ic-struct-mitraclip"]             // Structural
-                    case 5: newCase.procedureTagIds = ["ic-diag-rhc"]                     // RHC
-                    case 6: newCase.procedureTagIds = ["ic-periph-peripheral"]            // Peripheral
-                    case 7: newCase.procedureTagIds = ["ic-pci-cto"]                      // CTO
-                    case 8: newCase.procedureTagIds = ["ic-pci-rotablator"]               // Atherectomy
-                    default:
-                        let numProcedures = Int.random(in: 1...3)
-                        newCase.procedureTagIds = Array(invasiveProcedures.shuffled().prefix(numProcedures))
-                    }
-
-                    newCase.createdAt = caseDate
-                    newCase.caseTypeRaw = CaseType.invasive.rawValue
-                    newCase.operatorPositionRaw = OperatorPosition.primary.rawValue
-
-                    let numAccessSites = Int.random(in: 1...2)
-                    newCase.accessSiteIds = Array(icAccessSites.shuffled().prefix(numAccessSites)).map { $0.rawValue }
-                    newCase.notes = interventionalNotes[i]
-
-                    // ALL pending for attestation
-                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
-
-                    modelContext.insert(newCase)
-
-                    // Create attestation notification
-                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
-                    let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
-                        SpecialtyPackCatalog.findProcedure(by: tagId)?.title
-                    }
-                    let procedureList = procedureTitles.prefix(3).joined(separator: ", ")
-
-                    let notification = Procedus.Notification(
-                        userId: attendingId,
-                        title: "New Case for Attestation",
-                        message: "\(fellowName) submitted: \(procedureList)",
-                        notificationType: NotificationType.attestationRequested.rawValue,
-                        caseId: newCase.id,
-                        attendingId: attendingId
-                    )
-                    notification.createdAt = caseDate
-                    modelContext.insert(notification)
-                }
+        // 249 PCI cases spread over ~15 months (about 4 per week)
+        for i in 0..<249 {
+            let weeksAgo = i / 4
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 65), to: Date()) ?? Date()
+            let isPending = i < 12  // Last 5% pending (12 of 249)
+            let procId = i % 5 == 0 ? "ic-pci-rotablator" : (i % 3 == 0 ? "ic-pci-dcb" : "ic-pci-stent")
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: pciComplications)
+            if isPending {
+                createPendingCase(fellowId: maggieId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
+            } else {
+                createAttestedCase(fellowId: maggieId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
             }
+        }
 
-            // =====================================
-            // Create 10 Imaging cases - ALL pending attestation
-            // =====================================
-            if !noninvasiveProcedures.isEmpty {
-                for i in 0..<10 {
-                    let weeksAgo = Int.random(in: 0...recentWeeks)
-                    let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
-                    let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+        // 200 diagnostic caths
+        for i in 0..<200 {
+            let weeksAgo = i / 4
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 65), to: Date()) ?? Date()
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: cathComplications)
+            createAttestedCase(fellowId: maggieId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
 
-                    let randomFellowId = createdFellowIds.randomElement()!
-                    let attendingId = createdAttendingIds.randomElement()!
-                    let newCase = CaseEntry(
-                        fellowId: randomFellowId,
-                        ownerId: randomFellowId,
-                        attendingId: attendingId,
-                        weekBucket: weekBucket,
-                        facilityId: createdFacilityIds.randomElement()
-                    )
-                    newCase.programId = program.id
+        // 150 TTE + 50 TEE (noninvasive - no access sites or complications)
+        for i in 0..<150 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 65), to: Date()) ?? Date()
+            createAttestedCase(fellowId: maggieId, procedureIds: ["ci-echo-tte"], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+        }
+        for i in 0..<50 {
+            let weeksAgo = i / 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 65), to: Date()) ?? Date()
+            createAttestedCase(fellowId: maggieId, procedureIds: ["ci-echo-tee"], caseDate: caseDate, caseType: .noninvasive, notes: "TEE for procedure guidance.")
+        }
 
-                    // One imaging procedure per case
-                    newCase.procedureTagIds = [noninvasiveProcedures[i % noninvasiveProcedures.count]]
-                    newCase.createdAt = caseDate
-                    newCase.caseTypeRaw = CaseType.noninvasive.rawValue
-                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
-                    newCase.notes = imagingNotes[i]
+        // 30 EP cases (scattered) - mix of devices and ablations
+        for i in 0..<30 {
+            let weeksAgo = i * 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 65), to: Date()) ?? Date()
+            let procId = ["ep-dev-ppm-dp", "ep-abl-svt", "ep-dx-eps"].randomElement()!
+            let isDevice = procId.contains("dev")
+            let accessSites = isDevice ? randomEPDeviceAccessSites() : randomEPAblationAccessSites()
+            let complications = maybeAddComplications(from: isDevice ? epDeviceComplications : epAblationComplications)
+            createAttestedCase(fellowId: maggieId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: epNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
 
-                    modelContext.insert(newCase)
+        // =========================================
+        // PGY6 - Bart Simpson (299 PCI)
+        // Fellowship years 1-3 (about to graduate)
+        // =========================================
+        let bartId = activeFellowIds[2]
 
-                    // Create attestation notification
-                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
-                    let procedureTitle = SpecialtyPackCatalog.findProcedure(by: newCase.procedureTagIds.first!)?.title ?? "Imaging Study"
-
-                    let notification = Procedus.Notification(
-                        userId: attendingId,
-                        title: "New Case for Attestation",
-                        message: "\(fellowName) submitted: \(procedureTitle)",
-                        notificationType: NotificationType.attestationRequested.rawValue,
-                        caseId: newCase.id,
-                        attendingId: attendingId
-                    )
-                    notification.createdAt = caseDate
-                    modelContext.insert(notification)
-                }
+        // 299 PCI cases spread over ~27 months
+        for i in 0..<299 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 117), to: Date()) ?? Date()
+            let isPending = i < 15  // Last 5% pending
+            let procId = ["ic-pci-stent", "ic-pci-dcb", "ic-pci-rotablator", "ic-pci-ivl"].randomElement()!
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: pciComplications)
+            if isPending {
+                createPendingCase(fellowId: bartId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
+            } else {
+                createAttestedCase(fellowId: bartId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
             }
+        }
 
-            // =====================================
-            // Create 10 EP cases - ALL pending attestation
-            // =====================================
-            if !epProcedures.isEmpty {
-                for i in 0..<10 {
-                    let weeksAgo = Int.random(in: 0...recentWeeks)
-                    let caseDate = calendar.date(byAdding: .weekOfYear, value: -weeksAgo, to: Date()) ?? Date()
-                    let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
+        // 250 diagnostic caths
+        for i in 0..<250 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 117), to: Date()) ?? Date()
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: cathComplications)
+            createAttestedCase(fellowId: bartId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
 
-                    let randomFellowId = createdFellowIds.randomElement()!
-                    let attendingId = createdAttendingIds.randomElement()!
-                    let newCase = CaseEntry(
-                        fellowId: randomFellowId,
-                        ownerId: randomFellowId,
-                        attendingId: attendingId,
-                        weekBucket: weekBucket,
-                        facilityId: createdFacilityIds.randomElement()
-                    )
-                    newCase.programId = program.id
+        // 200 TTE + 60 TEE (noninvasive - no access sites or complications)
+        for i in 0..<200 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 117), to: Date()) ?? Date()
+            createAttestedCase(fellowId: bartId, procedureIds: ["ci-echo-tte"], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+        }
+        for i in 0..<60 {
+            let weeksAgo = i * 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 117), to: Date()) ?? Date()
+            createAttestedCase(fellowId: bartId, procedureIds: ["ci-echo-tee"], caseDate: caseDate, caseType: .noninvasive, notes: "TEE for structural guidance.")
+        }
 
-                    // EP procedures - one or two per case
-                    let numProcedures = Int.random(in: 1...2)
-                    newCase.procedureTagIds = Array(epProcedures.shuffled().prefix(numProcedures))
-                    newCase.createdAt = caseDate
-                    newCase.caseTypeRaw = CaseType.invasive.rawValue
-                    newCase.operatorPositionRaw = operatorPositions.randomElement()?.rawValue
-                    newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
-                    newCase.notes = epNotes[i]
+        // =========================================
+        // GRADUATED FELLOWS WITH COCATS LEVEL 2 SPECIALIZATIONS
+        // =========================================
 
-                    modelContext.insert(newCase)
+        // Skinner - EP Specialist (COCATS Level 2 EP: 100+ procedures)
+        let skinnerId = graduatedFellowIds[0]
+        // EP: 150 ablations + 80 device implants = 230 EP procedures
+        for i in 0..<150 {
+            let weeksAgo = i / 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let procId = ["ep-abl-pvi", "ep-abl-svt", "ep-abl-cti", "ep-abl-avnrt", "ep-abl-vt-idio"].randomElement()!
+            let accessSites = randomEPAblationAccessSites()
+            let complications = maybeAddComplications(from: epAblationComplications)
+            createAttestedCase(fellowId: skinnerId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: "Successful ablation procedure.", accessSites: accessSites, complications: complications)
+        }
+        for i in 0..<80 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let procId = ["ep-dev-ppm-dp", "ep-dev-icd", "ep-dev-crt-d", "ep-dev-leadless"].randomElement()!
+            let accessSites = randomEPDeviceAccessSites()
+            let complications = maybeAddComplications(from: epDeviceComplications)
+            createAttestedCase(fellowId: skinnerId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: "Device implant, good parameters.", accessSites: accessSites, complications: complications)
+        }
+        // Level 2 Echo (150 TTE + 50 TEE) - noninvasive
+        for i in 0..<150 {
+            let weeksAgo = i / 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: skinnerId, procedureIds: ["ci-echo-tte"], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+        }
+        for i in 0..<50 {
+            let weeksAgo = i * 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: skinnerId, procedureIds: ["ci-echo-tee"], caseDate: caseDate, caseType: .noninvasive, notes: "TEE for device guidance.")
+        }
+        // Some diagnostic caths (100)
+        for i in 0..<100 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: cathComplications)
+            createAttestedCase(fellowId: skinnerId, procedureIds: ["ic-dx-lhc"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
 
-                    // Create attestation notification
-                    let fellowName = allUsers.first(where: { $0.id == randomFellowId })?.lastName ?? "Fellow"
-                    let procedureTitles = newCase.procedureTagIds.compactMap { tagId in
-                        SpecialtyPackCatalog.findProcedure(by: tagId)?.title
-                    }
-                    let procedureList = procedureTitles.prefix(2).joined(separator: ", ")
+        // Willie - Coronary Intervention Specialist (COCATS Level 2 PCI: 200+)
+        let willieId = graduatedFellowIds[1]
+        // 280 PCI cases
+        for i in 0..<280 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let procId = ["ic-pci-stent", "ic-pci-rotablator", "ic-pci-ivl", "ic-pci-dcb"].randomElement()!
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: pciComplications)
+            createAttestedCase(fellowId: willieId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
+        // 300 diagnostic caths
+        for i in 0..<300 {
+            let weeksAgo = i / 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: cathComplications)
+            createAttestedCase(fellowId: willieId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
+        // Level 2 Echo - noninvasive
+        for i in 0..<150 {
+            let weeksAgo = i / 2
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: willieId, procedureIds: ["ci-echo-tte"], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+        }
+        for i in 0..<50 {
+            let weeksAgo = i * 3
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: willieId, procedureIds: ["ci-echo-tee"], caseDate: caseDate, caseType: .noninvasive, notes: "TEE for PCI guidance.")
+        }
 
-                    let notification = Procedus.Notification(
-                        userId: attendingId,
-                        title: "New Case for Attestation",
-                        message: "\(fellowName) submitted: \(procedureList)",
-                        notificationType: NotificationType.attestationRequested.rawValue,
-                        caseId: newCase.id,
-                        attendingId: attendingId
-                    )
-                    notification.createdAt = caseDate
-                    modelContext.insert(notification)
-                }
+        // Milhouse - Noninvasive Cardio Specialist (COCATS Level 2 Echo)
+        let milhouseId = graduatedFellowIds[2]
+        // Heavy echo volume: 400 TTE + 100 TEE + 100 stress echo - all noninvasive
+        for i in 0..<400 {
+            let weeksAgo = i / 4
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: milhouseId, procedureIds: ["ci-echo-tte"], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+        }
+        for i in 0..<100 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: milhouseId, procedureIds: ["ci-echo-tee"], caseDate: caseDate, caseType: .noninvasive, notes: "TEE structural assessment.")
+        }
+        for i in 0..<100 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            createAttestedCase(fellowId: milhouseId, procedureIds: ["ci-echo-stress"], caseDate: caseDate, caseType: .noninvasive, notes: "Stress echo negative.")
+        }
+        // Nuclear and CT imaging - noninvasive
+        for i in 0..<120 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let procId = ["ci-nuc-spect", "ci-nuc-pet", "ci-ct-cta"].randomElement()!
+            createAttestedCase(fellowId: milhouseId, procedureIds: [procId], caseDate: caseDate, caseType: .noninvasive, notes: "Advanced imaging study.")
+        }
+        // Minimal invasive (100 caths for level 2)
+        for i in 0..<100 {
+            let weeksAgo = i
+            let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 156), to: Date()) ?? Date()
+            let accessSites = randomICAccessSites()
+            let complications = maybeAddComplications(from: cathComplications)
+            createAttestedCase(fellowId: milhouseId, procedureIds: ["ic-dx-lhc"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+        }
+
+        // =========================================
+        // DUTY HOURS FOR GRADUATED FELLOWS (3 years of fellowship)
+        // =========================================
+        let fellowshipWeeks = 156  // 3 years
+
+        for fellowId in graduatedFellowIds {
+            for weekOffset in 0..<fellowshipWeeks {
+                let weekDate = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: Date()) ?? Date()
+                let weekBucket = weekDate.toWeekBucket()
+                let hours = Double.random(in: 55...75)  // Realistic work hours
+
+                let dutyEntry = DutyHoursEntry(
+                    userId: fellowId,
+                    programId: program.id,
+                    weekBucket: weekBucket,
+                    hours: hours,
+                    notes: nil
+                )
+                modelContext.insert(dutyEntry)
             }
         }
 
         try? modelContext.save()
 
-        // Check and award badges for all fellows (for the attested cases we just created)
-        for fellowId in createdFellowIds {
+        // Add sample images to ~5% of cases for the 3 active fellows
+        addSampleImagesToDevCases(activeFellowIds: activeFellowIds, fellows: [
+            (id: activeFellowIds[0], name: "Lisa Simpson"),
+            (id: activeFellowIds[1], name: "Maggie Simpson"),
+            (id: activeFellowIds[2], name: "Bart Simpson")
+        ])
+
+        // Check and award badges for all fellows
+        let allFellowIds = activeFellowIds + graduatedFellowIds
+        for fellowId in allFellowIds {
             checkAndAwardBadgesForFellow(fellowId, programId: program.id)
         }
 
         devDataPopulated = true
+    }
+
+    private func addSampleImagesToDevCases(activeFellowIds: [UUID], fellows: [(id: UUID, name: String)]) {
+        // Fetch all cases for active fellows
+        let casesDescriptor = FetchDescriptor<CaseEntry>()
+        guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
+
+        // Sample search terms for Teaching Files
+        let teachingLabels = ["Teaching Example", "Interesting Case", "Classic Finding", "Rare Finding", "Good Outcome"]
+        let privateLabels = ["Personal Reference", "Follow-up", "To Review"]
+
+        for fellowInfo in fellows {
+            let fellowCases = allCases.filter { $0.ownerId == fellowInfo.id || $0.fellowId == fellowInfo.id }
+            let caseCount = fellowCases.count
+
+            // Select ~5% of cases to add images (minimum 1 if there are cases)
+            let imageCaseCount = max(1, Int(Double(caseCount) * 0.05))
+            let selectedCases = fellowCases.shuffled().prefix(imageCaseCount)
+
+            for (index, caseEntry) in selectedCases.enumerated() {
+                // Create sample media entry
+                let media = CaseMedia(
+                    caseEntryId: caseEntry.id,
+                    ownerId: fellowInfo.id,
+                    ownerName: fellowInfo.name,
+                    mediaType: .image,
+                    fileName: "sample_image_\(index + 1).jpg",
+                    localPath: "dev_sample_\(UUID().uuidString).jpg"
+                )
+
+                // Set some metadata
+                media.fileSizeBytes = Int.random(in: 500_000...2_000_000)
+                media.contentHash = UUID().uuidString
+                media.width = 1920
+                media.height = 1080
+                media.caseDate = caseEntry.createdAt
+                media.textDetectionRan = true
+                media.textWasDetected = false
+                media.userConfirmedNoPHI = true
+                media.userConfirmedAt = caseEntry.createdAt
+                media.createdAt = caseEntry.createdAt
+                media.updatedAt = caseEntry.createdAt
+
+                // Randomly share some to Teaching Files (~40% shared)
+                let isShared = index % 3 != 0  // Share 2 out of every 3
+                media.isSharedWithFellowship = isShared
+
+                // Add appropriate labels
+                if isShared {
+                    media.searchTerms = [teachingLabels.randomElement()!, teachingLabels.randomElement()!]
+                    media.comment = "Great teaching case example."
+                } else {
+                    media.searchTerms = [privateLabels.randomElement()!]
+                }
+
+                modelContext.insert(media)
+            }
+        }
+
+        try? modelContext.save()
     }
 
     private func checkAndAwardBadgesForFellow(_ fellowId: UUID, programId: UUID) {
@@ -1681,6 +2002,53 @@ struct ManageProgramView: View {
                             }
                         }
                         .pickerStyle(.menu)
+                        .labelsHidden()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                    Divider().padding(.leading, 16)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Earliest PGY Level")
+                                .font(.body)
+                                .foregroundColor(Color(UIColor.label))
+                            Text("First year of fellowship (e.g., PGY4 after 3-year residency)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { program.earliestPGYLevel },
+                            set: { program.earliestPGYLevel = $0; program.updatedAt = Date() }
+                        )) {
+                            ForEach(1...10, id: \.self) { pgy in
+                                Text("PGY\(pgy)").tag(pgy)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                    Divider().padding(.leading, 16)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Allow Simple Duty Hours")
+                                .font(.body)
+                                .foregroundColor(Color(UIColor.label))
+                            Text("When disabled, fellows must use comprehensive shift tracking")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { program.allowSimpleDutyHours },
+                            set: { program.allowSimpleDutyHours = $0; program.updatedAt = Date() }
+                        ))
                         .labelsHidden()
                     }
                     .padding(.horizontal, 16)
@@ -5162,12 +5530,17 @@ struct AttestationDashboardView: View {
     @Query private var allCases: [CaseEntry]
     @Query private var allUsers: [User]
     @Query private var attendings: [Attending]
+    @Query private var evaluationFields: [EvaluationField]
+    @Query private var evaluationSettings: [ProgramEvaluationSettings]
+    @Query private var programs: [Program]
 
     @State private var filterStatus: AttestationStatus? = nil
     @State private var filterFellowId: UUID? = nil
     @State private var filterAttendingId: UUID? = nil
+    @State private var filterAttestorType: String = "all"  // "all", "attending", "proxy"
     @State private var showingProxyAttestation = false
     @State private var caseForProxy: CaseEntry?
+    @State private var selectedProxyRating: Int? = nil
 
     private var pendingCount: Int {
         allCases.filter { $0.attestationStatus == .pending || $0.attestationStatus == .requested }.count
@@ -5194,6 +5567,16 @@ struct AttestationDashboardView: View {
             cases = cases.filter { $0.attendingId == attendingId || $0.supervisorId == attendingId }
         }
 
+        // Filter by attestor type (attending vs proxy)
+        switch filterAttestorType {
+        case "attending":
+            cases = cases.filter { !$0.isProxyAttestation && ($0.attestationStatus == .attested) }
+        case "proxy":
+            cases = cases.filter { $0.isProxyAttestation }
+        default:
+            break // "all" - no additional filter
+        }
+
         return cases.sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -5209,6 +5592,25 @@ struct AttestationDashboardView: View {
         allCases.filter { $0.isProxyAttestation }
     }
 
+    /// Current program
+    private var currentProgram: Program? {
+        programs.first
+    }
+
+    /// Check if evaluations are required for proxy attestation
+    private var evaluationsRequired: Bool {
+        guard let program = currentProgram else { return false }
+        if let settings = evaluationSettings.first(where: { $0.programId == program.id }) {
+            return settings.isEnabled && settings.isRequired
+        }
+        return program.evaluationsEnabled && program.evaluationsRequired
+    }
+
+    /// Active evaluation fields (non-archived rating fields)
+    private var activeRatingFields: [EvaluationField] {
+        evaluationFields.filter { !$0.isArchived && $0.fieldType == .rating }
+    }
+
     var body: some View {
         List {
             statusOverviewSection
@@ -5218,11 +5620,22 @@ struct AttestationDashboardView: View {
         }
         .navigationTitle("Attestation Dashboard")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Proxy Attestation", isPresented: $showingProxyAttestation) {
-            Button("Cancel", role: .cancel) { caseForProxy = nil }
-            Button("Attest") { performProxyAttestation() }
-        } message: {
-            proxyAttestationMessage
+        .sheet(isPresented: $showingProxyAttestation) {
+            ProxyAttestationSheet(
+                caseEntry: caseForProxy,
+                attendings: Array(attendings),
+                evaluationsRequired: evaluationsRequired,
+                selectedRating: $selectedProxyRating,
+                onCancel: {
+                    caseForProxy = nil
+                    selectedProxyRating = nil
+                    showingProxyAttestation = false
+                },
+                onAttest: {
+                    performProxyAttestation()
+                    showingProxyAttestation = false
+                }
+            )
         }
     }
 
@@ -5259,6 +5672,12 @@ struct AttestationDashboardView: View {
                 ForEach(activeAttendings) { attending in
                     Text(attending.name).tag(attending.id as UUID?)
                 }
+            }
+
+            Picker("Attested By", selection: $filterAttestorType) {
+                Text("All").tag("all")
+                Text("Attending").tag("attending")
+                Text("Proxy").tag("proxy")
             }
         } header: {
             Text("Filters")
@@ -5332,19 +5751,151 @@ struct AttestationDashboardView: View {
             caseEntry.attestationStatus = .proxyAttested
             caseEntry.isProxyAttestation = true
             caseEntry.attestedAt = Date()
+
+            // If evaluations required and rating selected, apply to all rating fields
+            if evaluationsRequired, let rating = selectedProxyRating {
+                var responses: [String: String] = [:]
+                for field in activeRatingFields {
+                    responses[field.id.uuidString] = String(rating)
+                }
+                caseEntry.evaluationResponses = responses
+            }
+
             try? modelContext.save()
         }
         caseForProxy = nil
+        selectedProxyRating = nil
+    }
+}
+
+// MARK: - Proxy Attestation Sheet
+
+struct ProxyAttestationSheet: View {
+    let caseEntry: CaseEntry?
+    let attendings: [Attending]
+    let evaluationsRequired: Bool
+    @Binding var selectedRating: Int?
+    let onCancel: () -> Void
+    let onAttest: () -> Void
+
+    private var attendingName: String {
+        guard let caseEntry = caseEntry,
+              let attendingId = caseEntry.attendingId ?? caseEntry.supervisorId,
+              let attending = attendings.first(where: { $0.id == attendingId }) else {
+            return "the attending"
+        }
+        return attending.name
     }
 
-    private var proxyAttestationMessage: Text {
-        if let caseEntry = caseForProxy,
-           let attendingId = caseEntry.attendingId ?? caseEntry.supervisorId,
-           let attending = attendings.first(where: { $0.id == attendingId }) {
-            return Text("I have proxy authorization from \(attending.name) to attest this case.")
-        } else {
-            return Text("Are you sure you want to attest this case by proxy?")
+    private var canAttest: Bool {
+        if evaluationsRequired {
+            return selectedRating != nil
         }
+        return true
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 50))
+                        .foregroundStyle(.blue)
+
+                    Text("Proxy Attestation")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    Text("I have proxy authorization from \(attendingName) to attest this case.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal)
+                }
+                .padding(.top, 24)
+
+                // Evaluation rating (if required)
+                if evaluationsRequired {
+                    VStack(spacing: 12) {
+                        Text("Overall Evaluation")
+                            .font(.headline)
+
+                        Text("Select a rating to apply to all evaluation metrics for this case.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 12) {
+                            ForEach(1...5, id: \.self) { rating in
+                                Button {
+                                    selectedRating = rating
+                                } label: {
+                                    Text("\(rating)")
+                                        .font(.title2)
+                                        .fontWeight(.semibold)
+                                        .frame(width: 50, height: 50)
+                                        .background(selectedRating == rating ? Color.blue : Color(UIColor.tertiarySystemFill))
+                                        .foregroundStyle(selectedRating == rating ? .white : .primary)
+                                        .cornerRadius(10)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Text("1 = Needs Improvement")
+                                .font(.caption2)
+                            Spacer()
+                            Text("5 = Excellent")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+                    }
+                    .padding()
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                }
+
+                Spacer()
+
+                // Action buttons
+                VStack(spacing: 12) {
+                    Button {
+                        onAttest()
+                    } label: {
+                        Text("Attest Case")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(canAttest ? Color.blue : Color.gray.opacity(0.3))
+                            .foregroundStyle(.white)
+                            .cornerRadius(12)
+                    }
+                    .disabled(!canAttest)
+
+                    Button {
+                        onCancel()
+                    } label: {
+                        Text("Cancel")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -5462,9 +6013,44 @@ struct AdminCaseLogView: View {
     @State private var filterStatus: String = "all"
     @State private var selectedFellowId: UUID? = nil
     @State private var selectedFacilityId: UUID? = nil
+    @State private var selectedDateRange: ProcedusAnalyticsRange = .allTime
+    @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var customEndDate: Date = Date()
+
+    private var dateFilteredCases: [CaseEntry] {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch selectedDateRange {
+        case .week:
+            let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            return allCases.filter { $0.createdAt >= weekStart }
+        case .last30Days:
+            let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
+            return allCases.filter { $0.createdAt >= thirtyDaysAgo }
+        case .monthToDate:
+            let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            return allCases.filter { $0.createdAt >= monthStart }
+        case .yearToDate:
+            let yearStart = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+            return allCases.filter { $0.createdAt >= yearStart }
+        case .academicYearToDate:
+            // Academic year starts July 1
+            let year = calendar.component(.month, from: now) >= 7 ? calendar.component(.year, from: now) : calendar.component(.year, from: now) - 1
+            let academicYearStart = calendar.date(from: DateComponents(year: year, month: 7, day: 1)) ?? now
+            return allCases.filter { $0.createdAt >= academicYearStart }
+        case .pgy:
+            // Show all time for PGY - grouped by year elsewhere
+            return allCases
+        case .allTime:
+            return allCases
+        case .custom:
+            return allCases.filter { $0.createdAt >= customStartDate && $0.createdAt <= customEndDate }
+        }
+    }
 
     private var filteredCases: [CaseEntry] {
-        var cases = allCases
+        var cases = dateFilteredCases
 
         // Filter by status
         switch filterStatus {
@@ -5563,6 +6149,41 @@ struct AdminCaseLogView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
 
+                // Date range filter
+                HStack(spacing: 12) {
+                    Menu {
+                        ForEach(ProcedusAnalyticsRange.allCases) { range in
+                            Button(range.rawValue) { selectedDateRange = range }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "calendar")
+                                .font(.caption)
+                            Text(selectedDateRange.rawValue)
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(20)
+                    }
+
+                    if selectedDateRange == .custom {
+                        DatePicker("", selection: $customStartDate, displayedComponents: .date)
+                            .labelsHidden()
+                        Text("-")
+                            .foregroundColor(.secondary)
+                        DatePicker("", selection: $customEndDate, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+
                 // Cases count
                 HStack {
                     Text("\(filteredCases.count) Cases")
@@ -5605,7 +6226,7 @@ struct AdminCaseLogView: View {
             .padding(.bottom, 32)
         }
         .background(Color(UIColor.systemBackground))
-        .navigationTitle("Procedure Log")
+        .navigationTitle("Case Log")
         .navigationBarTitleDisplayMode(.large)
     }
 
@@ -5850,18 +6471,34 @@ struct FellowProcedureReportView: View {
         allCases.filter { $0.fellowId == fellow.id || $0.ownerId == fellow.id }
     }
 
-    private var procedureCounts: [(String, Int)] {
-        var counts: [String: Int] = [:]
+    /// Procedures grouped by category
+    private var proceduresByCategory: [(category: ProcedureCategory, procedures: [(name: String, count: Int)])] {
+        var categoryProcedures: [ProcedureCategory: [String: Int]] = [:]
+
         for caseEntry in fellowCases {
             for tagId in caseEntry.procedureTagIds {
-                if let procedure = SpecialtyPackCatalog.findProcedure(by: tagId) {
-                    counts[procedure.title, default: 0] += 1
+                if let procedure = SpecialtyPackCatalog.findProcedure(by: tagId),
+                   let category = SpecialtyPackCatalog.findCategory(for: tagId) {
+                    if categoryProcedures[category] == nil {
+                        categoryProcedures[category] = [:]
+                    }
+                    categoryProcedures[category]?[procedure.title, default: 0] += 1
                 } else if tagId.hasPrefix("custom-") {
-                    counts["Custom Procedure", default: 0] += 1
+                    let customCategory = ProcedureCategory.other
+                    if categoryProcedures[customCategory] == nil {
+                        categoryProcedures[customCategory] = [:]
+                    }
+                    categoryProcedures[customCategory]?["Custom Procedure", default: 0] += 1
                 }
             }
         }
-        return counts.sorted { $0.value > $1.value }
+
+        return categoryProcedures.map { (category, procs) in
+            let sortedProcs = procs.map { (name: $0.key, count: $0.value) }
+                .sorted { $0.count > $1.count }
+            return (category: category, procedures: sortedProcs)
+        }
+        .sorted { $0.procedures.reduce(0) { $0 + $1.count } > $1.procedures.reduce(0) { $0 + $1.count } }
     }
 
     var body: some View {
@@ -5875,26 +6512,35 @@ struct FellowProcedureReportView: View {
                 Text("Summary")
             }
 
-            Section {
-                if procedureCounts.isEmpty {
+            if proceduresByCategory.isEmpty {
+                Section {
                     Text("No procedures logged")
                         .font(.subheadline)
                         .foregroundColor(Color(UIColor.secondaryLabel))
                         .italic()
-                } else {
-                    ForEach(procedureCounts, id: \.0) { (name, count) in
+                } header: {
+                    Text("Procedure Counts")
+                }
+            } else {
+                ForEach(proceduresByCategory, id: \.category) { categoryGroup in
+                    Section {
+                        ForEach(categoryGroup.procedures, id: \.name) { proc in
+                            HStack {
+                                Text(proc.name)
+                                    .font(.subheadline)
+                                Spacer()
+                                Text("\(proc.count)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                        }
+                    } header: {
                         HStack {
-                            Text(name)
-                                .font(.subheadline)
-                            Spacer()
-                            Text("\(count)")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                            CategoryBubble(category: categoryGroup.category, size: 16)
+                            Text(categoryGroup.category.rawValue)
                         }
                     }
                 }
-            } header: {
-                Text("Procedure Counts")
             }
         }
         .navigationTitle(fellow.displayName)
@@ -5902,7 +6548,7 @@ struct FellowProcedureReportView: View {
     }
 }
 
-// MARK: - Evaluation Summary View
+// MARK: - Evaluation Dashboard View
 
 struct EvaluationSummaryView: View {
     @Query private var allUsers: [User]
@@ -5913,12 +6559,43 @@ struct EvaluationSummaryView: View {
     @State private var sortOption: EvaluationSortOption = .fellowName
     @State private var filterPGY: Int? = nil
     @State private var showingFilters = false
+    @State private var selectedDateRange: ProcedusAnalyticsRange = .allTime
+    @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var customEndDate: Date = Date()
 
     enum EvaluationSortOption: String, CaseIterable {
         case fellowName = "Name"
         case pgyYear = "PGY Year"
         case evaluationCount = "Evaluations"
         case averageRating = "Avg Rating"
+    }
+
+    private var dateFilteredCases: [CaseEntry] {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch selectedDateRange {
+        case .week:
+            let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            return allCases.filter { $0.createdAt >= weekStart }
+        case .last30Days:
+            let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
+            return allCases.filter { $0.createdAt >= thirtyDaysAgo }
+        case .monthToDate:
+            let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            return allCases.filter { $0.createdAt >= monthStart }
+        case .yearToDate:
+            let yearStart = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+            return allCases.filter { $0.createdAt >= yearStart }
+        case .academicYearToDate:
+            let year = calendar.component(.month, from: now) >= 7 ? calendar.component(.year, from: now) : calendar.component(.year, from: now) - 1
+            let academicYearStart = calendar.date(from: DateComponents(year: year, month: 7, day: 1)) ?? now
+            return allCases.filter { $0.createdAt >= academicYearStart }
+        case .pgy, .allTime:
+            return allCases
+        case .custom:
+            return allCases.filter { $0.createdAt >= customStartDate && $0.createdAt <= customEndDate }
+        }
     }
 
     private var fellows: [User] {
@@ -5943,7 +6620,7 @@ struct EvaluationSummaryView: View {
     }
 
     private func casesWithEvaluations(for fellow: User) -> [CaseEntry] {
-        allCases.filter {
+        dateFilteredCases.filter {
             ($0.fellowId == fellow.id || $0.ownerId == fellow.id) &&
             (!$0.evaluationResponses.isEmpty || !$0.evaluationChecks.isEmpty)
         }
@@ -6003,6 +6680,30 @@ struct EvaluationSummaryView: View {
                     }
                     .pickerStyle(.menu)
                 }
+
+                HStack {
+                    Text("Date Range")
+                        .font(.subheadline)
+                        .foregroundColor(Color(UIColor.secondaryLabel))
+                    Spacer()
+                    Picker("Date", selection: $selectedDateRange) {
+                        ForEach(ProcedusAnalyticsRange.allCases) { range in
+                            Text(range.rawValue).tag(range)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                if selectedDateRange == .custom {
+                    HStack {
+                        DatePicker("From", selection: $customStartDate, displayedComponents: .date)
+                            .labelsHidden()
+                        Text("-")
+                            .foregroundColor(.secondary)
+                        DatePicker("To", selection: $customEndDate, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                }
             }
 
             // Fellows List
@@ -6056,7 +6757,7 @@ struct EvaluationSummaryView: View {
                 }
             }
         }
-        .navigationTitle("Evaluation Summary")
+        .navigationTitle("Evaluation Dashboard")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -6515,24 +7216,90 @@ struct ExportDataView: View {
     @Query private var evaluationFields: [EvaluationField]
     @Query(filter: #Predicate<CustomAccessSite> { !$0.isArchived }) private var customAccessSites: [CustomAccessSite]
     @Query(filter: #Predicate<CustomComplication> { !$0.isArchived }) private var customComplications: [CustomComplication]
+    @Query(sort: \DutyHoursEntry.weekBucket, order: .reverse) private var allDutyHours: [DutyHoursEntry]
 
     @State private var exportType = "log"
     @State private var exportFormat = "csv"
     @State private var selectedFellowId: UUID? = nil
+    @State private var selectedRange: ProcedusAnalyticsRange = .allTime
+    @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var customEndDate: Date = Date()
 
     private var fellows: [User] {
         allUsers.filter { $0.role == .fellow }.sorted { $0.displayName < $1.displayName }
+    }
+
+    private var dateRangeString: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+
+        switch selectedRange {
+        case .week:
+            return "This Week"
+        case .last30Days:
+            return "Last 30 Days"
+        case .monthToDate:
+            return "Month to Date"
+        case .yearToDate:
+            return "Year to Date"
+        case .academicYearToDate:
+            return "Academic Year to Date"
+        case .pgy:
+            return "PGY Year"
+        case .allTime:
+            return "All Time"
+        case .custom:
+            return "\(formatter.string(from: customStartDate)) - \(formatter.string(from: customEndDate))"
+        }
+    }
+
+    private func dateRange(for range: ProcedusAnalyticsRange) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch range {
+        case .week:
+            let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+            return (startOfWeek, now)
+        case .last30Days:
+            let start = calendar.date(byAdding: .day, value: -30, to: now) ?? now
+            return (start, now)
+        case .monthToDate:
+            let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            return (startOfMonth, now)
+        case .yearToDate:
+            let startOfYear = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+            return (startOfYear, now)
+        case .academicYearToDate:
+            // Academic year starts July 1
+            let year = calendar.component(.year, from: now)
+            let month = calendar.component(.month, from: now)
+            let academicYearStart = month >= 7 ? year : year - 1
+            let startComponents = DateComponents(year: academicYearStart, month: 7, day: 1)
+            let start = calendar.date(from: startComponents) ?? now
+            return (start, now)
+        case .pgy, .allTime:
+            return (Date.distantPast, now)
+        case .custom:
+            return (customStartDate, customEndDate)
+        }
+    }
+
+    private func filterCasesByDateRange(_ cases: [CaseEntry]) -> [CaseEntry] {
+        let range = dateRange(for: selectedRange)
+        return cases.filter { $0.createdAt >= range.start && $0.createdAt <= range.end }
     }
 
     var body: some View {
         List {
             Section {
                 Picker("Export Type", selection: $exportType) {
-                    Text("Procedure Log").tag("log")
+                    Text("Case Log").tag("log")
                     Text("Procedure Counts").tag("counts")
-                    Text("Evaluations").tag("evaluations")
+                    Text("Evaluation Summary").tag("evaluations")
+                    Text("Evaluation Log").tag("evalLog")
+                    Text("Duty Hours").tag("dutyHours")
                 }
-                .pickerStyle(.segmented)
             } header: {
                 Text("Export Type")
             } footer: {
@@ -6542,10 +7309,31 @@ struct ExportDataView: View {
                 case "counts":
                     Text("Totals grouped by procedure and category.")
                 case "evaluations":
-                    Text("Summary of attending evaluations and feedback.")
+                    Text("Summary of attending evaluations with averages and feedback.")
+                case "evalLog":
+                    Text("Case-by-case evaluation log showing who performed each evaluation (Attending vs Proxy).")
+                case "dutyHours":
+                    Text("Weekly duty hours logged by fellows.")
                 default:
                     Text("")
                 }
+            }
+
+            Section {
+                Picker("Date Range", selection: $selectedRange) {
+                    ForEach(ProcedusAnalyticsRange.allCases.filter { $0 != .pgy }, id: \.self) { range in
+                        Text(range.rawValue).tag(range)
+                    }
+                }
+
+                if selectedRange == .custom {
+                    DatePicker("Start Date", selection: $customStartDate, displayedComponents: .date)
+                    DatePicker("End Date", selection: $customEndDate, displayedComponents: .date)
+                }
+            } header: {
+                Text("Date Range")
+            } footer: {
+                Text("Filter exported data to the selected time period.")
             }
 
             Section {
@@ -6562,7 +7350,7 @@ struct ExportDataView: View {
                 Button {
                     exportAll()
                 } label: {
-                    Label("Export All Fellows", systemImage: "arrow.down.doc.fill")
+                    Label("Export All Fellows (\(dateRangeString))", systemImage: "arrow.down.doc.fill")
                         .font(.subheadline)
                         .foregroundColor(.blue)
                 }
@@ -6600,7 +7388,8 @@ struct ExportDataView: View {
     }
 
     private func exportForFellow(_ fellow: User) {
-        let fellowCases = allCases.filter { $0.fellowId == fellow.id || $0.ownerId == fellow.id }
+        let allFellowCases = allCases.filter { $0.fellowId == fellow.id || $0.ownerId == fellow.id }
+        let fellowCases = filterCasesByDateRange(allFellowCases)
         let safeName = fellow.displayName.replacingOccurrences(of: " ", with: "_")
         var url: URL?
 
@@ -6613,7 +7402,7 @@ struct ExportDataView: View {
             case "excel":
                 url = ExportService.shared.exportToExcel(rows: rows, filename: "\(safeName)_log")
             case "pdf":
-                url = ExportService.shared.exportToPDF(rows: rows, fellowName: fellow.displayName, title: "Procedure Log")
+                url = ExportService.shared.exportToPDF(rows: rows, fellowName: fellow.displayName, title: "Procedure Log (\(dateRangeString))")
             default: break
             }
 
@@ -6623,14 +7412,14 @@ struct ExportDataView: View {
             case "csv":
                 url = ExportService.shared.exportProcedureCountsToCSV(rows: rows, filename: "\(safeName)_counts")
             case "excel":
-                url = ExportService.shared.exportProcedureCountsToExcel(rows: rows, fellowName: fellow.displayName, totalCases: fellowCases.count, dateRange: "All Time")
+                url = ExportService.shared.exportProcedureCountsToExcel(rows: rows, fellowName: fellow.displayName, totalCases: fellowCases.count, dateRange: dateRangeString)
             case "pdf":
-                url = ExportService.shared.exportProcedureCountsToPDF(rows: rows, fellowName: fellow.displayName, dateRange: "All Time")
+                url = ExportService.shared.exportProcedureCountsToPDF(rows: rows, fellowName: fellow.displayName, dateRange: dateRangeString)
             default: break
             }
 
         case "evaluations":
-            let exportData = buildEvaluationExportData(for: fellowCases, fellowName: fellow.displayName)
+            let exportData = buildEvaluationExportData(for: fellowCases, fellowName: fellow.displayName, dateRange: dateRangeString)
             switch exportFormat {
             case "csv":
                 url = ExportService.shared.exportEvaluationSummaryToCSV(exportData, filename: "\(safeName)_evaluations.csv")
@@ -6638,6 +7427,30 @@ struct ExportDataView: View {
                 url = ExportService.shared.exportEvaluationSummaryToExcel(exportData, filename: "\(safeName)_evaluations.xls")
             case "pdf":
                 url = ExportService.shared.exportEvaluationSummaryToPDF(exportData, filename: "\(safeName)_evaluations.pdf")
+            default: break
+            }
+
+        case "evalLog":
+            let rows = buildEvaluationLogRows(for: fellowCases, fellowName: fellow.displayName)
+            switch exportFormat {
+            case "csv":
+                url = ExportService.shared.exportEvaluationLogToCSV(rows: rows, filename: "\(safeName)_eval_log")
+            case "excel":
+                url = ExportService.shared.exportEvaluationLogToExcel(rows: rows, fellowName: fellow.displayName, dateRange: dateRangeString)
+            case "pdf":
+                url = ExportService.shared.exportEvaluationLogToPDF(rows: rows, fellowName: fellow.displayName, dateRange: dateRangeString)
+            default: break
+            }
+
+        case "dutyHours":
+            let rows = buildDutyHoursRows(for: fellow)
+            switch exportFormat {
+            case "csv":
+                url = ExportService.shared.exportDutyHoursToCSV(rows: rows, filename: "\(safeName)_duty_hours")
+            case "excel":
+                url = ExportService.shared.exportDutyHoursToExcel(rows: rows, fellowName: fellow.displayName, dateRange: dateRangeString)
+            case "pdf":
+                url = ExportService.shared.exportDutyHoursToPDF(rows: rows, fellowName: fellow.displayName, dateRange: dateRangeString)
             default: break
             }
 
@@ -6717,7 +7530,7 @@ struct ExportDataView: View {
             }
     }
 
-    private func buildEvaluationExportData(for cases: [CaseEntry], fellowName: String) -> ExportService.EvaluationExportData {
+    private func buildEvaluationExportData(for cases: [CaseEntry], fellowName: String, dateRange: String = "All Time") -> ExportService.EvaluationExportData {
         var metrics: [ExportService.EvaluationExportData.FieldMetric] = []
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
@@ -6776,11 +7589,96 @@ struct ExportDataView: View {
 
         return ExportService.EvaluationExportData(
             fellowName: fellowName,
-            dateRange: "All Time",
+            dateRange: dateRange,
             totalEvaluations: cases.count,
             fieldMetrics: metrics,
             comments: comments
         )
+    }
+
+    private func buildEvaluationLogRows(for cases: [CaseEntry], fellowName: String) -> [ExportService.EvaluationLogRow] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+
+        return cases.sorted(by: { $0.createdAt > $1.createdAt }).compactMap { caseEntry in
+            // Only include attested cases
+            guard caseEntry.attestationStatus == .attested || caseEntry.attestationStatus == .proxyAttested else {
+                return nil
+            }
+
+            let attendingName = attendings.first(where: { $0.id == caseEntry.attendingId })?.name ?? "N/A"
+            let attestorName: String
+            if let attestorId = caseEntry.attestorId,
+               let attestor = attendings.first(where: { $0.id == attestorId }) {
+                attestorName = attestor.name
+            } else {
+                attestorName = attendingName
+            }
+
+            let evaluatedBy = caseEntry.isProxyAttestation ? "Proxy (Admin)" : "Attending"
+            let procedures = caseEntry.procedureTagIds.compactMap { SpecialtyPackCatalog.findProcedureTitle(for: $0) }.joined(separator: "; ")
+
+            // Get evaluation ratings
+            var ratings: [String: String] = [:]
+            for field in evaluationFields.sorted(by: { $0.displayOrder < $1.displayOrder }) {
+                if let value = caseEntry.evaluationResponses[field.id.uuidString] {
+                    if field.fieldType == .rating {
+                        ratings[field.title] = value
+                    } else {
+                        ratings[field.title] = value == "true" ? "Yes" : "No"
+                    }
+                }
+            }
+
+            return ExportService.EvaluationLogRow(
+                fellowName: fellowName,
+                caseDate: dateFormatter.string(from: caseEntry.createdAt),
+                attendingName: attendingName,
+                evaluatedBy: evaluatedBy,
+                attestorName: attestorName,
+                procedures: procedures,
+                attestationDate: caseEntry.attestedAt.map { dateFormatter.string(from: $0) } ?? "N/A",
+                comment: caseEntry.evaluationComment ?? "",
+                ratings: ratings
+            )
+        }
+    }
+
+    private func buildDutyHoursRows(for fellow: User) -> [ExportService.DutyHoursRow] {
+        let range = dateRange(for: selectedRange)
+
+        // Filter duty hours entries by fellow and date range
+        let fellowEntries = allDutyHours.filter { entry in
+            guard entry.userId == fellow.id else { return false }
+
+            // Parse week bucket to get the Monday date of that week
+            let weekComponents = entry.weekBucket.split(separator: "-W")
+            guard weekComponents.count == 2,
+                  let year = Int(weekComponents[0]),
+                  let week = Int(weekComponents[1]) else {
+                return true // Include if we can't parse
+            }
+
+            let calendar = Calendar(identifier: .iso8601)
+            var dateComponents = DateComponents()
+            dateComponents.yearForWeekOfYear = year
+            dateComponents.weekOfYear = week
+            dateComponents.weekday = 2 // Monday
+            guard let weekDate = calendar.date(from: dateComponents) else {
+                return true
+            }
+
+            return weekDate >= range.start && weekDate <= range.end
+        }
+
+        return fellowEntries.sorted(by: { $0.weekBucket > $1.weekBucket }).map { entry in
+            ExportService.DutyHoursRow(
+                weekBucket: entry.weekBucket,
+                weekLabel: entry.weekBucket.toWeekTimeframeLabel(),
+                hours: entry.hours,
+                notes: entry.notes ?? ""
+            )
+        }
     }
 }
 

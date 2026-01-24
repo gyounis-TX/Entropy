@@ -42,6 +42,7 @@ struct LogView: View {
     @Query private var notifications: [Notification]
     @Query private var facilities: [TrainingFacility]
     @Query private var customProcedures: [CustomProcedure]
+    @Query private var allMedia: [CaseMedia]
     
     // Get selected fellow ID from settings
     @State private var showingNotifications = false
@@ -108,6 +109,14 @@ struct LogView: View {
         currentProgram?.specialtyPackIds.contains("cardiac-imaging") == true
     }
 
+    private var hasInterventionalCardiology: Bool {
+        currentProgram?.specialtyPackIds.contains("interventional-cardiology") == true
+    }
+
+    private var hasElectrophysiology: Bool {
+        currentProgram?.specialtyPackIds.contains("electrophysiology") == true
+    }
+
     private var shouldShowCaseTypeFilter: Bool {
         guard let program = currentProgram else { return false }
         let hasOtherCardiology = program.specialtyPackIds.contains("interventional-cardiology") || program.specialtyPackIds.contains("electrophysiology")
@@ -116,6 +125,11 @@ struct LogView: View {
 
     private var casesForSelectedWeek: [CaseEntry] {
         myCases.filter { $0.weekBucket == selectedWeek }
+    }
+
+    /// Set of case IDs that have media attached
+    private var caseIdsWithMedia: Set<UUID> {
+        Set(allMedia.map { $0.caseEntryId })
     }
 
     private var casesForSelectedRange: [CaseEntry] {
@@ -158,10 +172,15 @@ struct LogView: View {
                 }
                 // For legacy cases without case type, infer from procedures
                 let hasCardiacImagingOnly = caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("ci-") }
-                if caseTypeFilter == .noninvasive {
+                let hasEPOnly = caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("ep-") }
+
+                switch caseTypeFilter {
+                case .noninvasive:
                     return hasCardiacImagingOnly
-                } else {
-                    return !hasCardiacImagingOnly
+                case .ep:
+                    return hasEPOnly
+                case .invasive:
+                    return !hasCardiacImagingOnly && !hasEPOnly
                 }
             }
         }
@@ -310,22 +329,44 @@ struct LogView: View {
 
     private var caseTypeFilterSection: some View {
         HStack(spacing: 4) {
-            // Invasive button
-            Button {
-                selectedCaseTypeFilter = .invasive
-            } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 10))
-                    Text("Invasive")
-                        .font(.caption)
-                        .fontWeight(selectedCaseTypeFilter == .invasive ? .semibold : .regular)
+            // Invasive button (only show if IC pack enabled)
+            if hasInterventionalCardiology {
+                Button {
+                    selectedCaseTypeFilter = .invasive
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.system(size: 10))
+                        Text("Invasive")
+                            .font(.caption)
+                            .fontWeight(selectedCaseTypeFilter == .invasive ? .semibold : .regular)
+                    }
+                    .foregroundColor(selectedCaseTypeFilter == .invasive ? .white : Color(UIColor.label))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(selectedCaseTypeFilter == .invasive ? Color.red : Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(6)
                 }
-                .foregroundColor(selectedCaseTypeFilter == .invasive ? .white : Color(UIColor.label))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(selectedCaseTypeFilter == .invasive ? Color.red : Color(UIColor.tertiarySystemFill))
-                .cornerRadius(6)
+            }
+
+            // EP button (only show if EP pack enabled)
+            if hasElectrophysiology {
+                Button {
+                    selectedCaseTypeFilter = .ep
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "bolt.heart.fill")
+                            .font(.system(size: 10))
+                        Text("EP")
+                            .font(.caption)
+                            .fontWeight(selectedCaseTypeFilter == .ep ? .semibold : .regular)
+                    }
+                    .foregroundColor(selectedCaseTypeFilter == .ep ? .white : Color(UIColor.label))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(selectedCaseTypeFilter == .ep ? Color.green : Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(6)
+                }
             }
 
             // Noninvasive button
@@ -473,7 +514,7 @@ struct LogView: View {
     private var caseList: some View {
         List {
             ForEach(casesForSelectedRange) { caseEntry in
-                CaseRowView(caseEntry: caseEntry, attendings: attendings, customProcedures: customProcedures)
+                CaseRowView(caseEntry: caseEntry, attendings: attendings, customProcedures: customProcedures, hasMedia: caseIdsWithMedia.contains(caseEntry.id))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if caseEntry.attestationStatus == .rejected {
@@ -570,6 +611,9 @@ struct CaseRowView: View {
     let caseEntry: CaseEntry
     let attendings: [Attending]
     var customProcedures: [CustomProcedure] = []
+    var hasMedia: Bool = false
+
+    @State private var showingProcedurePopover = false
 
     /// Check if this is a noninvasive case (all procedures from cardiac imaging)
     private var isNoninvasiveCase: Bool {
@@ -657,20 +701,38 @@ struct CaseRowView: View {
                 }
                 #endif
                 
-                // Category Bubbles - inline
-                ForEach(categoryBubbles.prefix(3), id: \.rawValue) { category in
-                    CategoryBubble(category: category, size: 20)
+                // Category Bubbles - inline (tappable for procedure list)
+                HStack(spacing: 4) {
+                    ForEach(categoryBubbles.prefix(3), id: \.rawValue) { category in
+                        CategoryBubble(category: category, size: 20)
+                    }
+
+                    // Show +N if more than 3 categories
+                    if categoryBubbles.count > 3 {
+                        Text("+\(categoryBubbles.count - 3)")
+                            .font(.caption2)
+                            .foregroundColor(Color(UIColor.secondaryLabel))
+                    }
                 }
-                
-                // Show +N if more than 3 categories
-                if categoryBubbles.count > 3 {
-                    Text("+\(categoryBubbles.count - 3)")
-                        .font(.caption2)
-                        .foregroundColor(Color(UIColor.secondaryLabel))
+                .onTapGesture {
+                    showingProcedurePopover = true
+                }
+                .popover(isPresented: $showingProcedurePopover) {
+                    ProcedureListPopover(
+                        procedureTagIds: caseEntry.procedureTagIds,
+                        customProcedures: customProcedures
+                    )
                 }
                 
                 Spacer()
-                
+
+                // Media indicator
+                if hasMedia {
+                    Image(systemName: "camera.fill")
+                        .font(.caption)
+                        .foregroundColor(ProcedusTheme.primary)
+                }
+
                 // Procedure count
                 Text("\(caseEntry.procedureTagIds.count)")
                     .font(.caption)
@@ -679,7 +741,7 @@ struct CaseRowView: View {
                     .padding(.vertical, 2)
                     .background(Color(UIColor.tertiarySystemFill))
                     .cornerRadius(4)
-                
+
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color(UIColor.tertiaryLabel))

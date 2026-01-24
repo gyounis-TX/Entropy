@@ -18,6 +18,36 @@
             endingLineNumber = "551"
             landmarkName = "createCases(from:fellowId:programId:modelContext:)"
             landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "077D87C7-3C96-4C69-81AB-720495406007 - e7b6a97fcdff0126"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Procedus.ProcedureLogImporter.createCases(from: Swift.Array&lt;Procedus.ImportedCase&gt;, fellowId: Foundation.UUID, programId: Swift.Optional&lt;Foundation.UUID&gt;, modelContext: SwiftData.ModelContext) -&gt; Swift.Int"
+                  moduleName = "Procedus.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/gyounis/Desktop/LUMEN%20INNOVATIONS%20DEVLOPMENT%20FOLDER/Procedus-Unified/Procedus%20U/Procedus/Services/ProcedureLogImporter.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "554"
+                  endingLineNumber = "554">
+               </Location>
+               <Location
+                  uuid = "077D87C7-3C96-4C69-81AB-720495406007 - e7b6a97fcdff0126"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Procedus.ProcedureLogImporter.createCases(from: Swift.Array&lt;Procedus.ImportedCase&gt;, fellowId: Foundation.UUID, programId: Swift.Optional&lt;Foundation.UUID&gt;, modelContext: SwiftData.ModelContext) -&gt; Swift.Int"
+                  moduleName = "Procedus.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/gyounis/Desktop/LUMEN%20INNOVATIONS%20DEVLOPMENT%20FOLDER/Procedus-Unified/Procedus%20U/Procedus/Services/ProcedureLogImporter.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "554"
+                  endingLineNumber = "554">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

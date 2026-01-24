@@ -12,14 +12,12 @@ struct AttendingAnalyticsView: View {
     @Query private var allCases: [CaseEntry]
     @Query private var users: [User]
     @Query private var attendings: [Attending]
-    @Query private var notifications: [Procedus.Notification]
 
     @AppStorage("selectedAttendingId") private var selectedAttendingIdString = ""
 
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
     @State private var selectedTraineeId: UUID? = nil // nil = All Trainees
     @State private var sortBy: AttendingSortOption = .recentFirst
-    @State private var showingNotifications = false
 
     private var currentAttendingId: UUID? {
         UUID(uuidString: selectedAttendingIdString)
@@ -28,44 +26,6 @@ struct AttendingAnalyticsView: View {
     private var currentAttending: Attending? {
         guard let id = currentAttendingId else { return nil }
         return attendings.first { $0.id == id }
-    }
-
-    /// Get all IDs that could be associated with this attending
-    private var attendingRelatedIds: Set<UUID> {
-        guard let attendingId = currentAttendingId else { return [] }
-        var ids: Set<UUID> = [attendingId]
-        if let linkedUserId = currentAttending?.userId {
-            ids.insert(linkedUserId)
-        }
-        if let attending = currentAttending {
-            if let matchingUser = users.first(where: { $0.role == .attending && "\($0.firstName) \($0.lastName)" == attending.name }) {
-                ids.insert(matchingUser.id)
-            }
-        }
-        return ids
-    }
-
-    /// Cases pending attestation by this attending
-    private var pendingCases: [CaseEntry] {
-        guard let attendingId = currentAttendingId else { return [] }
-        return allCases.filter {
-            ($0.attendingId == attendingId || $0.supervisorId == attendingId) &&
-            ($0.attestationStatus == .pending || $0.attestationStatus == .requested)
-        }
-    }
-
-    private var unreadNotificationCount: Int {
-        guard !attendingRelatedIds.isEmpty else { return 0 }
-        // Count unread notifications for any related ID
-        let notificationCount = notifications.filter { notification in
-            !notification.isRead && !notification.isCleared &&
-            (attendingRelatedIds.contains(notification.userId) ||
-             (notification.attendingId != nil && attendingRelatedIds.contains(notification.attendingId!)))
-        }.count
-        // Also count pending attestations as a badge indicator
-        let pendingAttestationCount = pendingCases.count
-        // Return the higher of the two to ensure badge shows when attestations are waiting
-        return max(notificationCount, pendingAttestationCount)
     }
 
     // Cases attested by this attending
@@ -168,20 +128,7 @@ struct AttendingAnalyticsView: View {
                 traineeBreakdownSection
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("Attestation Analytics")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    NotificationBellButton(
-                        role: .attending,
-                        badgeCount: unreadNotificationCount
-                    ) {
-                        showingNotifications = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showingNotifications) {
-                NotificationsSheet(role: .attending, userId: currentAttendingId)
-            }
+            .navigationBarHidden(true)
         }
     }
 

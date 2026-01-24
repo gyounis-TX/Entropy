@@ -1,52 +1,48 @@
-// MyImageLibraryView.swift
+// AttendingImageLibraryView.swift
 // Procedus - Unified
-// Personal media library ("My Images") with search functionality
+// Media library for attendings - view images from cases they attest
 
 import SwiftUI
 import SwiftData
 
-// MARK: - Gallery Tab Selection
+// MARK: - Attending Gallery Tab Selection
 
-enum GalleryTabSelection: String, CaseIterable {
+enum AttendingGalleryTabSelection: String, CaseIterable {
     case myGallery = "My Gallery"
     case teaching = "Teaching Files"
 }
 
-struct MyImageLibraryView: View {
+struct AttendingImageLibraryView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
 
     @Query(sort: \CaseMedia.createdAt, order: .reverse) private var allMedia: [CaseMedia]
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
+    @Query private var allUsers: [User]
     @Query private var attendings: [Attending]
 
-    @State private var selectedTab: GalleryTabSelection = .myGallery
+    @State private var selectedTab: AttendingGalleryTabSelection = .myGallery
     @State private var searchText = ""
     @State private var selectedMedia: CaseMedia?
-    @State private var showingMediaDetail = false
-    @State private var filterOption: MediaFilterOption = .all
+    @State private var filterOption: AttendingMediaFilterOption = .all
 
     // MARK: - Computed Properties
 
-    private var currentUserId: UUID {
-        if appState.isIndividualMode {
-            return getOrCreateIndividualUserId()
-        }
-        return appState.selectedFellowId ?? appState.currentUser?.id ?? UUID()
+    private var currentAttendingId: UUID? {
+        appState.selectedAttendingId ?? appState.currentUser?.id
     }
 
-    private var myMedia: [CaseMedia] {
-        // Show media where either:
-        // 1. ownerId matches current user (direct ownership)
-        // 2. caseEntryId belongs to a case owned by current user (case ownership)
-        let myCaseIds = Set(allCases.filter {
-            $0.ownerId == currentUserId || $0.fellowId == currentUserId
-        }.map { $0.id })
+    /// Cases assigned to this attending for attestation
+    private var myCases: [CaseEntry] {
+        guard let attendingId = currentAttendingId else { return [] }
+        return allCases.filter { $0.attendingId == attendingId || $0.supervisorId == attendingId }
+    }
 
-        return allMedia.filter { media in
-            media.ownerId == currentUserId || myCaseIds.contains(media.caseEntryId)
-        }
+    /// Media from cases assigned to this attending
+    private var myMedia: [CaseMedia] {
+        let myCaseIds = Set(myCases.map { $0.id })
+        return allMedia.filter { myCaseIds.contains($0.caseEntryId) }
     }
 
     private var filteredMedia: [CaseMedia] {
@@ -69,6 +65,7 @@ struct MyImageLibraryView: View {
             let lowercasedSearch = searchText.lowercased()
             result = result.filter { media in
                 media.searchTerms.contains { $0.lowercased().contains(lowercasedSearch) } ||
+                media.ownerName.lowercased().contains(lowercasedSearch) ||
                 media.fileName.lowercased().contains(lowercasedSearch)
             }
         }
@@ -109,10 +106,9 @@ struct MyImageLibraryView: View {
                 }
             }
             .background(Color(UIColor.systemGroupedBackground))
-            .navigationTitle(selectedTab == .teaching ? "Teaching Files" : "My Gallery")
-            .navigationBarHidden(true) // Hide nav bar - unified top bar is in FellowContentWrapper
+            .navigationBarHidden(true)
             .sheet(item: $selectedMedia) { media in
-                MediaFullDetailView(media: media, showCaseLink: true)
+                AttendingMediaDetailView(media: media, users: allUsers, attendings: attendings, allCases: allCases)
             }
         }
     }
@@ -121,7 +117,7 @@ struct MyImageLibraryView: View {
 
     private var galleryTabPicker: some View {
         HStack(spacing: 0) {
-            ForEach(GalleryTabSelection.allCases, id: \.self) { tab in
+            ForEach(AttendingGalleryTabSelection.allCases, id: \.self) { tab in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         selectedTab = tab
@@ -170,11 +166,12 @@ struct MyImageLibraryView: View {
 
     private var myGalleryContent: some View {
         VStack(spacing: 0) {
-            // Search and filter bar
             searchAndFilterBar
 
-            if filteredMedia.isEmpty {
+            if myMedia.isEmpty {
                 emptyStateView
+            } else if filteredMedia.isEmpty {
+                noResultsView
             } else {
                 mediaList
             }
@@ -189,7 +186,7 @@ struct MyImageLibraryView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(ProcedusTheme.textTertiary)
-                TextField("Search by label...", text: $searchText)
+                TextField("Search by label or fellow...", text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button {
@@ -207,7 +204,7 @@ struct MyImageLibraryView: View {
             // Filter pills
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(MediaFilterOption.allCases) { option in
+                    ForEach(AttendingMediaFilterOption.allCases) { option in
                         FilterPill(
                             title: option.displayName,
                             count: countForFilter(option),
@@ -234,15 +231,42 @@ struct MyImageLibraryView: View {
                 .font(.system(size: 60))
                 .foregroundStyle(ProcedusTheme.textTertiary)
 
-            Text("No Images Yet")
+            Text("No Case Images")
                 .font(.title2)
                 .fontWeight(.semibold)
                 .foregroundStyle(ProcedusTheme.textPrimary)
 
-            Text("Images you add to your cases will appear here.\nEdit a case to add media.")
+            Text("Images from cases assigned to you\nwill appear here.")
                 .font(.subheadline)
                 .foregroundStyle(ProcedusTheme.textSecondary)
                 .multilineTextAlignment(.center)
+
+            Spacer()
+        }
+        .padding()
+    }
+
+    private var noResultsView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 40))
+                .foregroundStyle(ProcedusTheme.textTertiary)
+
+            Text("No Results")
+                .font(.title3)
+                .fontWeight(.medium)
+
+            Text("Try a different search term or filter")
+                .font(.subheadline)
+                .foregroundStyle(ProcedusTheme.textSecondary)
+
+            Button("Clear Filters") {
+                searchText = ""
+                filterOption = .all
+            }
+            .buttonStyle(.bordered)
 
             Spacer()
         }
@@ -254,20 +278,13 @@ struct MyImageLibraryView: View {
     private var mediaList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                // Stats header
-                statsHeader
-
-                // Grouped by case
                 ForEach(groupedByCase, id: \.caseEntry?.id) { group in
-                    CaseMediaGroupView(
+                    AttendingCaseMediaGroupView(
                         caseEntry: group.caseEntry,
                         media: group.media,
-                        attendings: Array(attendings),
+                        users: allUsers,
                         onMediaTap: { media in
                             selectedMedia = media
-                        },
-                        onDelete: { media in
-                            deleteMedia(media)
                         }
                     )
                 }
@@ -276,23 +293,9 @@ struct MyImageLibraryView: View {
         }
     }
 
-    // MARK: - Stats Header
-
-    private var statsHeader: some View {
-        HStack(spacing: 24) {
-            StatItem(value: "\(myMedia.count)", label: "Total")
-            StatItem(value: "\(myMedia.filter { $0.mediaType == .image }.count)", label: "Images")
-            StatItem(value: "\(myMedia.filter { $0.mediaType == .video }.count)", label: "Videos")
-            StatItem(value: "\(myMedia.filter { $0.isSharedWithFellowship }.count)", label: "Shared")
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
-    }
-
     // MARK: - Helpers
 
-    private func countForFilter(_ option: MediaFilterOption) -> Int {
+    private func countForFilter(_ option: AttendingMediaFilterOption) -> Int {
         switch option {
         case .all: return myMedia.count
         case .images: return myMedia.filter { $0.mediaType == .image }.count
@@ -300,31 +303,11 @@ struct MyImageLibraryView: View {
         case .shared: return myMedia.filter { $0.isSharedWithFellowship }.count
         }
     }
-
-    private func deleteMedia(_ media: CaseMedia) {
-        MediaStorageService.shared.deleteMedia(
-            localPath: media.localPath,
-            thumbnailPath: media.thumbnailPath
-        )
-        modelContext.delete(media)
-        try? modelContext.save()
-    }
-
-    private func getOrCreateIndividualUserId() -> UUID {
-        let key = "individualUserUUID"
-        if let uuidString = UserDefaults.standard.string(forKey: key),
-           let uuid = UUID(uuidString: uuidString) {
-            return uuid
-        }
-        let newUUID = UUID()
-        UserDefaults.standard.set(newUUID.uuidString, forKey: key)
-        return newUUID
-    }
 }
 
-// MARK: - Media Filter Option
+// MARK: - Filter Options
 
-enum MediaFilterOption: String, CaseIterable, Identifiable {
+enum AttendingMediaFilterOption: String, CaseIterable, Identifiable {
     case all
     case images
     case videos
@@ -337,131 +320,79 @@ enum MediaFilterOption: String, CaseIterable, Identifiable {
         case .all: return "All"
         case .images: return "Images"
         case .videos: return "Videos"
-        case .shared: return "Shared"
+        case .shared: return "Teaching Files"
         }
     }
 }
 
-// MARK: - Filter Pill
+// MARK: - Attending Case Media Group View
 
-struct FilterPill: View {
-    let title: String
-    let count: Int
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(isSelected ? .semibold : .regular)
-                Text("(\(count))")
-                    .font(.caption)
-            }
-            .foregroundStyle(isSelected ? .white : ProcedusTheme.textPrimary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(isSelected ? ProcedusTheme.primary : Color(UIColor.secondarySystemBackground))
-            .cornerRadius(16)
-        }
-    }
-}
-
-// MARK: - Stat Item
-
-struct StatItem: View {
-    let value: String
-    let label: String
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(ProcedusTheme.primary)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-        }
-    }
-}
-
-// MARK: - Case Media Group View
-
-struct CaseMediaGroupView: View {
+struct AttendingCaseMediaGroupView: View {
     let caseEntry: CaseEntry?
     let media: [CaseMedia]
-    var attendings: [Attending] = []
+    let users: [User]
     let onMediaTap: (CaseMedia) -> Void
-    let onDelete: (CaseMedia) -> Void
+
+    private var fellowName: String {
+        guard let caseEntry = caseEntry else { return "Unknown" }
+        if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
+            return users.first { $0.id == fellowId }?.displayName ?? "Unknown Fellow"
+        }
+        return "Unknown Fellow"
+    }
 
     private var procedureName: String {
-        guard let entry = caseEntry,
-              let firstProcId = entry.procedureTagIds.first,
+        guard let caseEntry = caseEntry,
+              let firstProcId = caseEntry.procedureTagIds.first,
               let procedure = SpecialtyPackCatalog.findProcedure(by: firstProcId) else {
             return "Case"
         }
         return procedure.title
     }
 
-    private var attendingName: String? {
-        guard let entry = caseEntry,
-              let attendingId = entry.attendingId else { return nil }
-        return attendings.first { $0.id == attendingId }?.name
-    }
-
     private var caseDate: String {
-        guard let entry = caseEntry else { return "" }
-        return entry.createdAt.formatted(date: .abbreviated, time: .omitted)
+        guard let caseEntry = caseEntry else { return "" }
+        return caseEntry.createdAt.formatted(date: .abbreviated, time: .omitted)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Case header
+            // Header with procedure and fellow info
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(procedureName)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundStyle(ProcedusTheme.textPrimary)
                             .lineLimit(1)
-                        if let attending = attendingName {
-                            Text("•")
-                                .foregroundStyle(ProcedusTheme.textTertiary)
-                            Text(attending)
-                                .font(.subheadline)
-                                .foregroundStyle(ProcedusTheme.textSecondary)
-                                .lineLimit(1)
-                        }
+                        Text("•")
+                            .foregroundStyle(ProcedusTheme.textTertiary)
+                        Text(fellowName)
+                            .font(.subheadline)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                            .lineLimit(1)
                     }
                     Text(caseDate)
                         .font(.caption)
-                        .foregroundStyle(ProcedusTheme.textSecondary)
+                        .foregroundStyle(ProcedusTheme.textTertiary)
                 }
                 Spacer()
-                Text("\(media.count) item\(media.count == 1 ? "" : "s")")
+                Text("\(media.count)")
                     .font(.caption)
-                    .foregroundStyle(ProcedusTheme.textTertiary)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(ProcedusTheme.primary.opacity(0.1))
+                    .foregroundStyle(ProcedusTheme.primary)
+                    .cornerRadius(8)
             }
 
             // Media grid
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 8) {
                 ForEach(media) { item in
-                    MediaGridThumbnail(media: item)
+                    AttendingMediaThumbnailView(media: item)
                         .onTapGesture {
                             onMediaTap(item)
-                        }
-                        .contextMenu {
-                            if item.isSharedWithFellowship {
-                                Label("Shared in Teaching Files", systemImage: "person.2.fill")
-                            }
-                            Button(role: .destructive) {
-                                onDelete(item)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
                         }
                 }
             }
@@ -472,9 +403,9 @@ struct CaseMediaGroupView: View {
     }
 }
 
-// MARK: - Media Grid Thumbnail
+// MARK: - Attending Media Thumbnail View
 
-struct MediaGridThumbnail: View {
+struct AttendingMediaThumbnailView: View {
     let media: CaseMedia
 
     @State private var thumbnail: UIImage?
@@ -545,25 +476,23 @@ struct MediaGridThumbnail: View {
     }
 }
 
-// MARK: - Media Full Detail View
+// MARK: - Attending Media Detail View
 
-struct MediaFullDetailView: View {
+struct AttendingMediaDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(AppState.self) private var appState
 
     let media: CaseMedia
-    let showCaseLink: Bool
-    var isTeachingFiles: Bool = false
+    let users: [User]
+    let attendings: [Attending]
+    let allCases: [CaseEntry]
 
-    @Query private var allCases: [CaseEntry]
     @Query private var allComments: [MediaComment]
-    @Query private var allAttendings: [Attending]
 
     @State private var fullImage: UIImage?
     @State private var isEditingLabels = false
     @State private var editedLabels: [String] = []
-    @State private var isShared: Bool = false
     @State private var isInfoExpanded: Bool = false
     @State private var newCommentText: String = ""
     @State private var showingSuggestedLabels: Bool = false
@@ -578,38 +507,20 @@ struct MediaFullDetailView: View {
     }
 
     private var currentUserId: UUID {
-        if appState.isIndividualMode {
-            return getOrCreateIndividualUserId()
-        }
-        return appState.selectedFellowId ?? appState.currentUser?.id ?? UUID()
+        appState.selectedAttendingId ?? appState.currentUser?.id ?? UUID()
     }
 
     private var currentUserName: String {
-        appState.currentUser?.fullName ?? "Unknown"
+        appState.currentUser?.fullName ?? "Attending"
     }
 
-    private var currentUserRole: UserRole {
-        appState.currentUser?.role ?? .fellow
+    private var fellowName: String {
+        guard let caseEntry = linkedCase,
+              let fellowId = caseEntry.fellowId ?? caseEntry.ownerId else { return "Unknown" }
+        return users.first { $0.id == fellowId }?.displayName ?? "Unknown Fellow"
     }
 
-    /// Only fellows can edit labels - not attendings
-    private var canEditLabels: Bool {
-        currentUserRole == .fellow
-    }
-
-    /// Only the owner (fellow) can toggle share status
-    private var canToggleShare: Bool {
-        currentUserRole == .fellow && media.ownerId == currentUserId
-    }
-
-    /// Check if current user is the media owner
-    private var isOwner: Bool {
-        media.ownerId == currentUserId
-    }
-
-    /// Get case date display
     private var caseDateText: String {
-        // First try caseDate from media (which comes from weekBucket), then fall back to case createdAt
         if let caseDate = media.caseDate {
             return caseDate.formatted(date: .abbreviated, time: .omitted)
         }
@@ -617,21 +528,13 @@ struct MediaFullDetailView: View {
         return caseEntry.createdAt.formatted(date: .abbreviated, time: .omitted)
     }
 
-    /// Get attending name for the case
-    private var attendingName: String? {
-        guard let caseEntry = linkedCase,
-              let attendingId = caseEntry.attendingId else { return nil }
-        return allAttendings.first { $0.id == attendingId }?.fullName
-    }
-
-    /// Suggested labels based on procedure category (determined by procedure ID prefix)
+    /// Suggested labels based on procedure category
     private var suggestedLabels: [String] {
         guard let caseEntry = linkedCase,
               let firstProcId = caseEntry.procedureTagIds.first else {
             return defaultSuggestedLabels
         }
 
-        // Determine category by procedure ID prefix
         let procId = firstProcId.lowercased()
         if procId.hasPrefix("ic-") {
             return interventionalCardioLabels
@@ -647,27 +550,24 @@ struct MediaFullDetailView: View {
     private let interventionalCardioLabels = [
         "Complication", "Interesting Case", "Rare Finding", "Teaching Example",
         "Difficult Access", "Complex Anatomy", "Acute MI", "CTO",
-        "Bifurcation", "Calcified", "Dissection", "Perforation",
-        "No Reflow", "Good Outcome", "Challenging"
+        "Bifurcation", "Calcified", "Dissection", "Good Outcome"
     ]
 
     private let cardiacImagingLabels = [
         "Rare Finding", "Teaching Example", "Classic Finding", "Artifact",
         "Cardiomyopathy", "Valvular Disease", "Pericardial", "Congenital",
-        "Wall Motion", "LV Function", "RV Abnormal", "Mass/Thrombus",
-        "Strain Pattern", "Diastolic Dysfunction", "Good Image Quality"
+        "Wall Motion", "LV Function", "RV Abnormal", "Mass/Thrombus"
     ]
 
     private let epLabels = [
         "Complication", "Interesting Case", "Teaching Example", "Rare Arrhythmia",
         "Ablation", "Device", "SVT", "VT", "AF Ablation",
-        "Lead Extraction", "CRT Response", "Mapping", "Access Issue",
-        "Good Outcome", "Challenging"
+        "Lead Extraction", "CRT Response", "Good Outcome"
     ]
 
     private let defaultSuggestedLabels = [
         "Teaching Example", "Interesting Case", "Rare Finding", "Complication",
-        "Good Outcome", "Challenging", "Classic Finding", "Artifact"
+        "Good Outcome", "Challenging", "Classic Finding"
     ]
 
     var body: some View {
@@ -687,23 +587,17 @@ struct MediaFullDetailView: View {
                             .frame(height: 200)
                     }
 
-                    // Labels section (only for fellows)
-                    if canEditLabels {
-                        labelsSection
-                    } else {
-                        viewOnlyLabelsSection
-                    }
+                    // Labels section (attendings can edit)
+                    labelsSection
 
                     // Collapsible Info section
                     collapsibleInfoSection
 
-                    // Comments section (visible in Teaching Files or when there are comments)
-                    if isTeachingFiles || !mediaComments.isEmpty {
-                        commentsSection
-                    }
+                    // Comments section
+                    commentsSection
 
                     // Case link
-                    if showCaseLink, let caseEntry = linkedCase {
+                    if let caseEntry = linkedCase {
                         caseLinkSection(caseEntry)
                     }
                 }
@@ -719,7 +613,6 @@ struct MediaFullDetailView: View {
             .onAppear {
                 loadImage()
                 editedLabels = media.searchTerms
-                isShared = media.isSharedWithFellowship
             }
         }
     }
@@ -744,7 +637,7 @@ struct MediaFullDetailView: View {
         .cornerRadius(12)
     }
 
-    // MARK: - Labels Section (Editable for Fellows)
+    // MARK: - Labels Section (Attendings can edit)
 
     private var labelsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -753,16 +646,14 @@ struct MediaFullDetailView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 Spacer()
-                if isOwner {
-                    Button(isEditingLabels ? "Done" : "Edit") {
-                        if isEditingLabels {
-                            saveLabels()
-                        }
-                        isEditingLabels.toggle()
-                        showingSuggestedLabels = false
+                Button(isEditingLabels ? "Done" : "Edit") {
+                    if isEditingLabels {
+                        saveLabels()
                     }
-                    .font(.subheadline)
+                    isEditingLabels.toggle()
+                    showingSuggestedLabels = false
                 }
+                .font(.subheadline)
             }
 
             if media.searchTerms.isEmpty && !isEditingLabels {
@@ -823,46 +714,6 @@ struct MediaFullDetailView: View {
                 }
                 .padding(.top, 4)
             }
-
-            // Share toggle (only for owner fellows)
-            if canToggleShare {
-                Divider()
-                    .padding(.vertical, 4)
-                Toggle(isOn: $isShared) {
-                    Label("Share in Teaching Files", systemImage: "person.2.fill")
-                        .font(.subheadline)
-                }
-                .onChange(of: isShared) { _, newValue in
-                    media.isSharedWithFellowship = newValue
-                    try? modelContext.save()
-                }
-            }
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
-    }
-
-    // MARK: - View-Only Labels (for Attendings)
-
-    private var viewOnlyLabelsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Labels")
-                .font(.subheadline)
-                .fontWeight(.medium)
-
-            if media.searchTerms.isEmpty {
-                Text("No labels")
-                    .font(.caption)
-                    .foregroundStyle(ProcedusTheme.textTertiary)
-                    .italic()
-            } else {
-                FlowLayout(spacing: 6) {
-                    ForEach(media.searchTerms, id: \.self) { label in
-                        LabelChip(label: label, isEditing: false) {}
-                    }
-                }
-            }
         }
         .padding()
         .background(ProcedusTheme.cardBackground)
@@ -873,7 +724,6 @@ struct MediaFullDetailView: View {
 
     private var collapsibleInfoSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header (always visible, tappable)
             Button {
                 withAnimation { isInfoExpanded.toggle() }
             } label: {
@@ -890,20 +740,16 @@ struct MediaFullDetailView: View {
                 .padding()
             }
 
-            // Expanded content
             if isInfoExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Divider()
 
-                    // Uploader (in Teaching Files)
-                    if isTeachingFiles {
-                        HStack {
-                            Text("Uploaded by")
-                                .foregroundStyle(ProcedusTheme.textSecondary)
-                            Spacer()
-                            Text(media.ownerName)
-                                .font(.subheadline)
-                        }
+                    HStack {
+                        Text("Fellow")
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                        Spacer()
+                        Text(fellowName)
+                            .font(.subheadline)
                     }
 
                     HStack {
@@ -922,7 +768,6 @@ struct MediaFullDetailView: View {
                             .font(.subheadline)
                     }
 
-                    // Show case date range instead of date added
                     HStack {
                         Text("Case Date")
                             .foregroundStyle(ProcedusTheme.textSecondary)
@@ -1002,7 +847,7 @@ struct MediaFullDetailView: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
 
-            // Date range
+            // Date
             HStack {
                 Image(systemName: "calendar")
                     .foregroundStyle(ProcedusTheme.textSecondary)
@@ -1012,16 +857,14 @@ struct MediaFullDetailView: View {
                 Spacer()
             }
 
-            // Attending
-            if let attending = attendingName {
-                HStack {
-                    Image(systemName: "person.fill")
-                        .foregroundStyle(ProcedusTheme.textSecondary)
-                        .font(.caption)
-                    Text(attending)
-                        .font(.subheadline)
-                    Spacer()
-                }
+            // Fellow
+            HStack {
+                Image(systemName: "person.fill")
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                    .font(.caption)
+                Text(fellowName)
+                    .font(.subheadline)
+                Spacer()
             }
 
             // Procedure bubbles
@@ -1072,7 +915,7 @@ struct MediaFullDetailView: View {
             mediaId: media.id,
             authorId: currentUserId,
             authorName: currentUserName,
-            authorRole: currentUserRole,
+            authorRole: .attending,
             text: text
         )
         modelContext.insert(comment)
@@ -1090,12 +933,12 @@ struct MediaFullDetailView: View {
         let notification = Notification(
             userId: media.ownerId,
             title: "New Comment",
-            message: "\(currentUserName) commented on your Teaching File image",
+            message: "\(currentUserName) commented on your image",
             notificationType: "teachingFileComment"
         )
         notification.senderId = currentUserId
         notification.senderName = currentUserName
-        notification.senderRole = currentUserRole
+        notification.senderRole = .attending
         modelContext.insert(notification)
         try? modelContext.save()
     }
@@ -1105,158 +948,4 @@ struct MediaFullDetailView: View {
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", minutes, secs)
     }
-
-    private func getOrCreateIndividualUserId() -> UUID {
-        let key = "individualUserUUID"
-        if let uuidString = UserDefaults.standard.string(forKey: key),
-           let uuid = UUID(uuidString: uuidString) {
-            return uuid
-        }
-        let newUUID = UUID()
-        UserDefaults.standard.set(newUUID.uuidString, forKey: key)
-        return newUUID
-    }
 }
-
-// MARK: - Comment Bubble
-
-struct CommentBubble: View {
-    let comment: MediaComment
-    let isOwn: Bool
-
-    var body: some View {
-        VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-            if !isOwn {
-                HStack(spacing: 4) {
-                    Text(comment.authorName)
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                    if comment.authorRole == .attending {
-                        Text("• Attending")
-                            .font(.caption2)
-                            .foregroundStyle(ProcedusTheme.textTertiary)
-                    }
-                }
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            }
-
-            Text(comment.text)
-                .font(.subheadline)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(isOwn ? ProcedusTheme.primary.opacity(0.15) : Color(UIColor.secondarySystemFill))
-                .cornerRadius(12)
-
-            Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
-                .font(.caption2)
-                .foregroundStyle(ProcedusTheme.textTertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: isOwn ? .trailing : .leading)
-    }
-}
-
-// MARK: - Procedure Bubble
-
-struct ProcedureBubble: View {
-    let procedure: ProcedureTag
-
-    var body: some View {
-        Text(procedure.title)
-            .font(.caption2)
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(procedureColor.opacity(0.15))
-            .foregroundStyle(procedureColor)
-            .cornerRadius(8)
-    }
-
-    private var procedureColor: Color {
-        let procId = procedure.id.lowercased()
-        if procId.hasPrefix("ic-") {
-            return .red
-        } else if procId.hasPrefix("img-") || procId.hasPrefix("echo-") || procId.hasPrefix("ct-") || procId.hasPrefix("mri-") {
-            return .blue
-        } else if procId.hasPrefix("ep-") {
-            return .purple
-        } else if procId.hasPrefix("gi-") {
-            return .orange
-        }
-        return ProcedusTheme.primary
-    }
-}
-
-// MARK: - Label Chip
-
-struct LabelChip: View {
-    let label: String
-    let isEditing: Bool
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.caption)
-            if isEditing {
-                Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.caption2)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color(UIColor.tertiarySystemFill))
-        .foregroundStyle(ProcedusTheme.textPrimary)
-        .cornerRadius(12)
-    }
-}
-
-// MARK: - Add Label Button
-
-struct AddLabelButton: View {
-    let onAdd: (String) -> Void
-
-    @State private var isAdding = false
-    @State private var newLabel = ""
-
-    var body: some View {
-        if isAdding {
-            HStack(spacing: 4) {
-                TextField("Label", text: $newLabel)
-                    .font(.caption)
-                    .textFieldStyle(.plain)
-                    .frame(width: 80)
-                Button {
-                    onAdd(newLabel.trimmingCharacters(in: .whitespaces))
-                    newLabel = ""
-                    isAdding = false
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.gray.opacity(0.15))
-            .cornerRadius(12)
-        } else {
-            Button {
-                isAdding = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                        .font(.caption)
-                    Text("Add")
-                        .font(.caption)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.gray.opacity(0.15))
-                .cornerRadius(12)
-            }
-        }
-    }
-}
-
-// FlowLayout is defined in AttestationQueueView.swift

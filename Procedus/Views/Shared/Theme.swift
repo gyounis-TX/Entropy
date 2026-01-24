@@ -46,45 +46,34 @@ struct NotificationBellButton: View {
     let badgeCount: Int
     let action: () -> Void
 
-    /// Role-based bell color
-    private var bellColor: Color {
-        switch role {
-        case .fellow:
-            return Color.blue
-        case .attending:
-            return Color.green
-        case .admin:
-            return Color.purple
-        }
-    }
+    /// Unified notification badge color (blue)
+    private static let badgeColor = Color(red: 15/255, green: 107/255, blue: 219/255)
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                // Solid colored circle background
-                Circle()
-                    .fill(bellColor)
-                    .frame(width: 36, height: 36)
+            ZStack(alignment: .topTrailing) {
+                // Lumenus logo (emoji-style)
+                Image("LumenusLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
 
-                // Bell icon centered
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white)
-
-                // Badge count in center of bell (overlaid)
+                // Badge count (top right of logo)
                 if badgeCount > 0 {
                     Text(badgeCount > 99 ? "99+" : "\(badgeCount)")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Color.black)  // Always dark for readability
-                        .padding(.horizontal, 4)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(Color.white)
+                                .fill(Self.badgeColor)
                         )
-                        .offset(y: 2)  // Slightly below center for visual balance
+                        .offset(x: 10, y: -8)
                 }
             }
+            .frame(width: 40, height: 40)
         }
     }
 }
@@ -322,6 +311,63 @@ struct PasscodeKey: View {
 
 // NOTE: All enum extensions (displayName, color, iconName, etc.) are defined in Enums.swift
 // DO NOT add extensions here to avoid "Invalid redeclaration" errors
+
+// MARK: - Procedure List Popover
+
+struct ProcedureListPopover: View {
+    let procedureTagIds: [String]
+    let customProcedures: [CustomProcedure]
+
+    private var procedureDetails: [(name: String, category: ProcedureCategory)] {
+        procedureTagIds.compactMap { tagId in
+            // Check if this is a custom procedure
+            if tagId.hasPrefix("custom-") {
+                let uuidString = String(tagId.dropFirst(7))
+                if let uuid = UUID(uuidString: uuidString),
+                   let customProc = customProcedures.first(where: { $0.id == uuid }) {
+                    return (name: customProc.title, category: customProc.category)
+                }
+                return nil
+            }
+
+            // Look up in specialty packs
+            for pack in SpecialtyPackCatalog.allPacks {
+                for packCategory in pack.categories {
+                    if let procedure = packCategory.procedures.first(where: { $0.id == tagId }) {
+                        return (name: procedure.title, category: packCategory.category)
+                    }
+                }
+            }
+            return nil
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Procedures")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            if procedureDetails.isEmpty {
+                Text("No procedures")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(procedureDetails.enumerated()), id: \.offset) { _, detail in
+                    HStack(spacing: 8) {
+                        CategoryBubble(category: detail.category, size: 18)
+                        Text(detail.name)
+                            .font(.caption)
+                            .lineLimit(2)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .presentationCompactAdaptation(.popover)
+    }
+}
 
 // MARK: - Preview
 

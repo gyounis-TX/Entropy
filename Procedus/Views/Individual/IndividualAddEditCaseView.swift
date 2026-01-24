@@ -90,9 +90,9 @@ struct IndividualAddEditCaseView: View {
         appState.shouldShowCaseTypeToggle
     }
 
-    /// Whether to show the operator position field (cardiology invasive procedures only)
+    /// Whether to show the operator position field (cardiology invasive or EP procedures)
     private var shouldShowOperatorPosition: Bool {
-        appState.isCardiologyFellowship && selectedCaseType == .invasive
+        appState.isCardiologyFellowship && (selectedCaseType == .invasive || selectedCaseType == .ep)
     }
 
     /// Whether to use simplified noninvasive form (no attending, access, outcome, complications)
@@ -101,11 +101,27 @@ struct IndividualAddEditCaseView: View {
         if appState.isCardiacImagingOnlyMode {
             return true
         }
-        // If toggle is showing and noninvasive selected
+        // If toggle is showing and noninvasive selected (not EP)
         if shouldShowCaseTypeToggle && selectedCaseType == .noninvasive {
             return true
         }
         return false
+    }
+
+    /// Case types to show in the toggle based on enabled packs
+    private var availableCaseTypes: [CaseType] {
+        var types: [CaseType] = []
+        let packIds = enabledPacks.map { $0.id }
+        if packIds.contains("interventional-cardiology") {
+            types.append(.invasive)
+        }
+        if packIds.contains("electrophysiology") {
+            types.append(.ep)
+        }
+        if packIds.contains("cardiac-imaging") {
+            types.append(.noninvasive)
+        }
+        return types
     }
 
     /// Filter enabled packs based on current case type selection
@@ -119,12 +135,16 @@ struct IndividualAddEditCaseView: View {
 
         // If toggle is showing, filter based on selection
         if shouldShowCaseTypeToggle {
-            if selectedCaseType == .noninvasive {
+            switch selectedCaseType {
+            case .noninvasive:
                 // Noninvasive: only cardiac imaging
                 return allEnabled.filter { $0.id == "cardiac-imaging" }
-            } else {
-                // Invasive: all packs EXCEPT cardiac imaging
-                return allEnabled.filter { $0.id != "cardiac-imaging" }
+            case .ep:
+                // EP: only electrophysiology
+                return allEnabled.filter { $0.id == "electrophysiology" }
+            case .invasive:
+                // Invasive: only interventional cardiology
+                return allEnabled.filter { $0.id == "interventional-cardiology" }
             }
         }
 
@@ -423,33 +443,24 @@ struct IndividualAddEditCaseView: View {
     
     private var attendingSection: some View {
         Section {
-            HStack {
-                Text("Supervising Attending")
-                    .font(.clinicalBody)
-                    .foregroundStyle(ProcedusTheme.textPrimary)
-                
-                Spacer()
-                
-                if attendings.isEmpty {
-                    Text("Add in Settings")
-                        .font(.clinicalCaption)
-                        .foregroundStyle(ProcedusTheme.textTertiary)
-                } else {
-                    Picker("Attending", selection: $selectedAttendingId) {
-                        Text("Select...").tag(nil as UUID?)
-                        ForEach(attendings) { attending in
-                            Text(attending.name).tag(attending.id as UUID?)
-                        }
+            if attendings.isEmpty {
+                Text("Add in Settings")
+                    .font(.clinicalCaption)
+                    .foregroundStyle(ProcedusTheme.textTertiary)
+            } else {
+                Picker("", selection: $selectedAttendingId) {
+                    Text("Select...").tag(nil as UUID?)
+                    ForEach(attendings) { attending in
+                        Text(attending.name).tag(attending.id as UUID?)
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .tint(ProcedusTheme.primary)
-                    .font(.subheadline)
                 }
+                .pickerStyle(.menu)
+                .tint(ProcedusTheme.primary)
+                .font(.subheadline)
             }
         } header: {
             HStack(spacing: 2) {
-                Text("Attending")
+                Text("Supervising Attending")
                 Text("*").foregroundStyle(ProcedusTheme.error)
             }
             .font(.clinicalFootnote)
@@ -462,32 +473,23 @@ struct IndividualAddEditCaseView: View {
     
     private var facilitySection: some View {
         Section {
-            HStack {
-                Text("Training Facility")
-                    .font(.clinicalBody)
-                    .foregroundStyle(ProcedusTheme.textPrimary)
-                
-                Spacer()
-                
-                if facilities.isEmpty {
-                    Text("Add in Settings")
-                        .font(.clinicalCaption)
-                        .foregroundStyle(ProcedusTheme.textTertiary)
-                } else {
-                    Picker("Facility", selection: $selectedFacilityId) {
-                        // NO "None" option - facility is REQUIRED
-                        Text("Select...").tag(nil as UUID?)
-                        ForEach(facilities) { facility in
-                            Text(facility.name).tag(facility.id as UUID?)
-                        }
+            if facilities.isEmpty {
+                Text("Add in Settings")
+                    .font(.clinicalCaption)
+                    .foregroundStyle(ProcedusTheme.textTertiary)
+            } else {
+                Picker("", selection: $selectedFacilityId) {
+                    // NO "None" option - facility is REQUIRED
+                    Text("Select...").tag(nil as UUID?)
+                    ForEach(facilities) { facility in
+                        Text(facility.name).tag(facility.id as UUID?)
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .tint(ProcedusTheme.primary)
-                    .font(.subheadline)
                 }
+                .pickerStyle(.menu)
+                .tint(ProcedusTheme.primary)
+                .font(.subheadline)
             }
-            
+
             // Warning when facility not selected
             if selectedFacilityId == nil && !facilities.isEmpty {
                 HStack(spacing: 6) {
@@ -501,7 +503,7 @@ struct IndividualAddEditCaseView: View {
             }
         } header: {
             HStack(spacing: 2) {
-                Text("Facility")
+                Text("Training Facility")
                 Text("*").foregroundStyle(ProcedusTheme.error)
             }
             .font(.clinicalFootnote)
@@ -514,23 +516,18 @@ struct IndividualAddEditCaseView: View {
     
     private var timeframeSection: some View {
         Section {
-            HStack {
-                Text("Procedure Timeframe")
-                    .font(.clinicalBody)
-                    .foregroundStyle(ProcedusTheme.textPrimary)
-                
-                Spacer()
-                
-                Picker("Timeframe", selection: $selectedWeekBucket) {
-                    ForEach(availableWeekBuckets, id: \.self) { bucket in
-                        Text(bucket.toWeekTimeframeLabel()).tag(bucket)
-                    }
+            Picker("", selection: $selectedWeekBucket) {
+                ForEach(availableWeekBuckets, id: \.self) { bucket in
+                    Text(bucket.toWeekTimeframeLabel()).tag(bucket)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .tint(ProcedusTheme.primary)
-                .font(.subheadline)
             }
+            .pickerStyle(.menu)
+            .tint(ProcedusTheme.primary)
+            .font(.subheadline)
+        } header: {
+            Text("Procedure Timeframe")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
@@ -540,7 +537,7 @@ struct IndividualAddEditCaseView: View {
     private var caseTypeToggleSection: some View {
         Section {
             Picker("Case Type", selection: $selectedCaseType) {
-                ForEach(CaseType.allCases) { caseType in
+                ForEach(availableCaseTypes) { caseType in
                     Text(caseType.rawValue).tag(caseType)
                 }
             }
@@ -564,9 +561,12 @@ struct IndividualAddEditCaseView: View {
                 .font(.clinicalFootnote)
                 .foregroundStyle(ProcedusTheme.textSecondary)
         } footer: {
-            if selectedCaseType == .invasive {
-                Text("Invasive procedures requiring sterile access (cath lab, EP lab)")
-            } else {
+            switch selectedCaseType {
+            case .invasive:
+                Text("Invasive procedures requiring sterile access (cath lab)")
+            case .ep:
+                Text("Electrophysiology procedures (EP lab, device implants, ablations)")
+            case .noninvasive:
                 Text("Noninvasive imaging studies (echo, CT, MRI, nuclear). Choose entry mode below.")
                     .foregroundColor(.blue)
             }

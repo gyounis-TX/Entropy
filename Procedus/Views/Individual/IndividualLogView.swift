@@ -12,12 +12,9 @@ struct IndividualLogView: View {
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var customProcedures: [CustomProcedure]
 
-    @State private var showingAddCase = false
     @State private var caseToEdit: CaseEntry?
-    @State private var showingExportOptions = false
-    @State private var showingNotifications = false
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
     @State private var selectedPGYLevelFilter: Int? = nil  // For PGY year filtering
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
@@ -30,11 +27,6 @@ struct IndividualLogView: View {
         appState.shouldShowCaseTypeToggle
     }
 
-    private var unreadNotificationCount: Int {
-        let userId = currentUserId
-        return notifications.filter { $0.userId == userId && !$0.isRead }.count
-    }
-    
     // FIXED: Get user ID that works in both Individual and Institutional mode
     private var currentUserId: UUID {
         // In institutional mode, prioritize selectedFellowId (matches what's used when creating cases)
@@ -193,11 +185,11 @@ struct IndividualLogView: View {
                 dateRangeSelector
 
                 if casesForSelectedRange.isEmpty {
-                    EmptyStateView(icon: "list.clipboard", title: "No Cases", message: "No cases for this time range.", actionTitle: "Add Case", action: { showingAddCase = true })
+                    EmptyStateView(icon: "list.clipboard", title: "No Cases", message: "No cases for this time range. Tap + above to add one.")
                 } else {
                     List {
                         ForEach(casesForSelectedRange) { caseEntry in
-                            IndividualCaseRowView(caseEntry: caseEntry, attendings: Array(attendings), facilities: Array(facilities))
+                            IndividualCaseRowView(caseEntry: caseEntry, attendings: Array(attendings), facilities: Array(facilities), customProcedures: Array(customProcedures))
                                 .onTapGesture {
                                     if caseEntry.attestationStatus == .attested {
                                         showingAttestedCaseAlert = true
@@ -237,31 +229,9 @@ struct IndividualLogView: View {
                 }
             }
             .background(ProcedusTheme.background)
-            .navigationTitle("Log")
-            .toolbar {
-                // Only show notification bell in institutional mode (individual mode has no attestation workflow)
-                if !appState.isIndividualMode {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        NotificationBellButton(
-                            role: appState.userRole,
-                            badgeCount: unreadNotificationCount
-                        ) {
-                            showingNotifications = true
-                        }
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button { showingExportOptions = true } label: { Image(systemName: "square.and.arrow.up") }
-                            .disabled(myCases.isEmpty)
-                        Button { showingAddCase = true } label: { Image(systemName: "plus").fontWeight(.semibold) }
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddCase) { IndividualAddEditCaseView(weekBucket: CaseEntry.makeWeekBucket(for: Date())) }
+            .navigationTitle("Case Log")
+            .navigationBarHidden(true) // Hide nav bar - unified top bar is in FellowContentWrapper
             .sheet(item: $caseToEdit) { c in IndividualAddEditCaseView(existingCase: c) }
-            .sheet(isPresented: $showingExportOptions) { LogExportSheet(cases: myCases, attendings: Array(attendings), facilities: Array(facilities)) }
-            .sheet(isPresented: $showingNotifications) { NotificationsSheet(role: appState.userRole, userId: currentUserId) }
         }
     }
     
@@ -394,6 +364,9 @@ struct IndividualCaseRowView: View {
     let caseEntry: CaseEntry
     let attendings: [Attending]
     let facilities: [TrainingFacility]
+    var customProcedures: [CustomProcedure] = []
+
+    @State private var showingProcedurePopover = false
 
     /// Get unique procedure categories for this case
     private var procedureCategories: [ProcedureCategory] {
@@ -456,15 +429,26 @@ struct IndividualCaseRowView: View {
                 .foregroundStyle(caseEntry.attestationStatus == .rejected ? .red : .primary)
                 .lineLimit(1)
 
-            // Category bubbles inline
-            ForEach(procedureCategories.prefix(3), id: \.self) { category in
-                CategoryBubble(category: category, size: 20)
-            }
+            // Category bubbles inline (tappable for procedure list)
+            HStack(spacing: 4) {
+                ForEach(procedureCategories.prefix(3), id: \.self) { category in
+                    CategoryBubble(category: category, size: 20)
+                }
 
-            if procedureCategories.count > 3 {
-                Text("+\(procedureCategories.count - 3)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if procedureCategories.count > 3 {
+                    Text("+\(procedureCategories.count - 3)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onTapGesture {
+                showingProcedurePopover = true
+            }
+            .popover(isPresented: $showingProcedurePopover) {
+                ProcedureListPopover(
+                    procedureTagIds: caseEntry.procedureTagIds,
+                    customProcedures: customProcedures
+                )
             }
 
             Spacer()

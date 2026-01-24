@@ -209,10 +209,19 @@ struct AddEditCaseView: View {
         currentProgram?.specialtyPackIds.contains("cardiac-imaging") == true
     }
 
+    /// Whether the program has interventional cardiology enabled
+    private var hasInterventionalCardiology: Bool {
+        currentProgram?.specialtyPackIds.contains("interventional-cardiology") == true
+    }
+
+    /// Whether the program has electrophysiology enabled
+    private var hasElectrophysiology: Bool {
+        currentProgram?.specialtyPackIds.contains("electrophysiology") == true
+    }
+
     /// Whether the program has other cardiology packs (IC or EP) enabled
     private var hasOtherCardiologyPacks: Bool {
-        guard let packIds = currentProgram?.specialtyPackIds else { return false }
-        return packIds.contains("interventional-cardiology") || packIds.contains("electrophysiology")
+        hasInterventionalCardiology || hasElectrophysiology
     }
 
     /// Whether to show the invasive/noninvasive toggle
@@ -220,18 +229,33 @@ struct AddEditCaseView: View {
         hasCardiacImaging && hasOtherCardiologyPacks
     }
 
-    /// Whether to show operator position (cardiology invasive only)
-    private var shouldShowOperatorPosition: Bool {
-        isCardiologyProgram && selectedCaseType == .invasive
+    /// Case types to show in the toggle based on enabled packs
+    private var availableCaseTypes: [CaseType] {
+        var types: [CaseType] = []
+        if hasInterventionalCardiology {
+            types.append(.invasive)
+        }
+        if hasElectrophysiology {
+            types.append(.ep)
+        }
+        if hasCardiacImaging {
+            types.append(.noninvasive)
+        }
+        return types
     }
 
-    /// Whether using simplified noninvasive form
+    /// Whether to show operator position (cardiology invasive or EP)
+    private var shouldShowOperatorPosition: Bool {
+        isCardiologyProgram && (selectedCaseType == .invasive || selectedCaseType == .ep)
+    }
+
+    /// Whether using simplified noninvasive form (noninvasive only - not EP)
     private var isSimplifiedNoninvasiveForm: Bool {
         // If only cardiac imaging is enabled (no IC or EP)
         if hasCardiacImaging && !hasOtherCardiologyPacks {
             return true
         }
-        // If toggle is showing and noninvasive selected
+        // If toggle is showing and noninvasive selected (not EP)
         if shouldShowCaseTypeToggle && selectedCaseType == .noninvasive {
             return true
         }
@@ -247,10 +271,13 @@ struct AddEditCaseView: View {
 
         // If toggle is showing, filter based on selection
         if shouldShowCaseTypeToggle {
-            if selectedCaseType == .noninvasive {
+            switch selectedCaseType {
+            case .noninvasive:
                 return currentPacks.filter { $0.id == "cardiac-imaging" }
-            } else {
-                return currentPacks.filter { $0.id != "cardiac-imaging" }
+            case .ep:
+                return currentPacks.filter { $0.id == "electrophysiology" }
+            case .invasive:
+                return currentPacks.filter { $0.id == "interventional-cardiology" }
             }
         }
 
@@ -416,8 +443,13 @@ struct AddEditCaseView: View {
                             Text("Attachments")
                                 .font(.caption)
                         } footer: {
-                            Text("Add images or videos. PHI will be detected and must be redacted.")
-                                .font(.caption2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Add images or videos. PHI will be detected and must be redacted.")
+                                if !appState.isIndividualMode {
+                                    Text("All uploaded media will be visible to the assigned attending.")
+                                }
+                            }
+                            .font(.caption2)
                         }
                     } else if !isEditing {
                         // New case: show hint about adding media after saving
@@ -573,7 +605,7 @@ struct AddEditCaseView: View {
 
     private var timeframeSection: some View {
         Section {
-            Picker("Procedure Timeframe", selection: $selectedWeek) {
+            Picker("", selection: $selectedWeek) {
                 ForEach(weeks) { week in
                     Text(week.label)
                         .font(.subheadline)
@@ -582,7 +614,7 @@ struct AddEditCaseView: View {
             }
             .font(.subheadline)
         } header: {
-            Text("Timeframe")
+            Text("Procedure Timeframe")
                 .font(.caption)
         }
     }
@@ -592,7 +624,7 @@ struct AddEditCaseView: View {
     private var caseTypeToggleSection: some View {
         Section {
             Picker("Case Type", selection: $selectedCaseType) {
-                ForEach(CaseType.allCases) { caseType in
+                ForEach(availableCaseTypes) { caseType in
                     Text(caseType.rawValue).tag(caseType)
                 }
             }
@@ -614,9 +646,12 @@ struct AddEditCaseView: View {
             Text("Case Type")
                 .font(.caption)
         } footer: {
-            if selectedCaseType == .invasive {
-                Text("Invasive procedures requiring sterile access (cath lab, EP lab)")
-            } else {
+            switch selectedCaseType {
+            case .invasive:
+                Text("Invasive procedures requiring sterile access (cath lab)")
+            case .ep:
+                Text("Electrophysiology procedures (EP lab, device implants, ablations)")
+            case .noninvasive:
                 Text("Noninvasive imaging studies (echo, CT, MRI, nuclear). Bulk entry available below.")
                     .foregroundColor(.blue)
             }
@@ -837,7 +872,7 @@ struct AddEditCaseView: View {
                     .foregroundColor(Color(UIColor.secondaryLabel))
                     .italic()
             } else {
-                Picker("Attending", selection: $selectedAttendingId) {
+                Picker("", selection: $selectedAttendingId) {
                     Text("Select Attending")
                         .font(.subheadline)
                         .tag(nil as UUID?)
@@ -850,7 +885,7 @@ struct AddEditCaseView: View {
                 .font(.subheadline)
             }
         } header: {
-            Text("Attending")
+            Text("Supervising Attending")
                 .font(.caption)
         }
     }
@@ -865,7 +900,7 @@ struct AddEditCaseView: View {
                     .foregroundColor(Color(UIColor.secondaryLabel))
                     .italic()
             } else {
-                Picker("Facility", selection: $selectedFacilityId) {
+                Picker("", selection: $selectedFacilityId) {
                     Text("Select Facility")
                         .font(.subheadline)
                         .tag(nil as UUID?)
@@ -878,7 +913,7 @@ struct AddEditCaseView: View {
                 .font(.subheadline)
             }
         } header: {
-            Text("Facility")
+            Text("Training Facility")
                 .font(.caption)
         }
     }
@@ -1401,20 +1436,23 @@ struct AddEditCaseView: View {
     
     // MARK: - Complications Section (Collapsible Dropdown)
 
-    // Complications filtered by case type - IC-specific for invasive
+    // Complications filtered by case type
     private var complicationsForSection: [String] {
         var seen = Set<String>()
         var result: [String] = []
 
-        // For invasive cardiology cases, only show IC-specific complications
-        // For noninvasive, show cardiac imaging complications
+        // Filter complications based on case type selection
         let relevantPacks: [SpecialtyPack]
-        if selectedCaseType == .noninvasive || isSimplifiedNoninvasiveForm {
+        switch selectedCaseType {
+        case .noninvasive:
             // Cardiac imaging complications only
             relevantPacks = currentPacks.filter { $0.id == "cardiac-imaging" }
-        } else {
-            // Invasive: IC and EP complications only (not all packs)
-            relevantPacks = currentPacks.filter { $0.id == "interventional-cardiology" || $0.id == "electrophysiology" }
+        case .ep:
+            // EP complications only
+            relevantPacks = currentPacks.filter { $0.id == "electrophysiology" }
+        case .invasive:
+            // IC complications only
+            relevantPacks = currentPacks.filter { $0.id == "interventional-cardiology" }
         }
 
         for pack in relevantPacks {

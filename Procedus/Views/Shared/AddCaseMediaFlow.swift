@@ -11,11 +11,12 @@ import CoreMedia
 enum MediaFlowState {
     case picker
     case scanning
-    case reviewPHI(image: UIImage, regions: [DetectedTextRegion])
+    case reviewPHI(image: UIImage, regions: [DetectedTextRegion], isDiagram: Bool)
     case confirmNoPHI(image: UIImage)
-    case crop(image: UIImage)
+    case crop(image: UIImage, isDiagram: Bool)
     case labels(image: UIImage, wasRedacted: Bool)
-    case videoLabels(videoURL: URL)
+    case videoRedaction(videoURL: URL, regions: [DetectedTextRegion])
+    case videoLabels(videoURL: URL, wasRedacted: Bool)
 }
 
 struct AddCaseMediaFlow: View {
@@ -32,6 +33,33 @@ struct AddCaseMediaFlow: View {
     @State private var showingError = false
     @State private var searchTerms: [String] = []
     @State private var isSharedWithFellowship = false
+    @State private var mediaComment: String = ""
+
+    @Query private var allCases: [CaseEntry]
+
+    private var procedureCategory: String? {
+        guard let caseEntry = allCases.first(where: { $0.id == caseId }),
+              let firstProcId = caseEntry.procedureTagIds.first else {
+            return nil
+        }
+        // Determine category from procedure ID prefix
+        if firstProcId.hasPrefix("ic-") {
+            if firstProcId.contains("pci") {
+                return "coronary"
+            } else if firstProcId.contains("struct") || firstProcId.contains("tavr") || firstProcId.contains("teer") {
+                return "structural"
+            }
+            return "coronary"
+        } else if firstProcId.hasPrefix("ep-") {
+            return "ep"
+        } else if firstProcId.hasPrefix("ci-") {
+            if firstProcId.contains("echo") {
+                return "echo"
+            }
+            return "imaging"
+        }
+        return nil
+    }
 
     var body: some View {
         Group {
@@ -44,7 +72,7 @@ struct AddCaseMediaFlow: View {
             case .scanning:
                 scanningView
 
-            case .reviewPHI(let image, let regions):
+            case .reviewPHI(let image, let regions, let isDiagram):
                 PHIDetectionReviewView(
                     originalImage: image,
                     detectedRegions: regions,
@@ -52,10 +80,16 @@ struct AddCaseMediaFlow: View {
                         flowState = .labels(image: redactedImage, wasRedacted: true)
                     },
                     onCropInstead: {
-                        flowState = .crop(image: image)
+                        flowState = .crop(image: image, isDiagram: isDiagram)
                     },
                     onCancel: {
                         dismiss()
+                    },
+                    onRescanAsDiagram: isDiagram ? nil : {
+                        // Rescan the image as a hand-drawn diagram
+                        Task {
+                            await scanImage(image, isHandDrawnDiagram: true)
+                        }
                     }
                 )
 
@@ -70,13 +104,13 @@ struct AddCaseMediaFlow: View {
                     }
                 )
 
-            case .crop(let image):
+            case .crop(let image, let isDiagram):
                 ImageCropView(
                     image: image,
                     onCropComplete: { croppedImage in
-                        // Re-scan cropped image
+                        // Re-scan cropped image with same diagram setting
                         Task {
-                            await scanImage(croppedImage)
+                            await scanImage(croppedImage, isHandDrawnDiagram: isDiagram)
                         }
                     },
                     onCancel: {
@@ -89,6 +123,8 @@ struct AddCaseMediaFlow: View {
                     image: image,
                     searchTerms: $searchTerms,
                     isSharedWithFellowship: $isSharedWithFellowship,
+                    comment: $mediaComment,
+                    procedureCategory: procedureCategory,
                     onSave: {
                         saveImage(image, wasRedacted: wasRedacted)
                     },
@@ -97,14 +133,30 @@ struct AddCaseMediaFlow: View {
                     }
                 )
 
-            case .videoLabels(let videoURL):
+            case .videoRedaction(let videoURL, let regions):
+                VideoRedactionView(
+                    videoURL: videoURL,
+                    detectedTextRegions: regions,
+                    onComplete: { redactedURL in
+                        flowState = .videoLabels(videoURL: redactedURL, wasRedacted: true)
+                    },
+                    onCancel: {
+                        // Clean up temp video file
+                        try? FileManager.default.removeItem(at: videoURL)
+                        dismiss()
+                    }
+                )
+
+            case .videoLabels(let videoURL, let wasRedacted):
                 VideoLabelsView(
                     videoURL: videoURL,
                     searchTerms: $searchTerms,
                     isSharedWithFellowship: $isSharedWithFellowship,
+                    comment: $mediaComment,
+                    procedureCategory: procedureCategory,
                     onSave: {
                         Task {
-                            await saveVideo(videoURL)
+                            await saveVideo(videoURL, wasRedacted: wasRedacted)
                         }
                     },
                     onCancel: {
@@ -162,13 +214,13 @@ struct AddCaseMediaFlow: View {
     // MARK: - Scan Image
 
     @MainActor
-    private func scanImage(_ image: UIImage) async {
+    private func scanImage(_ image: UIImage, isHandDrawnDiagram: Bool = false) async {
         flowState = .scanning
 
-        let result = await TextDetectionService.shared.detectText(in: image)
+        let result = await TextDetectionService.shared.detectText(in: image, isHandDrawnDiagram: isHandDrawnDiagram)
 
         if result.textWasDetected {
-            flowState = .reviewPHI(image: image, regions: result.regions)
+            flowState = .reviewPHI(image: image, regions: result.regions, isDiagram: result.isHandDrawnDiagram)
         } else {
             flowState = .confirmNoPHI(image: image)
         }
@@ -183,13 +235,11 @@ struct AddCaseMediaFlow: View {
         let result = await TextDetectionService.shared.detectText(inVideo: videoURL)
 
         if result.textWasDetected {
-            // For videos with PHI, we can't easily redact - show error
-            errorMessage = "Video contains text that may include PHI. Please remove the text before uploading, or use an image instead."
-            showingError = true
-            try? FileManager.default.removeItem(at: videoURL)
+            // Video has PHI - show redaction UI
+            flowState = .videoRedaction(videoURL: videoURL, regions: result.regions)
         } else {
             // No PHI detected, proceed to labels
-            flowState = .videoLabels(videoURL: videoURL)
+            flowState = .videoLabels(videoURL: videoURL, wasRedacted: false)
         }
     }
 
@@ -219,6 +269,7 @@ struct AddCaseMediaFlow: View {
         caseMedia.contentHash = saveResult.contentHash
         caseMedia.searchTerms = searchTerms
         caseMedia.isSharedWithFellowship = isSharedWithFellowship
+        caseMedia.comment = mediaComment.isEmpty ? nil : mediaComment
         caseMedia.textDetectionRan = true
         caseMedia.textWasDetected = wasRedacted
         caseMedia.userConfirmedNoPHI = !wasRedacted
@@ -240,7 +291,7 @@ struct AddCaseMediaFlow: View {
     // MARK: - Save Video
 
     @MainActor
-    private func saveVideo(_ videoURL: URL) async {
+    private func saveVideo(_ videoURL: URL, wasRedacted: Bool = false) async {
         guard let saveResult = await MediaStorageService.shared.saveVideo(from: videoURL, forCaseId: caseId) else {
             errorMessage = "Failed to save video"
             showingError = true
@@ -268,10 +319,12 @@ struct AddCaseMediaFlow: View {
         caseMedia.contentHash = saveResult.contentHash
         caseMedia.searchTerms = searchTerms
         caseMedia.isSharedWithFellowship = isSharedWithFellowship
+        caseMedia.comment = mediaComment.isEmpty ? nil : mediaComment
         caseMedia.textDetectionRan = true
-        caseMedia.textWasDetected = false
-        caseMedia.userConfirmedNoPHI = true
+        caseMedia.textWasDetected = wasRedacted
+        caseMedia.userConfirmedNoPHI = !wasRedacted
         caseMedia.userConfirmedAt = Date()
+        caseMedia.redactionApplied = wasRedacted
 
         modelContext.insert(caseMedia)
 
@@ -295,43 +348,92 @@ struct ImageCropView: View {
 
     @State private var cropRect = CGRect.zero
     @State private var imageSize = CGSize.zero
+    @State private var isInitialized = false
 
     var body: some View {
         NavigationStack {
-            VStack {
-                Text("Crop to remove text areas")
+            VStack(spacing: 0) {
+                Text("Drag corners to adjust crop area")
                     .font(.subheadline)
                     .foregroundStyle(ProcedusTheme.textSecondary)
                     .padding()
 
                 GeometryReader { geometry in
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: geometry.size.width, maxHeight: geometry.size.height)
-                        .onAppear {
-                            let aspectRatio = image.size.width / image.size.height
-                            let containerAspect = geometry.size.width / geometry.size.height
+                    let aspectRatio = image.size.width / image.size.height
+                    let containerAspect = geometry.size.width / geometry.size.height
 
-                            if aspectRatio > containerAspect {
-                                imageSize = CGSize(
-                                    width: geometry.size.width,
-                                    height: geometry.size.width / aspectRatio
-                                )
-                            } else {
-                                imageSize = CGSize(
-                                    width: geometry.size.height * aspectRatio,
-                                    height: geometry.size.height
-                                )
-                            }
-                            cropRect = CGRect(origin: .zero, size: imageSize)
-                        }
-                        .overlay(
-                            CropOverlay(
-                                cropRect: $cropRect,
-                                bounds: imageSize
+                    let displaySize: CGSize = {
+                        if aspectRatio > containerAspect {
+                            return CGSize(
+                                width: geometry.size.width,
+                                height: geometry.size.width / aspectRatio
                             )
+                        } else {
+                            return CGSize(
+                                width: geometry.size.height * aspectRatio,
+                                height: geometry.size.height
+                            )
+                        }
+                    }()
+
+                    ZStack {
+                        // Image
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: displaySize.width, height: displaySize.height)
+
+                        // Crop overlay
+                        CropOverlay(
+                            cropRect: $cropRect,
+                            bounds: displaySize
                         )
+                        .frame(width: displaySize.width, height: displaySize.height)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .onAppear {
+                        if !isInitialized {
+                            imageSize = displaySize
+                            // Start with full image selected, with small inset
+                            let inset: CGFloat = 20
+                            cropRect = CGRect(
+                                x: inset,
+                                y: inset,
+                                width: displaySize.width - inset * 2,
+                                height: displaySize.height - inset * 2
+                            )
+                            isInitialized = true
+                        }
+                    }
+                    .onChange(of: geometry.size) { _, newSize in
+                        // Recalculate on rotation
+                        let newAspectRatio = image.size.width / image.size.height
+                        let newContainerAspect = newSize.width / newSize.height
+
+                        let newDisplaySize: CGSize
+                        if newAspectRatio > newContainerAspect {
+                            newDisplaySize = CGSize(
+                                width: newSize.width,
+                                height: newSize.width / newAspectRatio
+                            )
+                        } else {
+                            newDisplaySize = CGSize(
+                                width: newSize.height * newAspectRatio,
+                                height: newSize.height
+                            )
+                        }
+
+                        // Scale crop rect proportionally
+                        let scaleX = newDisplaySize.width / imageSize.width
+                        let scaleY = newDisplaySize.height / imageSize.height
+                        cropRect = CGRect(
+                            x: cropRect.origin.x * scaleX,
+                            y: cropRect.origin.y * scaleY,
+                            width: cropRect.width * scaleX,
+                            height: cropRect.height * scaleY
+                        )
+                        imageSize = newDisplaySize
+                    }
                 }
                 .padding()
             }
@@ -347,12 +449,18 @@ struct ImageCropView: View {
                     Button("Done") {
                         performCrop()
                     }
+                    .fontWeight(.semibold)
                 }
             }
         }
     }
 
     private func performCrop() {
+        guard imageSize.width > 0 && imageSize.height > 0 else {
+            onCancel()
+            return
+        }
+
         // Convert crop rect to image coordinates
         let scaleX = image.size.width / imageSize.width
         let scaleY = image.size.height / imageSize.height
@@ -364,7 +472,11 @@ struct ImageCropView: View {
             height: cropRect.height * scaleY
         )
 
-        guard let cgImage = image.cgImage?.cropping(to: scaledCropRect) else {
+        // Ensure crop rect is within bounds
+        let clampedRect = scaledCropRect.intersection(CGRect(origin: .zero, size: image.size))
+
+        guard clampedRect.width > 0, clampedRect.height > 0,
+              let cgImage = image.cgImage?.cropping(to: clampedRect) else {
             onCancel()
             return
         }
@@ -380,11 +492,12 @@ struct CropOverlay: View {
     @Binding var cropRect: CGRect
     let bounds: CGSize
 
-    @GestureState private var dragOffset = CGSize.zero
-    @State private var activeHandle: CropHandle?
+    // Track the initial rect when drag starts
+    @State private var initialCropRect: CGRect = .zero
+    @State private var isDraggingHandle = false
 
-    enum CropHandle {
-        case topLeft, topRight, bottomLeft, bottomRight, move
+    enum CropHandle: CaseIterable {
+        case topLeft, topRight, bottomLeft, bottomRight
     }
 
     var body: some View {
@@ -411,31 +524,73 @@ struct CropOverlay: View {
                 .frame(width: cropRect.width, height: cropRect.height)
                 .position(x: cropRect.midX, y: cropRect.midY)
 
-            // Corner handles
-            ForEach([CropHandle.topLeft, .topRight, .bottomLeft, .bottomRight], id: \.self) { handle in
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 20, height: 20)
-                    .position(handlePosition(for: handle))
-                    .gesture(
-                        DragGesture()
-                            .onChanged { value in
-                                updateCropRect(for: handle, translation: value.translation)
-                            }
-                    )
+            // Grid lines (rule of thirds)
+            Path { path in
+                let third = cropRect.width / 3
+                path.move(to: CGPoint(x: cropRect.minX + third, y: cropRect.minY))
+                path.addLine(to: CGPoint(x: cropRect.minX + third, y: cropRect.maxY))
+                path.move(to: CGPoint(x: cropRect.minX + third * 2, y: cropRect.minY))
+                path.addLine(to: CGPoint(x: cropRect.minX + third * 2, y: cropRect.maxY))
+
+                let thirdH = cropRect.height / 3
+                path.move(to: CGPoint(x: cropRect.minX, y: cropRect.minY + thirdH))
+                path.addLine(to: CGPoint(x: cropRect.maxX, y: cropRect.minY + thirdH))
+                path.move(to: CGPoint(x: cropRect.minX, y: cropRect.minY + thirdH * 2))
+                path.addLine(to: CGPoint(x: cropRect.maxX, y: cropRect.minY + thirdH * 2))
             }
+            .stroke(Color.white.opacity(0.5), lineWidth: 1)
+
+            // Corner handles
+            ForEach(CropHandle.allCases, id: \.self) { handle in
+                cornerHandle(for: handle)
+            }
+
+            // Move gesture on crop area (center)
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: max(0, cropRect.width - 60), height: max(0, cropRect.height - 60))
+                .position(x: cropRect.midX, y: cropRect.midY)
+                .gesture(moveGesture)
         }
         .frame(width: bounds.width, height: bounds.height)
-        .gesture(
-            DragGesture()
-                .onChanged { value in
-                    // Move entire crop rect
-                    var newRect = cropRect
-                    newRect.origin.x = max(0, min(bounds.width - cropRect.width, cropRect.origin.x + value.translation.width))
-                    newRect.origin.y = max(0, min(bounds.height - cropRect.height, cropRect.origin.y + value.translation.height))
-                    cropRect = newRect
+    }
+
+    private func cornerHandle(for handle: CropHandle) -> some View {
+        Circle()
+            .fill(Color.white)
+            .frame(width: 24, height: 24)
+            .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+            .position(handlePosition(for: handle))
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if !isDraggingHandle {
+                            initialCropRect = cropRect
+                            isDraggingHandle = true
+                        }
+                        updateCropRect(for: handle, translation: value.translation)
+                    }
+                    .onEnded { _ in
+                        isDraggingHandle = false
+                    }
+            )
+    }
+
+    private var moveGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                if !isDraggingHandle {
+                    if initialCropRect == .zero {
+                        initialCropRect = cropRect
+                    }
+                    let newX = max(0, min(bounds.width - initialCropRect.width, initialCropRect.origin.x + value.translation.width))
+                    let newY = max(0, min(bounds.height - initialCropRect.height, initialCropRect.origin.y + value.translation.height))
+                    cropRect = CGRect(x: newX, y: newY, width: initialCropRect.width, height: initialCropRect.height)
                 }
-        )
+            }
+            .onEnded { _ in
+                initialCropRect = cropRect
+            }
     }
 
     private func handlePosition(for handle: CropHandle) -> CGPoint {
@@ -448,8 +603,6 @@ struct CropOverlay: View {
             return CGPoint(x: cropRect.minX, y: cropRect.maxY)
         case .bottomRight:
             return CGPoint(x: cropRect.maxX, y: cropRect.maxY)
-        case .move:
-            return cropRect.origin
         }
     }
 
@@ -458,35 +611,33 @@ struct CropOverlay: View {
 
         switch handle {
         case .topLeft:
-            let newX = max(0, cropRect.minX + translation.width)
-            let newY = max(0, cropRect.minY + translation.height)
-            let newWidth = cropRect.maxX - newX
-            let newHeight = cropRect.maxY - newY
+            let newX = max(0, initialCropRect.minX + translation.width)
+            let newY = max(0, initialCropRect.minY + translation.height)
+            let newWidth = initialCropRect.maxX - newX
+            let newHeight = initialCropRect.maxY - newY
             if newWidth >= minSize && newHeight >= minSize {
                 cropRect = CGRect(x: newX, y: newY, width: newWidth, height: newHeight)
             }
         case .topRight:
-            let newWidth = min(bounds.width - cropRect.minX, cropRect.width + translation.width)
-            let newY = max(0, cropRect.minY + translation.height)
-            let newHeight = cropRect.maxY - newY
+            let newWidth = min(bounds.width - initialCropRect.minX, initialCropRect.width + translation.width)
+            let newY = max(0, initialCropRect.minY + translation.height)
+            let newHeight = initialCropRect.maxY - newY
             if newWidth >= minSize && newHeight >= minSize {
-                cropRect = CGRect(x: cropRect.minX, y: newY, width: newWidth, height: newHeight)
+                cropRect = CGRect(x: initialCropRect.minX, y: newY, width: newWidth, height: newHeight)
             }
         case .bottomLeft:
-            let newX = max(0, cropRect.minX + translation.width)
-            let newWidth = cropRect.maxX - newX
-            let newHeight = min(bounds.height - cropRect.minY, cropRect.height + translation.height)
+            let newX = max(0, initialCropRect.minX + translation.width)
+            let newWidth = initialCropRect.maxX - newX
+            let newHeight = min(bounds.height - initialCropRect.minY, initialCropRect.height + translation.height)
             if newWidth >= minSize && newHeight >= minSize {
-                cropRect = CGRect(x: newX, y: cropRect.minY, width: newWidth, height: newHeight)
+                cropRect = CGRect(x: newX, y: initialCropRect.minY, width: newWidth, height: newHeight)
             }
         case .bottomRight:
-            let newWidth = min(bounds.width - cropRect.minX, cropRect.width + translation.width)
-            let newHeight = min(bounds.height - cropRect.minY, cropRect.height + translation.height)
+            let newWidth = min(bounds.width - initialCropRect.minX, initialCropRect.width + translation.width)
+            let newHeight = min(bounds.height - initialCropRect.minY, initialCropRect.height + translation.height)
             if newWidth >= minSize && newHeight >= minSize {
-                cropRect = CGRect(x: cropRect.minX, y: cropRect.minY, width: newWidth, height: newHeight)
+                cropRect = CGRect(x: initialCropRect.minX, y: initialCropRect.minY, width: newWidth, height: newHeight)
             }
-        case .move:
-            break
         }
     }
 }
@@ -497,11 +648,37 @@ struct MediaLabelsView: View {
     let image: UIImage
     @Binding var searchTerms: [String]
     @Binding var isSharedWithFellowship: Bool
+    @Binding var comment: String
+    let procedureCategory: String?
     let onSave: () -> Void
     let onCancel: () -> Void
 
     @State private var newTerm = ""
     @Query private var suggestions: [SearchTermSuggestion]
+
+    // Common labels organized by procedure category
+    private static let commonLabels: [String: [String]] = [
+        "coronary": ["Great Result", "Coronary Anomaly", "CTO", "Bifurcation", "Calcified", "Thrombus", "Dissection", "Perforation"],
+        "structural": ["TAVR", "MitraClip", "LAAO", "PFO Closure", "ASD Closure", "Paravalvular Leak"],
+        "ep": ["Interesting Case", "Rare Arrhythmia", "Complex Ablation", "Device Implant", "Lead Extraction"],
+        "echo": ["Teaching Case", "Rare Finding", "Great Image", "Pathology", "Pre-Procedure", "Post-Procedure"],
+        "general": ["Teaching Case", "Rare Finding", "Great Result", "Complication", "Before/After", "Technique"]
+    ]
+
+    private var quickLabels: [String] {
+        if let category = procedureCategory?.lowercased() {
+            if category.contains("coronary") || category.contains("pci") || category.contains("cath") {
+                return Self.commonLabels["coronary"] ?? Self.commonLabels["general"]!
+            } else if category.contains("structural") || category.contains("tavr") || category.contains("valve") {
+                return Self.commonLabels["structural"] ?? Self.commonLabels["general"]!
+            } else if category.contains("ep") || category.contains("ablation") || category.contains("device") {
+                return Self.commonLabels["ep"] ?? Self.commonLabels["general"]!
+            } else if category.contains("echo") || category.contains("imaging") {
+                return Self.commonLabels["echo"] ?? Self.commonLabels["general"]!
+            }
+        }
+        return Self.commonLabels["general"]!
+    }
 
     private var filteredSuggestions: [SearchTermSuggestion] {
         guard !newTerm.isEmpty else { return [] }
@@ -524,13 +701,41 @@ struct MediaLabelsView: View {
                         .frame(maxHeight: 200)
                         .cornerRadius(12)
 
-                    // Search terms
+                    // Labels section
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Labels")
                             .font(.headline)
 
+                        // Quick label buttons
+                        Text("Quick Labels")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(quickLabels.filter { !searchTerms.contains($0) }, id: \.self) { label in
+                                Button {
+                                    searchTerms.append(label)
+                                } label: {
+                                    Text(label)
+                                        .font(.caption)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.blue.opacity(0.1))
+                                        .foregroundStyle(.blue)
+                                        .cornerRadius(16)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        Divider()
+
                         // Current terms
                         if !searchTerms.isEmpty {
+                            Text("Selected")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+
                             FlowLayout(spacing: 8) {
                                 ForEach(searchTerms, id: \.self) { term in
                                     HStack(spacing: 4) {
@@ -551,9 +756,9 @@ struct MediaLabelsView: View {
                             }
                         }
 
-                        // Add new term
+                        // Add custom term
                         HStack {
-                            TextField("Add label...", text: $newTerm)
+                            TextField("Add custom label...", text: $newTerm)
                                 .textFieldStyle(.roundedBorder)
                                 .onSubmit {
                                     addTerm()
@@ -569,7 +774,7 @@ struct MediaLabelsView: View {
                             .disabled(newTerm.isEmpty)
                         }
 
-                        // Suggestions
+                        // Suggestions from history
                         if !filteredSuggestions.isEmpty {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
@@ -590,6 +795,25 @@ struct MediaLabelsView: View {
                                 }
                             }
                         }
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
+                    // Comments section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Comments")
+                            .font(.headline)
+
+                        TextEditor(text: $comment)
+                            .frame(minHeight: 80)
+                            .padding(8)
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(8)
+
+                        Text("Add notes about this image for yourself and others")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textTertiary)
                     }
                     .padding()
                     .background(ProcedusTheme.cardBackground)
@@ -644,11 +868,37 @@ struct VideoLabelsView: View {
     let videoURL: URL
     @Binding var searchTerms: [String]
     @Binding var isSharedWithFellowship: Bool
+    @Binding var comment: String
+    let procedureCategory: String?
     let onSave: () -> Void
     let onCancel: () -> Void
 
     @State private var newTerm = ""
     @State private var thumbnailImage: UIImage?
+
+    // Common labels (same as MediaLabelsView)
+    private static let commonLabels: [String: [String]] = [
+        "coronary": ["Great Result", "Coronary Anomaly", "CTO", "Bifurcation", "Calcified", "Thrombus", "Dissection", "Perforation"],
+        "structural": ["TAVR", "MitraClip", "LAAO", "PFO Closure", "ASD Closure", "Paravalvular Leak"],
+        "ep": ["Interesting Case", "Rare Arrhythmia", "Complex Ablation", "Device Implant", "Lead Extraction"],
+        "echo": ["Teaching Case", "Rare Finding", "Great Image", "Pathology", "Pre-Procedure", "Post-Procedure"],
+        "general": ["Teaching Case", "Rare Finding", "Great Result", "Complication", "Before/After", "Technique"]
+    ]
+
+    private var quickLabels: [String] {
+        if let category = procedureCategory?.lowercased() {
+            if category.contains("coronary") || category.contains("pci") || category.contains("cath") {
+                return Self.commonLabels["coronary"] ?? Self.commonLabels["general"]!
+            } else if category.contains("structural") || category.contains("tavr") || category.contains("valve") {
+                return Self.commonLabels["structural"] ?? Self.commonLabels["general"]!
+            } else if category.contains("ep") || category.contains("ablation") || category.contains("device") {
+                return Self.commonLabels["ep"] ?? Self.commonLabels["general"]!
+            } else if category.contains("echo") || category.contains("imaging") {
+                return Self.commonLabels["echo"] ?? Self.commonLabels["general"]!
+            }
+        }
+        return Self.commonLabels["general"]!
+    }
 
     var body: some View {
         NavigationStack {
@@ -680,12 +930,40 @@ struct VideoLabelsView: View {
                         }
                     }
 
-                    // Search terms (same as MediaLabelsView)
+                    // Labels section
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Labels")
                             .font(.headline)
 
+                        // Quick label buttons
+                        Text("Quick Labels")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(quickLabels.filter { !searchTerms.contains($0) }, id: \.self) { label in
+                                Button {
+                                    searchTerms.append(label)
+                                } label: {
+                                    Text(label)
+                                        .font(.caption)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.blue.opacity(0.1))
+                                        .foregroundStyle(.blue)
+                                        .cornerRadius(16)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        Divider()
+
                         if !searchTerms.isEmpty {
+                            Text("Selected")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+
                             FlowLayout(spacing: 8) {
                                 ForEach(searchTerms, id: \.self) { term in
                                     HStack(spacing: 4) {
@@ -707,7 +985,7 @@ struct VideoLabelsView: View {
                         }
 
                         HStack {
-                            TextField("Add label...", text: $newTerm)
+                            TextField("Add custom label...", text: $newTerm)
                                 .textFieldStyle(.roundedBorder)
                                 .onSubmit {
                                     addTerm()
@@ -722,6 +1000,25 @@ struct VideoLabelsView: View {
                             }
                             .disabled(newTerm.isEmpty)
                         }
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
+                    // Comments section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Comments")
+                            .font(.headline)
+
+                        TextEditor(text: $comment)
+                            .frame(minHeight: 80)
+                            .padding(8)
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(8)
+
+                        Text("Add notes about this video for yourself and others")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textTertiary)
                     }
                     .padding()
                     .background(ProcedusTheme.cardBackground)

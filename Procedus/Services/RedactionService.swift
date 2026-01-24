@@ -83,6 +83,42 @@ final class RedactionService {
         return applyRedaction(to: image, regions: regionsToRedact)
     }
 
+    // MARK: - Manual Redaction
+
+    /// Apply manual redaction from user-drawn rectangles (normalized coordinates, origin top-left)
+    /// - Parameters:
+    ///   - image: The original image
+    ///   - rects: Array of normalized rectangles (0-1 range, UIKit coordinate system)
+    /// - Returns: New image with redactions applied
+    func applyManualRedaction(to image: UIImage, rects: [CGRect]) -> UIImage? {
+        guard !rects.isEmpty else { return image }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+
+        return renderer.image { context in
+            // Draw original image
+            image.draw(at: .zero)
+
+            // Draw black rectangles over each region
+            UIColor.black.setFill()
+
+            for rect in rects {
+                // Convert normalized rect to image coordinates
+                let imageRect = CGRect(
+                    x: rect.origin.x * image.size.width,
+                    y: rect.origin.y * image.size.height,
+                    width: rect.width * image.size.width,
+                    height: rect.height * image.size.height
+                )
+                context.fill(imageRect)
+            }
+        }
+    }
+
     // MARK: - Coordinate Conversion
 
     /// Convert Vision normalized rect (origin bottom-left) to UIKit coordinates (origin top-left)

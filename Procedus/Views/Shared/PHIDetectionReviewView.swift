@@ -10,24 +10,29 @@ struct PHIDetectionReviewView: View {
     let onRedactAndSave: (UIImage) -> Void
     let onCropInstead: () -> Void
     let onCancel: () -> Void
+    let onRescanAsDiagram: (() -> Void)?
 
     @State private var highlightedImage: UIImage?
     @State private var selectedRegionIds: Set<UUID>
     @State private var showingRedactionPreview = false
     @State private var redactedImage: UIImage?
+    @State private var showingManualRedaction = false
+    @State private var manualRedactionRects: [CGRect] = []
 
     init(
         originalImage: UIImage,
         detectedRegions: [DetectedTextRegion],
         onRedactAndSave: @escaping (UIImage) -> Void,
         onCropInstead: @escaping () -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onRescanAsDiagram: (() -> Void)? = nil
     ) {
         self.originalImage = originalImage
         self.detectedRegions = detectedRegions
         self.onRedactAndSave = onRedactAndSave
         self.onCropInstead = onCropInstead
         self.onCancel = onCancel
+        self.onRescanAsDiagram = onRescanAsDiagram
         // Default: all regions selected for redaction
         _selectedRegionIds = State(initialValue: Set(detectedRegions.map { $0.id }))
     }
@@ -64,6 +69,23 @@ struct PHIDetectionReviewView: View {
             }
             .sheet(isPresented: $showingRedactionPreview) {
                 redactionPreviewSheet
+            }
+            .sheet(isPresented: $showingManualRedaction) {
+                ManualRedactionView(
+                    image: originalImage,
+                    existingRects: manualRedactionRects,
+                    onSave: { rects in
+                        manualRedactionRects = rects
+                        showingManualRedaction = false
+                        // Apply manual redaction
+                        if let redacted = RedactionService.shared.applyManualRedaction(to: originalImage, rects: rects) {
+                            onRedactAndSave(redacted)
+                        }
+                    },
+                    onCancel: {
+                        showingManualRedaction = false
+                    }
+                )
             }
         }
     }
@@ -194,20 +216,64 @@ struct PHIDetectionReviewView: View {
             }
             .disabled(selectedRegionIds.isEmpty)
 
-            // Crop Instead button
-            Button {
-                onCropInstead()
-            } label: {
-                HStack {
-                    Image(systemName: "crop")
-                    Text("Crop Instead")
+            HStack(spacing: 8) {
+                // Crop button
+                Button {
+                    onCropInstead()
+                } label: {
+                    HStack {
+                        Image(systemName: "crop")
+                        Text("Crop")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(ProcedusTheme.primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(ProcedusTheme.primary.opacity(0.1))
+                    .cornerRadius(10)
                 }
-                .font(.subheadline)
-                .foregroundStyle(ProcedusTheme.primary)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(ProcedusTheme.primary.opacity(0.1))
-                .cornerRadius(12)
+
+                // Manual redaction button
+                Button {
+                    showingManualRedaction = true
+                } label: {
+                    HStack {
+                        Image(systemName: "rectangle.badge.plus")
+                        Text("Manual")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.purple)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.purple.opacity(0.1))
+                    .cornerRadius(10)
+                }
+
+                // Hand-drawn diagram button
+                if let rescanAsDiagram = onRescanAsDiagram {
+                    Button {
+                        rescanAsDiagram()
+                    } label: {
+                        HStack {
+                            Image(systemName: "hand.draw")
+                            Text("Diagram")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                }
+            }
+
+            // Help text for diagram mode
+            if onRescanAsDiagram != nil {
+                Text("Tap 'Diagram' if this is a hand-drawn sketch. Only the patient label area (top-right) will require redaction.")
+                    .font(.caption2)
+                    .foregroundStyle(ProcedusTheme.textTertiary)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding()
@@ -297,6 +363,180 @@ struct PHIDetectionReviewView: View {
 }
 
 // MARK: - No PHI Confirmation View
+
+// MARK: - Manual Redaction View
+
+/// Allows user to draw rectangles manually for PHI redaction
+struct ManualRedactionView: View {
+    let image: UIImage
+    let existingRects: [CGRect]
+    let onSave: ([CGRect]) -> Void
+    let onCancel: () -> Void
+
+    @State private var rects: [CGRect] = []
+    @State private var currentRect: CGRect?
+    @State private var dragStart: CGPoint?
+    @State private var imageDisplaySize: CGSize = .zero
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Instructions
+                HStack(spacing: 8) {
+                    Image(systemName: "hand.draw")
+                        .foregroundStyle(.purple)
+                    Text("Draw rectangles over areas to redact")
+                        .font(.subheadline)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                }
+                .padding()
+                .background(Color.purple.opacity(0.1))
+
+                // Image with drawing overlay
+                GeometryReader { geometry in
+                    let aspectRatio = image.size.width / image.size.height
+                    let containerAspect = geometry.size.width / geometry.size.height
+
+                    let displaySize: CGSize = {
+                        if aspectRatio > containerAspect {
+                            return CGSize(width: geometry.size.width, height: geometry.size.width / aspectRatio)
+                        } else {
+                            return CGSize(width: geometry.size.height * aspectRatio, height: geometry.size.height)
+                        }
+                    }()
+
+                    let offsetX = (geometry.size.width - displaySize.width) / 2
+                    let offsetY = (geometry.size.height - displaySize.height) / 2
+
+                    ZStack {
+                        // Image
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+
+                        // Existing rectangles
+                        ForEach(rects.indices, id: \.self) { index in
+                            Rectangle()
+                                .fill(Color.black)
+                                .frame(width: rects[index].width, height: rects[index].height)
+                                .position(x: rects[index].midX, y: rects[index].midY)
+                                .onTapGesture {
+                                    rects.remove(at: index)
+                                }
+                        }
+
+                        // Current drawing rectangle
+                        if let rect = currentRect {
+                            Rectangle()
+                                .stroke(Color.red, lineWidth: 2)
+                                .background(Color.red.opacity(0.2))
+                                .frame(width: rect.width, height: rect.height)
+                                .position(x: rect.midX, y: rect.midY)
+                        }
+                    }
+                    .frame(width: displaySize.width, height: displaySize.height)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                // Adjust for image offset
+                                let adjustedStart = CGPoint(
+                                    x: value.startLocation.x - offsetX,
+                                    y: value.startLocation.y - offsetY
+                                )
+                                let adjustedCurrent = CGPoint(
+                                    x: value.location.x - offsetX,
+                                    y: value.location.y - offsetY
+                                )
+
+                                // Clamp to image bounds
+                                let clampedStart = CGPoint(
+                                    x: max(0, min(displaySize.width, adjustedStart.x)),
+                                    y: max(0, min(displaySize.height, adjustedStart.y))
+                                )
+                                let clampedEnd = CGPoint(
+                                    x: max(0, min(displaySize.width, adjustedCurrent.x)),
+                                    y: max(0, min(displaySize.height, adjustedCurrent.y))
+                                )
+
+                                let minX = min(clampedStart.x, clampedEnd.x)
+                                let minY = min(clampedStart.y, clampedEnd.y)
+                                let width = abs(clampedEnd.x - clampedStart.x)
+                                let height = abs(clampedEnd.y - clampedStart.y)
+
+                                currentRect = CGRect(x: minX, y: minY, width: width, height: height)
+                            }
+                            .onEnded { _ in
+                                if let rect = currentRect, rect.width > 10, rect.height > 10 {
+                                    rects.append(rect)
+                                }
+                                currentRect = nil
+                            }
+                    )
+                    .onAppear {
+                        imageDisplaySize = displaySize
+                    }
+                    .onChange(of: geometry.size) { _, _ in
+                        imageDisplaySize = displaySize
+                    }
+                }
+                .padding()
+
+                // Rect count and clear button
+                HStack {
+                    Text("\(rects.count) area(s) marked")
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+
+                    Spacer()
+
+                    if !rects.isEmpty {
+                        Button("Clear All") {
+                            rects.removeAll()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    }
+                }
+                .padding(.horizontal)
+
+                // Save button
+                Button {
+                    // Convert display rects to normalized coordinates
+                    let normalizedRects = rects.map { rect -> CGRect in
+                        CGRect(
+                            x: rect.origin.x / imageDisplaySize.width,
+                            y: rect.origin.y / imageDisplaySize.height,
+                            width: rect.width / imageDisplaySize.width,
+                            height: rect.height / imageDisplaySize.height
+                        )
+                    }
+                    onSave(normalizedRects)
+                } label: {
+                    Text("Apply Redaction")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(rects.isEmpty ? Color.gray : Color.purple)
+                        .cornerRadius(12)
+                }
+                .disabled(rects.isEmpty)
+                .padding()
+            }
+            .navigationTitle("Manual Redaction")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+            }
+            .onAppear {
+                rects = existingRects
+            }
+        }
+    }
+}
 
 /// Shown when no text is detected - user must confirm no PHI
 struct NoPHIConfirmationView: View {

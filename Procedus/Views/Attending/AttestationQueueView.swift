@@ -15,13 +15,12 @@ struct AttestationQueueView: View {
     @Query private var attendings: [Attending]
     @Query private var programs: [Program]
     @Query private var users: [User]
-    @Query private var notifications: [Procedus.Notification]
     @Query private var evaluationFields: [EvaluationField]
     @Query private var facilities: [TrainingFacility]
+    @Query private var allMedia: [CaseMedia]
 
     @AppStorage("selectedAttendingId") private var selectedAttendingIdString = ""
 
-    @State private var showingNotifications = false
     @State private var selectedCase: CaseEntry?
     @State private var showingBulkAttestConfirm = false
     @State private var selectedFellowFilter: UUID? = nil  // nil = All Fellows
@@ -62,20 +61,6 @@ struct AttestationQueueView: View {
         return ids
     }
 
-    private var unreadNotificationCount: Int {
-        guard !attendingRelatedIds.isEmpty else { return 0 }
-        // Count unread notifications for any related ID
-        let notificationCount = notifications.filter { notification in
-            !notification.isRead && !notification.isCleared &&
-            (attendingRelatedIds.contains(notification.userId) ||
-             (notification.attendingId != nil && attendingRelatedIds.contains(notification.attendingId!)))
-        }.count
-        // Also count pending attestations as a badge indicator
-        let pendingAttestationCount = pendingCases.count
-        // Return the higher of the two to ensure badge shows when attestations are waiting
-        return max(notificationCount, pendingAttestationCount)
-    }
-
     private var hasAttendingSelected: Bool {
         guard let id = currentAttendingId else { return false }
         return attendings.contains { $0.id == id && !$0.isArchived }
@@ -95,6 +80,11 @@ struct AttestationQueueView: View {
         }
 
         return cases.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Set of case IDs that have media attached
+    private var caseIdsWithMedia: Set<UUID> {
+        Set(allMedia.map { $0.caseEntryId })
     }
 
     /// Unique fellows who have pending cases
@@ -125,17 +115,7 @@ struct AttestationQueueView: View {
                     attestationListView
                 }
             }
-            .navigationTitle("Attestations")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    NotificationBellButton(role: .attending, badgeCount: unreadNotificationCount) {
-                        showingNotifications = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showingNotifications) {
-                NotificationsSheet(role: .attending, userId: currentAttendingId)
-            }
+            .navigationBarHidden(true)
             .sheet(item: $selectedCase) { caseEntry in
                 AttendingAttestationDetailSheet(
                     caseEntry: caseEntry,
@@ -287,6 +267,7 @@ struct AttestationQueueView: View {
                             facilities: Array(facilities),
                             evaluationFields: activeEvaluationFields,
                             evaluationsRequired: evaluationsRequired,
+                            hasMedia: caseIdsWithMedia.contains(caseEntry.id),
                             onQuickRate: { rating in
                                 quickRateAllFields(caseEntry, rating: rating)
                             },
@@ -395,6 +376,7 @@ struct UnifiedAttestationCard: View {
     let facilities: [TrainingFacility]
     let evaluationFields: [EvaluationField]
     let evaluationsRequired: Bool
+    var hasMedia: Bool = false
     let onQuickRate: (Int) -> Void
     let onTap: () -> Void
 
@@ -422,9 +404,16 @@ struct UnifiedAttestationCard: View {
             HStack(alignment: .center, spacing: 8) {
                 // Fellow info
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(fellowName)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                    HStack(spacing: 6) {
+                        Text(fellowName)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        if hasMedia {
+                            Image(systemName: "camera.fill")
+                                .font(.caption)
+                                .foregroundColor(ProcedusTheme.primary)
+                        }
+                    }
 
                     HStack(spacing: 4) {
                         Text(caseEntry.createdAt.formatted(date: .abbreviated, time: .omitted))
@@ -715,6 +704,7 @@ struct AttestationQueueCaseRow: View {
     let caseEntry: CaseEntry
     let users: [User]
     let facilities: [TrainingFacility]
+    var hasMedia: Bool = false
 
     private var fellowName: String {
         users.first { $0.id == caseEntry.fellowId || $0.id == caseEntry.ownerId }?.displayName ?? "Unknown Fellow"
@@ -749,6 +739,11 @@ struct AttestationQueueCaseRow: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 Spacer()
+                if hasMedia {
+                    Image(systemName: "camera.fill")
+                        .font(.caption)
+                        .foregroundColor(ProcedusTheme.primary)
+                }
                 Text("\(caseEntry.procedureTagIds.count) procedure\(caseEntry.procedureTagIds.count == 1 ? "" : "s")")
                     .font(.caption)
                     .foregroundColor(Color(UIColor.secondaryLabel))

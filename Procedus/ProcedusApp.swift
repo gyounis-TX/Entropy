@@ -34,6 +34,10 @@ struct ProcedusApp: App {
             BadgeEarned.self,
             CaseMedia.self,
             SearchTermSuggestion.self,
+            MediaComment.self,
+            DutyHoursEntry.self,
+            DutyHoursShift.self,
+            DutyHoursViolation.self,
         ])
         
         let modelConfiguration = ModelConfiguration(

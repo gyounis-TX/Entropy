@@ -254,7 +254,7 @@ enum ProcedureCategory: String, Codable, CaseIterable, Identifiable {
         switch self {
         // Interventional Cardiology categories
         case .cardiacDiagnostic: return "D"   // Diagnostic
-        case .coronaryIntervention: return "C" // Coronary
+        case .coronaryIntervention: return "I" // Intervention
         case .peripheralArterial: return "P"   // Peripheral
         case .venousPE: return "V"             // Venous
         case .structuralValve: return "S"      // Structural
@@ -271,9 +271,9 @@ enum ProcedureCategory: String, Codable, CaseIterable, Identifiable {
         // Cardiac Imaging categories (unique letters to avoid conflicts)
         case .echo: return "E"                 // Echo (cyan to distinguish from EP green)
         case .nuclear: return "N"              // Nuclear
-        case .cardiacCT: return "T"            // CT (T for CT scan)
-        case .cardiacMRI: return "R"           // MRI (R for MRI)
-        case .vascularUltrasound: return "U"   // Ultrasound
+        case .cardiacCT: return "C"            // CT
+        case .cardiacMRI: return "M"           // MRI
+        case .vascularUltrasound: return "V"   // Vascular
 
         // General categories
         case .other: return "O"
@@ -803,6 +803,7 @@ enum FellowshipSpecialty: String, Codable, CaseIterable, Identifiable {
 
 enum CaseType: String, Codable, CaseIterable, Identifiable {
     case invasive = "Invasive"
+    case ep = "EP"
     case noninvasive = "Noninvasive"
 
     var id: String { rawValue }
@@ -812,6 +813,7 @@ enum CaseType: String, Codable, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .invasive: return "arrow.right.circle.fill"
+        case .ep: return "bolt.heart.fill"
         case .noninvasive: return "waveform.path.ecg"
         }
     }
@@ -819,6 +821,7 @@ enum CaseType: String, Codable, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .invasive: return .red
+        case .ep: return .green
         case .noninvasive: return .blue
         }
     }
@@ -1018,6 +1021,190 @@ enum MediaType: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .image: return ["jpg", "jpeg", "png", "heic", "heif"]
         case .video: return ["mp4", "mov", "m4v"]
+        }
+    }
+}
+
+// MARK: - Duty Hours Shift Type
+
+enum DutyHoursShiftType: String, Codable, CaseIterable, Identifiable {
+    case regular = "Regular"
+    case call = "Call"
+    case nightFloat = "Night Float"
+    case moonlighting = "Moonlighting"
+    case atHomeCall = "At-Home Call"
+    case dayOff = "Day Off"
+
+    var id: String { rawValue }
+
+    var displayName: String { rawValue }
+
+    var iconName: String {
+        switch self {
+        case .regular: return "clock.fill"
+        case .call: return "phone.fill"
+        case .nightFloat: return "moon.fill"
+        case .moonlighting: return "moon.stars.fill"
+        case .atHomeCall: return "house.fill"
+        case .dayOff: return "sun.max.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .regular: return .blue
+        case .call: return .orange
+        case .nightFloat: return .purple
+        case .moonlighting: return .indigo
+        case .atHomeCall: return .green
+        case .dayOff: return .mint
+        }
+    }
+
+    /// Whether this shift type counts toward ACGME duty hour limits
+    var countsTowardHourLimits: Bool {
+        switch self {
+        case .dayOff: return false
+        default: return true
+        }
+    }
+
+    /// Whether this is considered a call shift for call frequency calculations
+    var isCallShift: Bool {
+        switch self {
+        case .call, .nightFloat: return true
+        default: return false
+        }
+    }
+}
+
+// MARK: - Duty Hours Logging Mode
+
+enum DutyHoursLoggingMode: String, Codable, CaseIterable, Identifiable {
+    case simple = "Simple"
+    case comprehensive = "Comprehensive"
+
+    var id: String { rawValue }
+
+    var displayName: String { rawValue }
+
+    var description: String {
+        switch self {
+        case .simple: return "Log weekly totals only"
+        case .comprehensive: return "Track individual shifts with ACGME compliance"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .simple: return "list.bullet"
+        case .comprehensive: return "clock.badge.checkmark"
+        }
+    }
+}
+
+// MARK: - Duty Hours Violation Type
+
+enum DutyHoursViolationType: String, Codable, CaseIterable, Identifiable {
+    case weeklyHoursExceeded = "Weekly Hours Exceeded"
+    case continuousDutyExceeded = "Continuous Duty Exceeded"
+    case insufficientRestAfter24 = "Insufficient Rest After 24hr Shift"
+    case insufficientInterShiftRest = "Insufficient Inter-Shift Rest"
+    case insufficientDaysOff = "Insufficient Days Off"
+    case callFrequencyExceeded = "Call Frequency Exceeded"
+    case nightFloatExceeded = "Night Float Limit Exceeded"
+
+    var id: String { rawValue }
+
+    var displayName: String { rawValue }
+
+    var acgmeReference: String {
+        switch self {
+        case .weeklyHoursExceeded: return "ACGME VI.F.1 - 80 hours/week (4-week average)"
+        case .continuousDutyExceeded: return "ACGME VI.F.3 - 24 hours continuous duty"
+        case .insufficientRestAfter24: return "ACGME VI.F.4 - 14 hours rest after 24hr shift"
+        case .insufficientInterShiftRest: return "ACGME VI.F.5 - 8-10 hours between shifts"
+        case .insufficientDaysOff: return "ACGME VI.F.6 - 1 day off per 7 days (4-week average)"
+        case .callFrequencyExceeded: return "ACGME VI.F.7 - No more than every 3rd night call"
+        case .nightFloatExceeded: return "ACGME VI.F.8 - 6 consecutive nights maximum"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .weeklyHoursExceeded: return "clock.badge.exclamationmark"
+        case .continuousDutyExceeded: return "hourglass.badge.plus"
+        case .insufficientRestAfter24: return "bed.double.fill"
+        case .insufficientInterShiftRest: return "moon.zzz.fill"
+        case .insufficientDaysOff: return "calendar.badge.exclamationmark"
+        case .callFrequencyExceeded: return "phone.badge.plus"
+        case .nightFloatExceeded: return "moon.stars.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .weeklyHoursExceeded: return .red
+        case .continuousDutyExceeded: return .red
+        case .insufficientRestAfter24: return .orange
+        case .insufficientInterShiftRest: return .orange
+        case .insufficientDaysOff: return .yellow
+        case .callFrequencyExceeded: return .orange
+        case .nightFloatExceeded: return .purple
+        }
+    }
+}
+
+// MARK: - Violation Severity
+
+enum ViolationSeverity: String, Codable, CaseIterable, Identifiable {
+    case minor = "Minor"
+    case major = "Major"
+    case critical = "Critical"
+
+    var id: String { rawValue }
+
+    var displayName: String { rawValue }
+
+    var color: Color {
+        switch self {
+        case .minor: return .yellow
+        case .major: return .orange
+        case .critical: return .red
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .minor: return "exclamationmark.triangle"
+        case .major: return "exclamationmark.triangle.fill"
+        case .critical: return "exclamationmark.octagon.fill"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .minor: return "Approaching limit - requires monitoring"
+        case .major: return "Limit exceeded - requires attention"
+        case .critical: return "Significant violation - immediate action required"
+        }
+    }
+}
+
+// MARK: - Duty Hours Shift Location
+
+enum DutyHoursShiftLocation: String, Codable, CaseIterable, Identifiable {
+    case inHouse = "In-House"
+    case atHome = "At Home"
+
+    var id: String { rawValue }
+
+    var displayName: String { rawValue }
+
+    var iconName: String {
+        switch self {
+        case .inHouse: return "building.2.fill"
+        case .atHome: return "house.fill"
         }
     }
 }

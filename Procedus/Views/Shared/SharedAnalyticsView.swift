@@ -45,11 +45,21 @@ enum CategoryPreset: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Analytics Tab Selection
+
+enum AnalyticsTabSelection: String, CaseIterable {
+    case analytics = "Analytics"
+    case badges = "Badges"
+}
+
 // MARK: - Analytics View
 
 struct AnalyticsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("badgesEnabled") private var badgesEnabled = true
+    @AppStorage("badgesLastViewedAt") private var badgesLastViewedAt: Double = 0
 
     @Query private var allCases: [CaseEntry]
     @Query(filter: #Predicate<CustomProcedure> { !$0.isArchived }) private var customProcedures: [CustomProcedure]
@@ -58,15 +68,15 @@ struct AnalyticsView: View {
     @Query(filter: #Predicate<CustomComplication> { !$0.isArchived }) private var customComplications: [CustomComplication]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }, sort: \TrainingFacility.name) private var facilities: [TrainingFacility]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var earnedBadges: [BadgeEarned]
 
+    @State private var selectedTab: AnalyticsTabSelection = .analytics
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
     @State private var selectedPGYLevelFilter: Int? = nil  // nil = no PGY filter, otherwise specific PGY level (1-8)
     @State private var selectedFacilityId: UUID? = nil // nil = All Facilities
     @State private var selectedAttendingId: UUID? = nil // nil = All Attendings
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
-    @State private var showingNotifications = false
     @State private var selectedChartType: AnalyticsChartType = .bar
     @State private var selectedChartGrouping: ChartGrouping = .weeks
     @State private var showChart = true
@@ -95,11 +105,6 @@ struct AnalyticsView: View {
         }
         // For invasive or all, show standard presets
         return CategoryPreset.allCases
-    }
-
-    private var unreadNotificationCount: Int {
-        guard let userId = currentUserId else { return 0 }
-        return notifications.filter { $0.userId == userId && !$0.isRead }.count
     }
 
     /// Get the current user ID - handles both individual and institutional modes
@@ -335,68 +340,38 @@ struct AnalyticsView: View {
         let days = Calendar.current.dateComponents([.day], from: customStartDate, to: customEndDate).day ?? 0
         return days >= 6
     }
-    
+
+    private var newBadgeCount: Int {
+        let lastViewed = Date(timeIntervalSince1970: badgesLastViewedAt)
+        return earnedBadges.filter { $0.earnedAt > lastViewed }.count
+    }
+
+    /// Only show badges toggle for Fellows (not Attendings)
+    private var shouldShowBadgesToggle: Bool {
+        badgesEnabled && (appState.userRole == .fellow || appState.isIndividualMode)
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                // Case type filter for cardiology programs
-                if shouldShowAnalyticsCaseTypeFilter {
-                    analyticsCaseTypeSection
+            VStack(spacing: 0) {
+                // Analytics/Badges toggle at top (Fellows only)
+                if shouldShowBadgesToggle {
+                    analyticsTabPicker
                 }
 
-                // Operator position filter (for invasive cardiology)
-                if shouldShowOperatorPositionFilter {
-                    operatorPositionFilterSection
+                // Content based on selection
+                if selectedTab == .badges && shouldShowBadgesToggle {
+                    BadgeDashboardView()
+                        .onAppear {
+                            badgesLastViewedAt = Date().timeIntervalSince1970
+                        }
+                } else {
+                    analyticsContent
                 }
-
-                rangeSection
-                facilityFilterSection
-
-                // Attending filter (hide for noninvasive-only mode since those cases don't have attendings)
-                if selectedAnalyticsCaseType != .noninvasive {
-                    attendingFilterSection
-                }
-
-                if selectedRange == .custom {
-                    customRangeSection
-                }
-
-                summarySection
-                chartSection
-                countsSection
-
-                // Hide access site section for noninvasive mode
-                if selectedAnalyticsCaseType != .noninvasive {
-                    accessSiteSection
-                }
-
-                // Complications section - show for all case types
-                complicationSection
-
-                // Custom procedure details tracking
-                if !customProcedureDetails.isEmpty {
-                    customDetailsSection
-                }
-
-                notesSection
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .background(Color(UIColor.systemGroupedBackground))
-            .navigationTitle("Analytics")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    NotificationBellButton(
-                        role: appState.userRole,
-                        badgeCount: unreadNotificationCount
-                    ) {
-                        showingNotifications = true
-                    }
-                }
-            }
-            .sheet(isPresented: $showingNotifications) {
-                NotificationsSheet(role: appState.userRole, userId: appState.currentUser?.id)
-            }
+            .navigationTitle(selectedTab == .badges ? "Badges" : "Analytics")
+            .navigationBarHidden(true) // Hide nav bar - unified top bar is in FellowContentWrapper
             .sheet(isPresented: $showingProcedureFilter) {
                 ProcedureFilterSheet(
                     selectedCategoryPresets: $selectedCategoryPresets,
@@ -405,6 +380,104 @@ struct AnalyticsView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Analytics/Badges Tab Picker
+
+    private var analyticsTabPicker: some View {
+        HStack(spacing: 0) {
+            ForEach(AnalyticsTabSelection.allCases, id: \.self) { tab in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: tab == .analytics ? "chart.bar.fill" : "trophy.fill")
+                            .font(.system(size: 14))
+                        Text(tab.rawValue)
+                            .font(.subheadline)
+                            .fontWeight(selectedTab == tab ? .semibold : .regular)
+
+                        // Show badge count for Badges tab
+                        if tab == .badges && newBadgeCount > 0 && selectedTab != .badges {
+                            Text("\(newBadgeCount)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.red))
+                        }
+                    }
+                    .foregroundStyle(selectedTab == tab ? .white : (colorScheme == .dark ? Color(UIColor.secondaryLabel) : Color(UIColor.darkGray)))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        selectedTab == tab
+                            ? ProcedusTheme.primary
+                            : Color.clear
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(colorScheme == .dark ? Color(UIColor.secondarySystemBackground) : .white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Analytics Content
+
+    private var analyticsContent: some View {
+        List {
+            // Case type filter for cardiology programs
+            if shouldShowAnalyticsCaseTypeFilter {
+                analyticsCaseTypeSection
+            }
+
+            // Operator position filter (for invasive cardiology)
+            if shouldShowOperatorPositionFilter {
+                operatorPositionFilterSection
+            }
+
+            rangeSection
+            facilityFilterSection
+
+            // Attending filter (hide for noninvasive-only mode since those cases don't have attendings)
+            if selectedAnalyticsCaseType != .noninvasive {
+                attendingFilterSection
+            }
+
+            if selectedRange == .custom {
+                customRangeSection
+            }
+
+            summarySection
+            chartSection
+            countsSection
+
+            // Hide access site section for noninvasive mode
+            if selectedAnalyticsCaseType != .noninvasive {
+                accessSiteSection
+            }
+
+            // Complications section - show for all case types
+            complicationSection
+
+            // Custom procedure details tracking
+            if !customProcedureDetails.isEmpty {
+                customDetailsSection
+            }
+
+            notesSection
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
     }
     
     // MARK: - Case Type Filter Section (Cardiology)

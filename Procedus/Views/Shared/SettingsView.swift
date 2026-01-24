@@ -47,7 +47,6 @@ struct SettingsView: View {
     @AppStorage("notificationFrequency") private var notificationFrequencyRaw = NotificationFrequency.immediate.rawValue
     @AppStorage("caseLoggingReminderEnabled") private var caseLoggingReminderEnabled = false
     @AppStorage("caseLoggingReminderHour") private var caseLoggingReminderHour = 17 // 5 PM default
-    @AppStorage("allowCellularMediaUpload") private var allowCellularMediaUpload = false
     @AppStorage("teachingFilesAlertsEnabled") private var teachingFilesAlertsEnabled = true
     @AppStorage("attestationSummaryEnabled") private var attestationSummaryEnabled = false
     @State private var showingNotificationsSheet = false
@@ -391,14 +390,6 @@ struct SettingsView: View {
                 showingTeachingFiles = true
             }
 
-            // Cellular Upload Toggle
-            SettingsPillToggle(
-                icon: "antenna.radiowaves.left.and.right",
-                iconColor: .green,
-                title: "Upload on Cellular",
-                isOn: $allowCellularMediaUpload
-            )
-
             // IMPORT/EXPORT Section
             SectionHeader(title: "IMPORT/EXPORT")
 
@@ -500,22 +491,6 @@ struct SettingsView: View {
             }
 
             // MEDIA Section
-            SectionHeader(title: "MEDIA")
-
-            SettingsPillToggle(
-                icon: "antenna.radiowaves.left.and.right",
-                iconColor: .green,
-                title: "Upload on Cellular",
-                isOn: $allowCellularMediaUpload
-            )
-            .padding(.bottom, 4)
-
-            Text("When disabled, case images will only upload to cloud when connected to WiFi.")
-                .font(.caption2)
-                .foregroundColor(Color(UIColor.secondaryLabel))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-
             // About Row
             SettingsPillRow(
                 icon: "info.circle.fill",
@@ -1134,14 +1109,6 @@ struct SettingsView: View {
                     showingTeachingFiles = true
                 }
 
-                // Cellular Upload Toggle
-                SettingsPillToggle(
-                    icon: "antenna.radiowaves.left.and.right",
-                    iconColor: .green,
-                    title: "Upload on Cellular",
-                    isOn: $allowCellularMediaUpload
-                )
-
                 // IMPORT/EXPORT Section
                 SectionHeader(title: "IMPORT/EXPORT")
 
@@ -1328,13 +1295,6 @@ struct SettingsView: View {
                         showingTeachingFiles = true
                     }
 
-                    // Cellular Upload Toggle
-                    SettingsPillToggle(
-                        icon: "antenna.radiowaves.left.and.right",
-                        iconColor: .orange,
-                        title: "Allow Cellular Upload",
-                        isOn: $allowCellularMediaUpload
-                    )
                 }
 
                 // Push Notifications Section (for admin/attending)
