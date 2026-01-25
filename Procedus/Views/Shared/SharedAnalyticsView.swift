@@ -445,13 +445,8 @@ struct AnalyticsView: View {
                 operatorPositionFilterSection
             }
 
-            rangeSection
-            facilityFilterSection
-
-            // Attending filter (hide for noninvasive-only mode since those cases don't have attendings)
-            if selectedAnalyticsCaseType != .noninvasive {
-                attendingFilterSection
-            }
+            // Combined filters section
+            filtersSection
 
             if selectedRange == .custom {
                 customRangeSection
@@ -639,7 +634,7 @@ struct AnalyticsView: View {
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
 
-    // MARK: - Range Section
+    // MARK: - Combined Filters Section
 
     /// Combined display name for the current time range selection
     private var timeRangeDisplayName: String {
@@ -649,93 +644,156 @@ struct AnalyticsView: View {
         return selectedRange.rawValue
     }
 
-    private var rangeSection: some View {
-        Section {
-            Menu {
-                // Standard time ranges (excluding generic PGY and custom)
-                ForEach(standardTimeRanges, id: \.self) { range in
-                    Button {
-                        selectedRange = range
-                        selectedPGYLevelFilter = nil
-                    } label: {
-                        if selectedPGYLevelFilter == nil && selectedRange == range {
-                            Label(range.rawValue, systemImage: "checkmark")
-                        } else {
-                            Text(range.rawValue)
-                        }
-                    }
-                }
+    /// Selected facility display name
+    private var facilityDisplayName: String {
+        if let facilityId = selectedFacilityId,
+           let facility = facilities.first(where: { $0.id == facilityId }) {
+            return facility.name
+        }
+        return "All Hospitals"
+    }
 
-                // Dynamic PGY levels (only if PGY level is set and there's data)
-                if !availablePGYLevels.isEmpty {
-                    Divider()
-                    ForEach(availablePGYLevels, id: \.level) { pgyOption in
+    /// Selected attending display name
+    private var attendingDisplayName: String {
+        if let attendingId = selectedAttendingId,
+           let attending = attendings.first(where: { $0.id == attendingId }) {
+            return attending.name
+        }
+        return "All Attendings"
+    }
+
+    private var filtersSection: some View {
+        Section {
+            // Time Range Filter
+            HStack {
+                Text("Time")
+                    .font(.clinicalBody)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                Spacer()
+                Menu {
+                    // Standard time ranges (excluding generic PGY and custom)
+                    ForEach(standardTimeRanges, id: \.self) { range in
                         Button {
-                            selectedPGYLevelFilter = pgyOption.level
-                            selectedRange = .pgy
-                            selectedChartGrouping = .pgyYears
+                            selectedRange = range
+                            selectedPGYLevelFilter = nil
                         } label: {
-                            if selectedPGYLevelFilter == pgyOption.level {
-                                Label(pgyOption.displayName, systemImage: "checkmark")
+                            if selectedPGYLevelFilter == nil && selectedRange == range {
+                                Label(range.rawValue, systemImage: "checkmark")
                             } else {
-                                Text(pgyOption.displayName)
+                                Text(range.rawValue)
                             }
                         }
                     }
+
+                    // Dynamic PGY levels (only if PGY level is set and there's data)
+                    if !availablePGYLevels.isEmpty {
+                        Divider()
+                        ForEach(availablePGYLevels, id: \.level) { pgyOption in
+                            Button {
+                                selectedPGYLevelFilter = pgyOption.level
+                                selectedRange = .pgy
+                                selectedChartGrouping = .pgyYears
+                            } label: {
+                                if selectedPGYLevelFilter == pgyOption.level {
+                                    Label(pgyOption.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(pgyOption.displayName)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(timeRangeDisplayName)
+                            .font(.clinicalBody)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10))
+                    }
+                    .foregroundColor(ProcedusTheme.primary)
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(timeRangeDisplayName)
+            }
+
+            // Hospital Filter
+            HStack {
+                Text("Hospital")
+                    .font(.clinicalBody)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                Spacer()
+                Menu {
+                    Button {
+                        selectedFacilityId = nil
+                    } label: {
+                        if selectedFacilityId == nil {
+                            Label("All Hospitals", systemImage: "checkmark")
+                        } else {
+                            Text("All Hospitals")
+                        }
+                    }
+                    Divider()
+                    ForEach(facilities) { facility in
+                        Button {
+                            selectedFacilityId = facility.id
+                        } label: {
+                            if selectedFacilityId == facility.id {
+                                Label(facility.name, systemImage: "checkmark")
+                            } else {
+                                Text(facility.name)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(facilityDisplayName)
+                            .font(.clinicalBody)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10))
+                    }
+                    .foregroundColor(ProcedusTheme.primary)
+                }
+            }
+
+            // Attending Filter (hide for noninvasive-only mode)
+            if selectedAnalyticsCaseType != .noninvasive {
+                HStack {
+                    Text("Attending")
                         .font(.clinicalBody)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10))
-                }
-                .foregroundColor(ProcedusTheme.primary)
-            }
-        } header: {
-            Text("Time Range")
-                .font(.clinicalFootnote)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-        }
-        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
-    }
-
-    // MARK: - Facility Filter Section
-
-    private var facilityFilterSection: some View {
-        Section {
-            Picker("", selection: $selectedFacilityId) {
-                Text("All Hospitals").tag(nil as UUID?)
-                ForEach(facilities) { facility in
-                    Text(facility.name).tag(facility.id as UUID?)
-                }
-            }
-            .pickerStyle(.menu)
-            .tint(ProcedusTheme.primary)
-            .labelsHidden()
-        } header: {
-            Text("Hospital")
-                .font(.clinicalFootnote)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-        }
-        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
-    }
-
-    // MARK: - Attending Filter Section
-
-    private var attendingFilterSection: some View {
-        Section {
-            Picker("", selection: $selectedAttendingId) {
-                Text("All Attendings").tag(nil as UUID?)
-                ForEach(attendings.sorted { $0.name < $1.name }) { attending in
-                    Text(attending.name).tag(attending.id as UUID?)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                    Spacer()
+                    Menu {
+                        Button {
+                            selectedAttendingId = nil
+                        } label: {
+                            if selectedAttendingId == nil {
+                                Label("All Attendings", systemImage: "checkmark")
+                            } else {
+                                Text("All Attendings")
+                            }
+                        }
+                        Divider()
+                        ForEach(attendings.sorted { $0.name < $1.name }) { attending in
+                            Button {
+                                selectedAttendingId = attending.id
+                            } label: {
+                                if selectedAttendingId == attending.id {
+                                    Label(attending.name, systemImage: "checkmark")
+                                } else {
+                                    Text(attending.name)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(attendingDisplayName)
+                                .font(.clinicalBody)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(ProcedusTheme.primary)
+                    }
                 }
             }
-            .pickerStyle(.menu)
-            .tint(ProcedusTheme.primary)
-            .labelsHidden()
         } header: {
-            Text("Attending")
+            Text("Filters")
                 .font(.clinicalFootnote)
                 .foregroundStyle(ProcedusTheme.textSecondary)
         }
