@@ -81,6 +81,9 @@ struct SettingsView: View {
     @State private var showingMyGallery = false
     @State private var showingTeachingFiles = false
 
+    // Messaging
+    @State private var showingSendMessage = false
+
     private var unreadNotificationCount: Int {
         guard let userId = appState.currentUser?.id else { return 0 }
         return notifications.filter { $0.userId == userId && !$0.isRead }.count
@@ -1000,6 +1003,16 @@ struct SettingsView: View {
                     showingCloudBackup = true
                 }
 
+                // Send Message Row
+                SettingsPillRow(
+                    icon: "message.fill",
+                    iconColor: .green,
+                    title: "Send Message",
+                    showChevron: true
+                ) {
+                    showingSendMessage = true
+                }
+
                 // TRAINING PROGRAM Section
                 SectionHeader(title: "TRAINING PROGRAM")
 
@@ -1285,6 +1298,16 @@ struct SettingsView: View {
                     ) {
                         showingAttendingIdentityPicker = true
                     }
+
+                    // Send Message Row
+                    SettingsPillRow(
+                        icon: "message.fill",
+                        iconColor: .blue,
+                        title: "Send Message",
+                        showChevron: true
+                    ) {
+                        showingSendMessage = true
+                    }
                 }
 
                 // Identity Selection for Admins (dev mode)
@@ -1512,6 +1535,9 @@ struct SettingsView: View {
             DevRoleSwitcherSheet()
         }
         #endif
+        .sheet(isPresented: $showingSendMessage) {
+            SendMessageSheet(senderRole: appState.userRole)
+        }
     }
 
     private var roleIcon: String {
@@ -1839,7 +1865,7 @@ struct InstitutionalProfileEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
-    @Query(filter: #Predicate<User> { $0.roleRaw == "fellow" && !$0.hasGraduated }) private var fellows: [User]
+    @Query(filter: #Predicate<User> { $0.roleRaw == "Fellow" && !$0.hasGraduated }) private var fellows: [User]
     @Query(filter: #Predicate<User> { $0.roleRaw == "Admin" }) private var adminUsers: [User]
 
     @AppStorage("selectedAdminId") private var selectedAdminIdString = ""
@@ -3763,7 +3789,8 @@ struct DevInstitutionalSheet: View {
     @Query private var attendings: [Attending]
 
     private var availableFellows: [User] {
-        fellows.filter { $0.role == .fellow && !$0.isArchived }
+        fellows.filter { $0.role == .fellow && !$0.isArchived && !$0.hasGraduated }
+            .sorted { $0.displayName < $1.displayName }
     }
 
     private var availableAttendings: [Attending] {
@@ -3777,9 +3804,15 @@ struct DevInstitutionalSheet: View {
                     Button {
                         appState.devSignIn(role: .fellow)
                         appState.hasCompletedOnboarding = true
-                        // Auto-select first fellow if none selected
-                        if appState.selectedFellowId == nil, let firstFellow = availableFellows.first {
+                        // Find valid fellow - either currently selected (if still active) or first available
+                        if let selectedId = appState.selectedFellowId,
+                           let selectedFellow = availableFellows.first(where: { $0.id == selectedId }) {
+                            // Currently selected fellow is still valid
+                            appState.currentUser = selectedFellow
+                        } else if let firstFellow = availableFellows.first {
+                            // Selected fellow is invalid/graduated - pick first available
                             appState.selectedFellowId = firstFellow.id
+                            appState.currentUser = firstFellow
                         }
                         dismiss()
                     } label: {
@@ -3794,8 +3827,14 @@ struct DevInstitutionalSheet: View {
                     Button {
                         appState.devSignIn(role: .attending)
                         appState.hasCompletedOnboarding = true
-                        // Auto-select first attending if none selected
-                        if appState.selectedAttendingId == nil, let firstAttending = availableAttendings.first {
+                        // Clear currentUser to prevent showing fellow's notifications
+                        appState.currentUser = nil
+                        // Find valid attending - either currently selected or first available
+                        if let selectedId = appState.selectedAttendingId,
+                           availableAttendings.contains(where: { $0.id == selectedId }) {
+                            // Currently selected attending is still valid - keep it
+                        } else if let firstAttending = availableAttendings.first {
+                            // Selected attending is invalid - pick first available
                             appState.selectedAttendingId = firstAttending.id
                         }
                         dismiss()
@@ -3811,6 +3850,8 @@ struct DevInstitutionalSheet: View {
                     Button {
                         appState.devSignIn(role: .admin)
                         appState.hasCompletedOnboarding = true
+                        // Clear currentUser to prevent showing fellow's notifications
+                        appState.currentUser = nil
                         dismiss()
                     } label: {
                         HStack {
@@ -3842,7 +3883,8 @@ struct DevRoleSwitcherSheet: View {
     @Query private var attendings: [Attending]
 
     private var availableFellows: [User] {
-        fellows.filter { $0.role == .fellow && !$0.isArchived }
+        fellows.filter { $0.role == .fellow && !$0.isArchived && !$0.hasGraduated }
+            .sorted { $0.displayName < $1.displayName }
     }
 
     private var availableAttendings: [Attending] {
@@ -3855,13 +3897,15 @@ struct DevRoleSwitcherSheet: View {
                 Section("Switch to Role") {
                     Button {
                         appState.devSignIn(role: .fellow)
-                        // Auto-select first fellow if none selected and set currentUser
-                        if appState.selectedFellowId == nil, let firstFellow = availableFellows.first {
+                        // Find valid fellow - either currently selected (if still active) or first available
+                        if let selectedId = appState.selectedFellowId,
+                           let selectedFellow = availableFellows.first(where: { $0.id == selectedId }) {
+                            // Currently selected fellow is still valid
+                            appState.currentUser = selectedFellow
+                        } else if let firstFellow = availableFellows.first {
+                            // Selected fellow is invalid/graduated - pick first available
                             appState.selectedFellowId = firstFellow.id
                             appState.currentUser = firstFellow
-                        } else if let selectedId = appState.selectedFellowId,
-                                  let selectedFellow = availableFellows.first(where: { $0.id == selectedId }) {
-                            appState.currentUser = selectedFellow
                         }
                         dismiss()
                     } label: {
@@ -3879,8 +3923,14 @@ struct DevRoleSwitcherSheet: View {
 
                     Button {
                         appState.devSignIn(role: .attending)
-                        // Auto-select first attending if none selected
-                        if appState.selectedAttendingId == nil, let firstAttending = availableAttendings.first {
+                        // Clear currentUser to prevent showing fellow's notifications
+                        appState.currentUser = nil
+                        // Find valid attending - either currently selected or first available
+                        if let selectedId = appState.selectedAttendingId,
+                           availableAttendings.contains(where: { $0.id == selectedId }) {
+                            // Currently selected attending is still valid - keep it
+                        } else if let firstAttending = availableAttendings.first {
+                            // Selected attending is invalid - pick first available
                             appState.selectedAttendingId = firstAttending.id
                         }
                         dismiss()
@@ -3899,6 +3949,8 @@ struct DevRoleSwitcherSheet: View {
 
                     Button {
                         appState.devSignIn(role: .admin)
+                        // Clear currentUser to prevent showing fellow's notifications
+                        appState.currentUser = nil
                         dismiss()
                     } label: {
                         HStack {
@@ -4782,6 +4834,212 @@ struct FellowshipSpecialtyPickerSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Send Message Sheet
+
+struct SendMessageSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
+
+    @Query private var allUsers: [User]
+    @Query private var attendings: [Attending]
+
+    let senderRole: UserRole
+
+    @State private var selectedRecipientId: UUID?
+    @State private var messageText: String = ""
+    @State private var isSending = false
+    @State private var showingSuccess = false
+
+    // Get current sender info
+    private var senderId: UUID? {
+        switch senderRole {
+        case .fellow:
+            return appState.selectedFellowId
+        case .attending:
+            return appState.selectedAttendingId
+        case .admin:
+            if let adminIdString = UserDefaults.standard.string(forKey: "selectedAdminId") {
+                return UUID(uuidString: adminIdString)
+            }
+            return nil
+        }
+    }
+
+    private var senderName: String {
+        switch senderRole {
+        case .fellow:
+            if let fellowId = appState.selectedFellowId,
+               let fellow = allUsers.first(where: { $0.id == fellowId }) {
+                return fellow.displayName
+            }
+        case .attending:
+            if let attendingId = appState.selectedAttendingId,
+               let attending = attendings.first(where: { $0.id == attendingId }) {
+                return attending.name
+            }
+        case .admin:
+            if let adminIdString = UserDefaults.standard.string(forKey: "selectedAdminId"),
+               let adminId = UUID(uuidString: adminIdString),
+               let admin = allUsers.first(where: { $0.id == adminId }) {
+                return admin.displayName
+            }
+        }
+        return "Unknown"
+    }
+
+    // Available recipients based on sender role
+    private var availableRecipients: [(id: UUID, name: String, role: UserRole, subtitle: String?)] {
+        var recipients: [(id: UUID, name: String, role: UserRole, subtitle: String?)] = []
+
+        switch senderRole {
+        case .fellow:
+            // Fellows can message attendings and admins
+            for attending in attendings.filter({ !$0.isArchived }) {
+                if let userId = attending.userId {
+                    recipients.append((id: userId, name: attending.name, role: .attending, subtitle: "Attending"))
+                } else {
+                    // Use attending's own ID if no linked user
+                    recipients.append((id: attending.id, name: attending.name, role: .attending, subtitle: "Attending"))
+                }
+            }
+            for user in allUsers.filter({ $0.role == .admin }) {
+                recipients.append((id: user.id, name: user.displayName, role: .admin, subtitle: "Program Admin"))
+            }
+
+        case .attending:
+            // Attendings can message fellows and admins
+            for user in allUsers.filter({ $0.role == .fellow && !$0.hasGraduated }) {
+                let yearText = user.trainingYear != nil ? "PGY-\(user.trainingYear!)" : nil
+                recipients.append((id: user.id, name: user.displayName, role: .fellow, subtitle: yearText))
+            }
+            for user in allUsers.filter({ $0.role == .admin }) {
+                recipients.append((id: user.id, name: user.displayName, role: .admin, subtitle: "Program Admin"))
+            }
+
+        case .admin:
+            // Admins can message anyone
+            for user in allUsers.filter({ $0.role == .fellow && !$0.hasGraduated }) {
+                let yearText = user.trainingYear != nil ? "PGY-\(user.trainingYear!)" : nil
+                recipients.append((id: user.id, name: user.displayName, role: .fellow, subtitle: yearText))
+            }
+            for attending in attendings.filter({ !$0.isArchived }) {
+                if let userId = attending.userId {
+                    recipients.append((id: userId, name: attending.name, role: .attending, subtitle: "Attending"))
+                } else {
+                    recipients.append((id: attending.id, name: attending.name, role: .attending, subtitle: "Attending"))
+                }
+            }
+        }
+
+        return recipients.sorted { $0.name < $1.name }
+    }
+
+    private var canSend: Bool {
+        selectedRecipientId != nil && !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                // Recipient Selection
+                Section {
+                    Picker("To", selection: $selectedRecipientId) {
+                        Text("Select recipient").tag(nil as UUID?)
+                        ForEach(availableRecipients, id: \.id) { recipient in
+                            HStack {
+                                Text(recipient.name)
+                                if let subtitle = recipient.subtitle {
+                                    Text("(\(subtitle))")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .tag(recipient.id as UUID?)
+                        }
+                    }
+                } header: {
+                    Text("Recipient")
+                }
+
+                // Message Content
+                Section {
+                    TextField("Enter your message...", text: $messageText, axis: .vertical)
+                        .lineLimit(4...8)
+                } header: {
+                    Text("Message")
+                } footer: {
+                    Text("Messages are delivered as in-app notifications.")
+                }
+
+                // Send Button
+                Section {
+                    Button {
+                        sendMessage()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isSending {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                Text("Send Message")
+                            }
+                            Spacer()
+                        }
+                        .foregroundColor(.white)
+                        .padding(.vertical, 4)
+                    }
+                    .listRowBackground(canSend ? ProcedusTheme.primary : Color.gray)
+                    .disabled(!canSend || isSending)
+                }
+            }
+            .navigationTitle("Send Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .alert("Message Sent", isPresented: $showingSuccess) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("Your message has been delivered.")
+            }
+        }
+    }
+
+    private func sendMessage() {
+        guard let recipientId = selectedRecipientId,
+              let currentSenderId = senderId else { return }
+
+        isSending = true
+
+        // Create the notification
+        let notification = Procedus.Notification(
+            userId: recipientId,
+            title: "Message from \(senderName)",
+            message: messageText.trimmingCharacters(in: .whitespacesAndNewlines),
+            notificationType: NotificationType.directMessage.rawValue
+        )
+        notification.senderId = currentSenderId
+        notification.senderName = senderName
+        notification.senderRoleRaw = senderRole.rawValue
+        notification.conversationId = UUID() // New conversation
+
+        modelContext.insert(notification)
+
+        do {
+            try modelContext.save()
+            isSending = false
+            showingSuccess = true
+        } catch {
+            print("Error sending message: \(error)")
+            isSending = false
+        }
     }
 }
 

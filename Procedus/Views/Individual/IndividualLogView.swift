@@ -5,6 +5,13 @@
 import SwiftUI
 import SwiftData
 
+// Attestation status filter for institutional mode
+enum LogAttestationFilter: String, CaseIterable {
+    case all = "All"
+    case attested = "Attested"
+    case unattested = "Unattested"
+}
+
 struct IndividualLogView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
@@ -21,6 +28,7 @@ struct IndividualLogView: View {
     @State private var caseToDelete: CaseEntry? = nil
     @State private var showingDeleteConfirmation = false
     @State private var showingAttestedCaseAlert = false
+    @State private var selectedAttestationFilter: LogAttestationFilter = .all
 
     // Check if we should show case type filter (cardiology with both imaging and other packs)
     private var shouldShowCaseTypeFilter: Bool {
@@ -116,6 +124,18 @@ struct IndividualLogView: View {
                 } else {
                     return !hasCardiacImagingOnly
                 }
+            }
+        }
+
+        // Apply attestation filter (institutional mode only)
+        if !appState.isIndividualMode {
+            switch selectedAttestationFilter {
+            case .all:
+                break  // No filtering
+            case .attested:
+                filteredCases = filteredCases.filter { $0.attestationStatus == .attested || $0.attestationStatus == .proxyAttested || $0.attestationStatus == .notRequired }
+            case .unattested:
+                filteredCases = filteredCases.filter { $0.attestationStatus == .pending || $0.attestationStatus == .requested || $0.attestationStatus == .rejected }
             }
         }
 
@@ -343,6 +363,17 @@ struct IndividualLogView: View {
                 .foregroundStyle(ProcedusTheme.primary)
             }
             .tint(ProcedusTheme.primary)
+
+            // Attestation filter (institutional mode only)
+            if !appState.isIndividualMode {
+                Picker("", selection: $selectedAttestationFilter) {
+                    ForEach(LogAttestationFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(ProcedusTheme.primary)
+            }
 
             Spacer()
 

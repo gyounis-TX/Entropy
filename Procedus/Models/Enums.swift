@@ -535,6 +535,7 @@ enum NotificationType: String, Codable, CaseIterable {
     case badgeEarned = "badge_earned"
     case dutyHoursWarning = "duty_hours_warning"
     case dutyHoursViolation = "duty_hours_violation"
+    case directMessage = "direct_message"
 
     var icon: String {
         switch self {
@@ -551,6 +552,7 @@ enum NotificationType: String, Codable, CaseIterable {
         case .badgeEarned: return "trophy.fill"
         case .dutyHoursWarning: return "exclamationmark.triangle.fill"
         case .dutyHoursViolation: return "xmark.shield.fill"
+        case .directMessage: return "message.fill"
         }
     }
 
@@ -569,6 +571,7 @@ enum NotificationType: String, Codable, CaseIterable {
         case .badgeEarned: return .yellow
         case .dutyHoursWarning: return .orange
         case .dutyHoursViolation: return .red
+        case .directMessage: return .blue
         }
     }
 }
@@ -909,7 +912,7 @@ enum BadgeType: String, Codable, CaseIterable, Identifiable {
         case .milestone: return "Milestone"
         case .categoryMilestone: return "Category Milestone"
         case .totalCases: return "Total Cases"
-        case .diversity: return "Diversity"
+        case .diversity: return "Balance"
         case .cocatsTraining: return "COCATS Training"
         }
     }
@@ -921,7 +924,7 @@ enum BadgeType: String, Codable, CaseIterable, Identifiable {
         case .milestone: return "flag.checkered"
         case .categoryMilestone: return "chart.bar.fill"
         case .totalCases: return "number.circle.fill"
-        case .diversity: return "chart.pie.fill"
+        case .diversity: return "scale.3d"  // Balance scale icon
         case .cocatsTraining: return "graduationcap.fill"
         }
     }
@@ -960,10 +963,10 @@ enum BadgeTier: Int, Codable, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .bronze: return Color(red: 0.8, green: 0.5, blue: 0.2)
-        case .silver: return Color(red: 0.75, green: 0.75, blue: 0.8)
-        case .gold: return Color(red: 1.0, green: 0.84, blue: 0.0)
-        case .platinum: return Color(red: 0.9, green: 0.9, blue: 0.95)
+        case .bronze: return Color(red: 0.8, green: 0.5, blue: 0.2)  // Warm bronze/copper
+        case .silver: return Color(red: 0.45, green: 0.55, blue: 0.7)  // Distinct blue-silver
+        case .gold: return Color(red: 1.0, green: 0.75, blue: 0.0)  // Rich gold
+        case .platinum: return Color(red: 0.4, green: 0.6, blue: 0.8)  // Vibrant platinum-blue
         }
     }
 

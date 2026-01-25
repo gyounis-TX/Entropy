@@ -38,11 +38,6 @@ struct AdminDashboardView: View {
     @State private var showingExportSheet = false
     @State private var showingProgramMessage = false
 
-    // Dashboard navigation state for floating bar
-    @State private var showingAttestationDashboard = false
-    @State private var showingEvaluationDashboard = false
-    @State private var showingDutyHoursDashboard = false
-
     private var currentProgram: Program? { programs.first }
 
     /// Get admin users in the system
@@ -91,18 +86,36 @@ struct AdminDashboardView: View {
         currentProgram?.specialtyPackIds.count ?? 0
     }
 
-    private var totalCases: Int { allCases.count }
+    /// IDs of active (non-graduated) fellows
+    private var activeFellowIds: Set<UUID> {
+        Set(allUsers.filter { $0.role == .fellow && !$0.hasGraduated }.map { $0.id })
+    }
+
+    /// Cases belonging to active fellows only
+    private var activeFellowCases: [CaseEntry] {
+        allCases.filter { caseEntry in
+            if let fellowId = caseEntry.fellowId {
+                return activeFellowIds.contains(fellowId)
+            }
+            if let ownerId = caseEntry.ownerId {
+                return activeFellowIds.contains(ownerId)
+            }
+            return false
+        }
+    }
+
+    private var totalCases: Int { activeFellowCases.count }
 
     private var attestedCases: Int {
-        allCases.filter { $0.attestationStatus == .attested || $0.attestationStatus == .proxyAttested }.count
+        activeFellowCases.filter { $0.attestationStatus == .attested || $0.attestationStatus == .proxyAttested }.count
     }
 
     private var pendingCases: Int {
-        allCases.filter { $0.attestationStatus == .pending || $0.attestationStatus == .requested }.count
+        activeFellowCases.filter { $0.attestationStatus == .pending || $0.attestationStatus == .requested }.count
     }
 
     private var rejectedCases: Int {
-        allCases.filter { $0.attestationStatus == .rejected }.count
+        activeFellowCases.filter { $0.attestationStatus == .rejected }.count
     }
 
     private var attestationRate: Double {
@@ -134,7 +147,7 @@ struct AdminDashboardView: View {
                     #endif
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 100) // Extra padding for floating bar
+                .padding(.bottom, 20)
             }
             .background(Color(UIColor.systemBackground))
             .navigationBarHidden(true)
@@ -168,92 +181,7 @@ struct AdminDashboardView: View {
             .sheet(isPresented: $showingProgramMessage) {
                 SendProgramUpdateSheet()
             }
-            // Dashboard Floating Bar
-            .overlay(alignment: .bottom) {
-                dashboardFloatingBar
-            }
-            .navigationDestination(isPresented: $showingAttestationDashboard) {
-                AttestationDashboardView()
-            }
-            .navigationDestination(isPresented: $showingEvaluationDashboard) {
-                EvaluationSummaryView()
-            }
-            .navigationDestination(isPresented: $showingDutyHoursDashboard) {
-                DutyHoursDashboardView()
-            }
         }
-    }
-
-    // MARK: - Dashboard Floating Bar
-
-    private var dashboardFloatingBar: some View {
-        HStack(spacing: 0) {
-            // Admin Home Button
-            VStack(spacing: 4) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(ProcedusTheme.primary)
-                Text("Admin")
-                    .font(.caption2)
-                    .foregroundStyle(ProcedusTheme.primary)
-            }
-            .frame(maxWidth: .infinity)
-
-            // Attestation Dashboard Button
-            Button { showingAttestationDashboard = true } label: {
-                VStack(spacing: 4) {
-                    ZStack {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.green)
-                        if pendingCases > 0 {
-                            Text("\(min(pendingCases, 99))")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(.orange))
-                                .offset(x: 12, y: -8)
-                        }
-                    }
-                    Text("Attestation")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-
-            // Evaluation Dashboard Button
-            Button { showingEvaluationDashboard = true } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.yellow)
-                    Text("Evaluations")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-
-            // Duty Hours Dashboard Button
-            Button { showingDutyHoursDashboard = true } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: "clock.badge.checkmark.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.orange)
-                    Text("Duty Hours")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.vertical, 12)
-        .background(
-            Color(UIColor.secondarySystemBackground)
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -4)
-        )
     }
 
     // MARK: - Statistics Section
@@ -449,7 +377,7 @@ struct AdminDashboardView: View {
             Button("Cancel", role: .cancel) {}
             Button("Populate") { populateDevProgram() }
         } message: {
-            Text("This will create 'My Great Fellowship' with test data including 3 fellows, 3 attendings, 2 facilities, cardiology specialty packs, and evaluations enabled.")
+            Text("This will create 'My Great Fellowship' with test data including 3 fellows, 4 attendings, 2 facilities, cardiology specialty packs, and evaluations enabled.")
         }
         .alert("Reset Dev Program?", isPresented: $showingResetDevConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -717,6 +645,23 @@ struct AdminDashboardView: View {
         // Delete existing evaluation responses
         // (Note: EvaluationResponse would need to be fetched and deleted if the model exists)
 
+        // Delete ALL existing fellows to prevent mixing with dev data
+        // This ensures a clean slate even without calling resetDevProgram first
+        appState.selectedFellowId = nil
+        appState.currentUser = nil
+        for user in allUsers where user.role == .fellow {
+            modelContext.delete(user)
+        }
+
+        // Delete ALL existing non-admin users to ensure clean dev environment
+        // (Attendings are recreated below, admins are preserved)
+        for user in allUsers where user.role == .attending {
+            modelContext.delete(user)
+        }
+
+        // Save deletions before creating new users
+        try? modelContext.save()
+
         // =========================================
         // CREATE 3 ACTIVE FELLOWS: PGY4, PGY5, PGY6
         // =========================================
@@ -728,34 +673,18 @@ struct AdminDashboardView: View {
         ]
 
         for (first, last, email, pgy) in activeFellowData {
-            // Update existing fellow OR create new one (preserves UUID for existing)
-            if let existing = allUsers.first(where: { $0.email == email }) {
-                // Update existing fellow - preserves UUID
-                existing.firstName = first
-                existing.lastName = last
-                existing.displayName = "\(first) \(last)"
-                existing.role = .fellow
-                existing.accountMode = .institutional
-                existing.programId = program.id
-                existing.trainingYear = pgy
-                existing.hasGraduated = false
-                existing.graduatedAt = nil
-                existing.isArchived = false
-                activeFellowIds.append(existing.id)
-            } else {
-                // Create new fellow only if doesn't exist
-                let fellow = User(
-                    email: email,
-                    firstName: first,
-                    lastName: last,
-                    role: .fellow,
-                    accountMode: .institutional,
-                    programId: program.id,
-                    trainingYear: pgy
-                )
-                modelContext.insert(fellow)
-                activeFellowIds.append(fellow.id)
-            }
+            // Always create fresh fellows (all existing were deleted above)
+            let fellow = User(
+                email: email,
+                firstName: first,
+                lastName: last,
+                role: .fellow,
+                accountMode: .institutional,
+                programId: program.id,
+                trainingYear: pgy
+            )
+            modelContext.insert(fellow)
+            activeFellowIds.append(fellow.id)
         }
 
         // =========================================
@@ -769,36 +698,20 @@ struct AdminDashboardView: View {
         ]
 
         for (first, last, email, _) in graduatedFellowData {
-            // Update existing fellow OR create new one (preserves UUID for existing)
-            if let existing = allUsers.first(where: { $0.email == email }) {
-                // Update existing fellow - preserves UUID
-                existing.firstName = first
-                existing.lastName = last
-                existing.displayName = "\(first) \(last)"
-                existing.role = .fellow
-                existing.accountMode = .institutional
-                existing.programId = program.id
-                existing.trainingYear = 6
-                existing.hasGraduated = true
-                existing.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
-                existing.isArchived = false
-                graduatedFellowIds.append(existing.id)
-            } else {
-                // Create new fellow only if doesn't exist
-                let fellow = User(
-                    email: email,
-                    firstName: first,
-                    lastName: last,
-                    role: .fellow,
-                    accountMode: .institutional,
-                    programId: program.id,
-                    trainingYear: 6  // All graduated at PGY6
-                )
-                fellow.hasGraduated = true
-                fellow.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
-                modelContext.insert(fellow)
-                graduatedFellowIds.append(fellow.id)
-            }
+            // Always create fresh fellows (all existing were deleted above)
+            let fellow = User(
+                email: email,
+                firstName: first,
+                lastName: last,
+                role: .fellow,
+                accountMode: .institutional,
+                programId: program.id,
+                trainingYear: 6  // All graduated at PGY6
+            )
+            fellow.hasGraduated = true
+            fellow.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
+            modelContext.insert(fellow)
+            graduatedFellowIds.append(fellow.id)
         }
 
         // Create default evaluation fields if not exist, and capture their IDs for rating generation
@@ -836,6 +749,14 @@ struct AdminDashboardView: View {
 
         try? modelContext.save()
 
+        // Round-robin counter for distributing cases across all attendings
+        var attendingRoundRobinIndex = 0
+        func getNextAttendingId() -> UUID {
+            let id = createdAttendingIds[attendingRoundRobinIndex % createdAttendingIds.count]
+            attendingRoundRobinIndex += 1
+            return id
+        }
+
         // =========================================
         // HELPER FUNCTION: Create attested case with evaluation
         // =========================================
@@ -855,9 +776,10 @@ struct AdminDashboardView: View {
             let attendingId: UUID
             if caseDate < twoYearsAgo && !archivedAttendingIds.isEmpty {
                 // 70% chance of archived attending for old cases
-                attendingId = Int.random(in: 0..<10) < 7 ? archivedAttendingIds.randomElement()! : createdAttendingIds.randomElement()!
+                attendingId = Int.random(in: 0..<10) < 7 ? archivedAttendingIds.randomElement()! : getNextAttendingId()
             } else {
-                attendingId = createdAttendingIds.randomElement()!
+                // Round-robin through all active attendings for even distribution
+                attendingId = getNextAttendingId()
             }
 
             let newCase = CaseEntry(
@@ -876,22 +798,30 @@ struct AdminDashboardView: View {
             newCase.complicationIds = complications
             newCase.operatorPositionRaw = operatorPosition.rawValue
 
-            // Mark as attested - set attestorId to the attending who attested
-            newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
-            newCase.attestedAt = caseDate.addingTimeInterval(3600)
-            newCase.attestorId = attendingId  // Critical: set attestorId for attending dashboard and evaluations
+            // 10% chance to leave case unattested (pending)
+            let shouldLeavePending = Int.random(in: 0..<10) == 0
 
-            // Add random evaluations (1-5 rating for each field)
-            var evalResponses: [String: String] = [:]
-            for fieldId in evaluationFieldIds {
-                let randomRating = Int.random(in: 3...5)  // Realistic ratings 3-5
-                evalResponses[fieldId.uuidString] = String(randomRating)
+            if shouldLeavePending {
+                // Leave as pending attestation
+                newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
+            } else {
+                // Mark as attested - set attestorId to the attending who attested
+                newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
+                newCase.attestedAt = caseDate.addingTimeInterval(3600)
+                newCase.attestorId = attendingId  // Critical: set attestorId for attending dashboard and evaluations
+
+                // Add random evaluations (1-5 rating for each field)
+                var evalResponses: [String: String] = [:]
+                for fieldId in evaluationFieldIds {
+                    let randomRating = Int.random(in: 3...5)  // Realistic ratings 3-5
+                    evalResponses[fieldId.uuidString] = String(randomRating)
+                }
+                if let jsonData = try? JSONEncoder().encode(evalResponses),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    newCase.evaluationResponsesJson = jsonString
+                }
+                newCase.evaluationComment = "Good performance on this case."
             }
-            if let jsonData = try? JSONEncoder().encode(evalResponses),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                newCase.evaluationResponsesJson = jsonString
-            }
-            newCase.evaluationComment = "Good performance on this case."
 
             modelContext.insert(newCase)
         }
@@ -907,7 +837,8 @@ struct AdminDashboardView: View {
             operatorPosition: OperatorPosition = .primary
         ) {
             let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
-            let attendingId = createdAttendingIds.randomElement()!
+            // Round-robin through all active attendings for even distribution
+            let attendingId = getNextAttendingId()
 
             let newCase = CaseEntry(
                 fellowId: fellowId,
@@ -8589,6 +8520,7 @@ struct NotificationsSheet: View {
     enum NotificationCategory: String, CaseIterable, Identifiable {
         case attestations = "Attestations"
         case messages = "Messages"
+        case achievements = "Achievements"
 
         var id: String { rawValue }
 
@@ -8601,6 +8533,7 @@ struct NotificationsSheet: View {
                     NotificationType.caseRejected.rawValue
                 ]
             case .messages:
+                // Program messages from admin/others + direct messages
                 return [
                     NotificationType.programUpdate.rawValue,
                     NotificationType.programChange.rawValue,
@@ -8609,9 +8542,14 @@ struct NotificationsSheet: View {
                     NotificationType.userInvite.rawValue,
                     NotificationType.reminder.rawValue,
                     NotificationType.info.rawValue,
-                    NotificationType.badgeEarned.rawValue,
                     NotificationType.dutyHoursWarning.rawValue,
-                    NotificationType.dutyHoursViolation.rawValue
+                    NotificationType.dutyHoursViolation.rawValue,
+                    NotificationType.directMessage.rawValue
+                ]
+            case .achievements:
+                // Badge/achievement notifications for fellows
+                return [
+                    NotificationType.badgeEarned.rawValue
                 ]
             }
         }
@@ -8642,6 +8580,10 @@ struct NotificationsSheet: View {
         allRelevantNotifications.filter { NotificationCategory.messages.notificationTypes.contains($0.notificationType) && !$0.isRead }.count
     }
 
+    private var achievementsCount: Int {
+        allRelevantNotifications.filter { NotificationCategory.achievements.notificationTypes.contains($0.notificationType) && !$0.isRead }.count
+    }
+
     private var attestationNotifications: [Procedus.Notification] {
         allRelevantNotifications.filter { NotificationCategory.attestations.notificationTypes.contains($0.notificationType) }
     }
@@ -8649,13 +8591,14 @@ struct NotificationsSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Category Picker - admin only sees Messages, others see both
+                // Category Picker - role-specific categories
                 if role == .admin {
                     // Admin only has messages (replies from others)
                     Text("Messages")
                         .font(.headline)
                         .padding()
-                } else {
+                } else if role == .attending {
+                    // Attending sees Attestations and Messages (no achievements)
                     Picker("Category", selection: $selectedCategory) {
                         Text(attestationCount > 0 ? "Attestations (\(attestationCount))" : "Attestations")
                             .tag(NotificationCategory.attestations)
@@ -8664,16 +8607,28 @@ struct NotificationsSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .padding()
+                } else {
+                    // Fellow sees all three categories: Attestations, Messages, Achievements
+                    Picker("Category", selection: $selectedCategory) {
+                        Text(attestationCount > 0 ? "Attestations (\(attestationCount))" : "Attestations")
+                            .tag(NotificationCategory.attestations)
+                        Text(messagesCount > 0 ? "Messages (\(messagesCount))" : "Messages")
+                            .tag(NotificationCategory.messages)
+                        Text(achievementsCount > 0 ? "Achievements (\(achievementsCount))" : "Achievements")
+                            .tag(NotificationCategory.achievements)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding()
                 }
 
-                // Clear Attestations button for attending role
-                if role == .attending && !attestationNotifications.isEmpty && selectedCategory == .attestations {
+                // Category-specific Clear All button (shown when there are notifications in selected category)
+                if !filteredNotifications.isEmpty {
                     Button {
-                        clearAttestationNotifications()
+                        clearCategoryNotifications()
                     } label: {
                         HStack {
                             Image(systemName: "xmark.circle.fill")
-                            Text("Clear All Attestation Notifications")
+                            Text("Clear All \(selectedCategory.rawValue)")
                         }
                         .font(.subheadline)
                         .foregroundStyle(.red)
@@ -8747,18 +8702,6 @@ struct NotificationsSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
-                if !filteredNotifications.isEmpty {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Clear All") {
-                            for notification in filteredNotifications {
-                                notification.isCleared = true
-                                notification.clearedAt = Date()
-                            }
-                            try? modelContext.save()
-                        }
-                        .font(.subheadline)
-                    }
-                }
             }
             .sheet(item: $notificationToReply) { notification in
                 if let effectiveId = effectiveUserId {
@@ -8773,8 +8716,9 @@ struct NotificationsSheet: View {
         }
     }
 
-    private func clearAttestationNotifications() {
-        for notification in attestationNotifications {
+    /// Clear all notifications in the currently selected category
+    private func clearCategoryNotifications() {
+        for notification in filteredNotifications {
             notification.isCleared = true
             notification.clearedAt = Date()
         }
@@ -8792,13 +8736,15 @@ struct NotificationRow: View {
         let messageTypes = [
             NotificationType.programUpdate.rawValue,
             NotificationType.programChange.rawValue,
-            NotificationType.info.rawValue
+            NotificationType.info.rawValue,
+            NotificationType.directMessage.rawValue
         ]
         return messageTypes.contains(notification.notificationType)
     }
 
     private var canReply: Bool {
-        isMessageType && notification.senderId != nil
+        // Can reply to any message that has a sender
+        notification.senderId != nil
     }
 
     var body: some View {
@@ -8936,9 +8882,9 @@ struct ReplyToMessageSheet: View {
         // Create reply notification for the original sender
         let replyNotification = Procedus.Notification(
             userId: recipientId,
-            title: "Reply: \(originalNotification.title)",
+            title: "Reply from \(currentUserName)",
             message: replyMessage.trimmingCharacters(in: .whitespacesAndNewlines),
-            notificationType: NotificationType.programUpdate.rawValue
+            notificationType: NotificationType.directMessage.rawValue
         )
 
         // Set sender tracking

@@ -15,6 +15,7 @@ struct BadgeDashboardView: View {
     @State private var selectedCategory: BadgeType? = nil
     @State private var showingBadgeDetail: Badge? = nil
     @State private var showingTierLegend = false
+    @State private var showingCOCATSInfo = false
 
     // MARK: - COCATS Competency Definitions
 
@@ -232,7 +233,12 @@ struct BadgeDashboardView: View {
             .background(Color(UIColor.systemGroupedBackground))
             .navigationTitle("Achievements")
             .sheet(item: $showingBadgeDetail) { badge in
-                BadgeDetailSheet(badge: badge, earned: myEarnedBadges.first { $0.badgeId == badge.id })
+                // Badges shown from this view are always earned, pass isEarned: true for reliable coloring
+                BadgeDetailSheet(
+                    badge: badge,
+                    earned: myEarnedBadges.first { $0.badgeId == badge.id },
+                    isEarned: true
+                )
             }
         }
     }
@@ -339,9 +345,22 @@ struct BadgeDashboardView: View {
 
     private var cocatsProgressSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("COCATS Competencies")
-                .font(.headline)
-                .foregroundStyle(ProcedusTheme.textPrimary)
+            // Header with info button
+            HStack {
+                Text("COCATS Competencies")
+                    .font(.headline)
+                    .foregroundStyle(ProcedusTheme.textPrimary)
+
+                Spacer()
+
+                Button {
+                    showingCOCATSInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.body)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                }
+            }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 16) {
                 ForEach(Self.cocatsCompetencies) { competency in
@@ -359,6 +378,9 @@ struct BadgeDashboardView: View {
             .padding()
             .background(ProcedusTheme.cardBackground)
             .cornerRadius(16)
+        }
+        .sheet(isPresented: $showingCOCATSInfo) {
+            COCATSInfoSheet(competencies: Self.cocatsCompetencies)
         }
     }
 
@@ -535,7 +557,7 @@ struct BadgeCard: View {
     }
 
     private var tierColor: Color {
-        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.textSecondary
+        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.primary
     }
 }
 
@@ -574,7 +596,7 @@ struct EarnedBadgeGridItem: View {
     }
 
     private var tierColor: Color {
-        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.textSecondary
+        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.primary
     }
 }
 
@@ -608,7 +630,7 @@ struct BadgeGridItem: View {
     }
 
     private var tierColor: Color {
-        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.textSecondary
+        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.primary
     }
 }
 
@@ -782,32 +804,39 @@ struct BadgeDetailSheet: View {
 
     let badge: Badge
     let earned: BadgeEarned?
+    /// Explicitly track if badge is earned (for reliable coloring even if lookup fails)
+    var isEarned: Bool = true
 
     private var tierColor: Color {
-        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.textSecondary
+        BadgeTier(rawValue: badge.tier)?.color ?? ProcedusTheme.primary
     }
 
     private var tierName: String {
         BadgeTier(rawValue: badge.tier)?.displayName ?? "Badge"
     }
 
+    /// Use isEarned flag OR presence of earned record for display
+    private var shouldShowAsEarned: Bool {
+        isEarned || earned != nil
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                // Badge icon with glow
+                // Badge icon with glow - always show in color if earned
                 ZStack {
                     Circle()
                         .fill(tierColor.opacity(0.2))
                         .frame(width: 120, height: 120)
-                        .blur(radius: earned != nil ? 20 : 0)
+                        .blur(radius: shouldShowAsEarned ? 20 : 0)
 
                     Circle()
-                        .fill(earned != nil ? tierColor.opacity(0.15) : Color.gray.opacity(0.1))
+                        .fill(shouldShowAsEarned ? tierColor.opacity(0.15) : Color.gray.opacity(0.1))
                         .frame(width: 100, height: 100)
 
                     Image(systemName: badge.iconName)
                         .font(.system(size: 50))
-                        .foregroundStyle(earned != nil ? tierColor : Color.gray.opacity(0.4))
+                        .foregroundStyle(shouldShowAsEarned ? tierColor : Color.gray.opacity(0.4))
                 }
 
                 VStack(spacing: 8) {
@@ -847,6 +876,19 @@ struct BadgeDetailSheet: View {
                     .padding()
                     .background(Color.green.opacity(0.1))
                     .cornerRadius(12)
+                } else if isEarned {
+                    // Show earned status without date if lookup failed
+                    VStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.green)
+                        Text("Earned")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                    }
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(12)
                 } else {
                     Text("Not yet earned")
                         .font(.caption)
@@ -863,6 +905,125 @@ struct BadgeDetailSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+// MARK: - COCATS Info Sheet
+
+struct COCATSInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let competencies: [BadgeDashboardView.COCATSCompetency]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Header explanation
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("About COCATS Competencies")
+                            .font(.headline)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+
+                        Text("COCATS (Core Cardiology Training Symposium) defines competency levels for cardiovascular training. Each level represents increasing proficiency and procedural volume requirements.")
+                            .font(.subheadline)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
+                    // Competencies grouped by category
+                    ForEach(competencies) { competency in
+                        COCATSCompetencyInfoCard(competency: competency)
+                    }
+                }
+                .padding()
+            }
+            .background(Color(UIColor.systemGroupedBackground))
+            .navigationTitle("COCATS Levels")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - COCATS Competency Info Card
+
+struct COCATSCompetencyInfoCard: View {
+    let competency: BadgeDashboardView.COCATSCompetency
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Category header
+            HStack(spacing: 10) {
+                Image(systemName: competency.iconName)
+                    .font(.title2)
+                    .foregroundStyle(competency.color)
+                    .frame(width: 32, height: 32)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(competency.name)
+                        .font(.headline)
+                        .foregroundStyle(ProcedusTheme.textPrimary)
+
+                    Text(competency.shortName)
+                        .font(.caption)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                }
+
+                Spacer()
+            }
+
+            Divider()
+
+            // Level requirements
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(competency.levels, id: \.level) { levelInfo in
+                    HStack {
+                        // Level badge
+                        Text("Level \(levelInfo.level)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(competency.color)
+                            .frame(width: 70, alignment: .leading)
+
+                        // Case requirement
+                        HStack(spacing: 4) {
+                            Image(systemName: "number")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textTertiary)
+                            Text("\(levelInfo.threshold) cases")
+                                .font(.subheadline)
+                                .foregroundStyle(ProcedusTheme.textPrimary)
+                        }
+
+                        Spacer()
+
+                        // Level description
+                        Text(levelDescription(for: levelInfo.level))
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .padding()
+        .background(ProcedusTheme.cardBackground)
+        .cornerRadius(12)
+    }
+
+    private func levelDescription(for level: Int) -> String {
+        switch level {
+        case 1: return "Basic"
+        case 2: return "Proficient"
+        case 3: return "Advanced"
+        default: return ""
         }
     }
 }

@@ -589,6 +589,17 @@ final class CaseEntry {
         let week = calendar.component(.weekOfYear, from: date)
         return String(format: "%d-W%02d", year, week)
     }
+
+    /// Check if this is a noninvasive case (cardiac imaging only)
+    /// Noninvasive cases do not require attending attestation
+    @Transient var isNoninvasiveCase: Bool {
+        // Check explicit case type first
+        if let caseType = caseType {
+            return caseType == .noninvasive
+        }
+        // Fallback: infer from procedure IDs (all cardiac imaging procedures start with "ci-")
+        return !procedureTagIds.isEmpty && procedureTagIds.allSatisfy { $0.hasPrefix("ci-") }
+    }
 }
 
 // MARK: - Attestation Record

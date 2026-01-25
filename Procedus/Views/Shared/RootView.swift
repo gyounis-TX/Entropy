@@ -120,7 +120,22 @@ struct RootView: View {
                 TabView {
                     AdminDashboardView()
                         .tabItem {
-                            Label("Admin", systemImage: "gear.badge")
+                            Label("Admin", systemImage: "gearshape.fill")
+                        }
+
+                    AttestationDashboardView()
+                        .tabItem {
+                            Label("Attestation", systemImage: "checkmark.seal.fill")
+                        }
+
+                    EvaluationSummaryView()
+                        .tabItem {
+                            Label("Evaluations", systemImage: "star.fill")
+                        }
+
+                    DutyHoursDashboardView()
+                        .tabItem {
+                            Label("Hours", systemImage: "clock.fill")
                         }
                 }
             }
@@ -154,6 +169,9 @@ struct FellowContentWrapper<Content: View>: View {
     @State private var showingNotifications = false
     @State private var showingAddCase = false
     @State private var showingExportOptions = false
+    #if DEBUG
+    @State private var showingDevRoleSwitcher = false
+    #endif
 
     /// Only show add case and export buttons on the Log tab
     private var showCaseLogActions: Bool {
@@ -248,6 +266,11 @@ struct FellowContentWrapper<Content: View>: View {
                 facilities: Array(facilities)
             )
         }
+        #if DEBUG
+        .sheet(isPresented: $showingDevRoleSwitcher) {
+            DevRoleSwitcherSheet()
+        }
+        #endif
     }
 
     // MARK: - Unified Top Bar
@@ -262,7 +285,7 @@ struct FellowContentWrapper<Content: View>: View {
 
             // Left and Right items
             HStack(spacing: 12) {
-                // Left: Notification logo + Settings gear
+                // Left: Notification logo + Settings gear + Dev role switcher
                 HStack(spacing: 10) {
                     NotificationBellButton(
                         role: .fellow,
@@ -280,6 +303,20 @@ struct FellowContentWrapper<Content: View>: View {
                             .foregroundStyle(settingsGearColor)
                             .frame(width: 28, height: 28)
                     }
+
+                    #if DEBUG
+                    // Dev mode quick role switcher (only in institutional mode)
+                    if appState.isDevMode && !appState.isIndividualMode {
+                        Button {
+                            showingDevRoleSwitcher = true
+                        } label: {
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.orange)
+                                .frame(width: 28, height: 28)
+                        }
+                    }
+                    #endif
                 }
 
                 Spacer()
@@ -333,13 +370,26 @@ struct AttendingContentWrapper<Content: View>: View {
 
     @State private var showingSettings = false
     @State private var showingNotifications = false
+    #if DEBUG
+    @State private var showingDevRoleSwitcher = false
+    #endif
 
-    private var currentUserId: UUID {
-        appState.currentUser?.id ?? UUID()
+    /// For attendings, use selectedAttendingId since notifications are created with Attending.id
+    /// Do NOT fall back to currentUser?.id as it may be a fellow's ID from previous role switch
+    private var currentUserId: UUID? {
+        appState.selectedAttendingId
     }
 
     private var unreadNotificationCount: Int {
-        return notifications.filter { $0.userId == currentUserId && !$0.isRead && !$0.isCleared }.count
+        // For attending, check both userId and attendingId fields using selectedAttendingId ONLY
+        // Do NOT use currentUser?.id as it may be a fellow's ID (badge notifications issue)
+        guard let attendingId = appState.selectedAttendingId else { return 0 }
+
+        return notifications.filter { notification in
+            !notification.isRead && !notification.isCleared &&
+            (notification.userId == attendingId ||
+             notification.attendingId == attendingId)
+        }.count
     }
 
     // Colors for light/dark mode
@@ -379,13 +429,18 @@ struct AttendingContentWrapper<Content: View>: View {
                     }
             }
         }
+        #if DEBUG
+        .sheet(isPresented: $showingDevRoleSwitcher) {
+            DevRoleSwitcherSheet()
+        }
+        #endif
     }
 
     // MARK: - Attending Top Bar
 
     private var attendingTopBar: some View {
         HStack(spacing: 12) {
-            // Left: Notification logo + Settings gear
+            // Left: Notification logo + Settings gear + Dev role switcher
             HStack(spacing: 10) {
                 NotificationBellButton(
                     role: .attending,
@@ -403,6 +458,20 @@ struct AttendingContentWrapper<Content: View>: View {
                         .foregroundStyle(settingsGearColor)
                         .frame(width: 28, height: 28)
                 }
+
+                #if DEBUG
+                // Dev mode quick role switcher
+                if appState.isDevMode {
+                    Button {
+                        showingDevRoleSwitcher = true
+                    } label: {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.orange)
+                            .frame(width: 28, height: 28)
+                    }
+                }
+                #endif
             }
 
             Spacer()
@@ -427,13 +496,27 @@ struct AdminContentWrapper<Content: View>: View {
 
     @State private var showingSettings = false
     @State private var showingNotifications = false
+    #if DEBUG
+    @State private var showingDevRoleSwitcher = false
+    #endif
 
-    private var currentUserId: UUID {
-        appState.currentUser?.id ?? UUID()
+    /// For admin role, use selectedAdminId from UserDefaults, NOT currentUser (which may be a fellow)
+    /// This prevents admin from seeing fellow's personal notifications (like badges)
+    private var currentUserId: UUID? {
+        if let adminIdString = UserDefaults.standard.string(forKey: "selectedAdminId"),
+           let adminId = UUID(uuidString: adminIdString) {
+            return adminId
+        }
+        // Fallback: Only use currentUser if it's actually an admin
+        if appState.currentUser?.role == .admin {
+            return appState.currentUser?.id
+        }
+        return nil
     }
 
     private var unreadNotificationCount: Int {
-        return notifications.filter { $0.userId == currentUserId && !$0.isRead && !$0.isCleared }.count
+        guard let adminId = currentUserId else { return 0 }
+        return notifications.filter { $0.userId == adminId && !$0.isRead && !$0.isCleared }.count
     }
 
     // Colors for light/dark mode
@@ -473,13 +556,18 @@ struct AdminContentWrapper<Content: View>: View {
                     }
             }
         }
+        #if DEBUG
+        .sheet(isPresented: $showingDevRoleSwitcher) {
+            DevRoleSwitcherSheet()
+        }
+        #endif
     }
 
     // MARK: - Admin Top Bar
 
     private var adminTopBar: some View {
         HStack(spacing: 12) {
-            // Left: Notification logo + Settings gear
+            // Left: Notification logo + Settings gear + Dev role switcher
             HStack(spacing: 10) {
                 NotificationBellButton(
                     role: .admin,
@@ -497,6 +585,20 @@ struct AdminContentWrapper<Content: View>: View {
                         .foregroundStyle(settingsGearColor)
                         .frame(width: 28, height: 28)
                 }
+
+                #if DEBUG
+                // Dev mode quick role switcher
+                if appState.isDevMode {
+                    Button {
+                        showingDevRoleSwitcher = true
+                    } label: {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.orange)
+                            .frame(width: 28, height: 28)
+                    }
+                }
+                #endif
             }
 
             Spacer()

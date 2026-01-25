@@ -34,10 +34,10 @@ struct AttendingAnalyticsView: View {
         return allCases.filter { $0.attestorId == attendingId && $0.attestationStatus == .attested }
     }
 
-    // Cases pending attestation by this attending
+    // Cases pending attestation by this attending (excludes noninvasive cases)
     private var pendingCases: [CaseEntry] {
         guard let attendingId = currentAttendingId else { return [] }
-        return allCases.filter { $0.attestorId == attendingId && $0.attestationStatus == .pending }
+        return allCases.filter { $0.attestorId == attendingId && $0.attestationStatus == .pending && !$0.isNoninvasiveCase }
     }
 
     // Cases filtered by time range

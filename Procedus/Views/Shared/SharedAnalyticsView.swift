@@ -69,6 +69,8 @@ struct AnalyticsView: View {
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }, sort: \TrainingFacility.name) private var facilities: [TrainingFacility]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query private var earnedBadges: [BadgeEarned]
+    @Query private var programs: [Program]
+    @Query private var users: [User]
 
     @State private var selectedTab: AnalyticsTabSelection = .analytics
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
@@ -122,24 +124,61 @@ struct AnalyticsView: View {
         }
     }
 
+    /// Get the current program (for institutional mode)
+    private var currentProgram: Program? {
+        programs.first
+    }
+
+    /// Get the current fellow's User record (for institutional mode)
+    private var currentFellowUser: User? {
+        guard let userId = currentUserId else { return nil }
+        return users.first { $0.id == userId }
+    }
+
+    /// Get the current fellow's PGY level - handles both individual and institutional modes
+    private var currentFellowPGYLevel: Int? {
+        if appState.isIndividualMode {
+            // In individual mode, use appState setting
+            return appState.individualPGYLevel?.rawValue
+        } else {
+            // In institutional mode, use the fellow's trainingYear from User record
+            return currentFellowUser?.trainingYear ?? appState.individualPGYLevel?.rawValue
+        }
+    }
+
+    /// Get the earliest valid PGY level for fellowship (from program settings)
+    private var earliestValidPGYLevel: Int {
+        if appState.isIndividualMode {
+            // In individual mode, no restriction (default to PGY1)
+            return 1
+        } else {
+            // In institutional mode, use program's earliest PGY level setting
+            return currentProgram?.earliestPGYLevel ?? 4
+        }
+    }
+
     private var userCases: [CaseEntry] {
         guard let userId = currentUserId else { return [] }
         return allCases.filter { $0.ownerId == userId }
     }
 
     /// Get available PGY levels that have data, based on fellow's current PGY level
+    /// Only shows PGY levels >= program's earliestPGYLevel (fellowship years only)
     private var availablePGYLevels: [(level: Int, displayName: String)] {
-        guard let currentPGY = appState.individualPGYLevel else { return [] }
+        guard let currentPGY = currentFellowPGYLevel else { return [] }
 
         let currentAcademicYear = academicYear(for: Date())
         var levelsWithData: Set<Int> = []
+        let minPGY = earliestValidPGYLevel
 
         // Check which PGY levels have case data
         for caseEntry in userCases {
             let caseAcademicYear = academicYear(for: caseEntry.createdAt)
             let yearsAgo = currentAcademicYear - caseAcademicYear
-            let pgyLevel = currentPGY.rawValue - yearsAgo
-            if pgyLevel >= 1 && pgyLevel <= 8 {
+            let pgyLevel = currentPGY - yearsAgo
+
+            // Only include if PGY level is valid (>= earliest fellowship PGY and <= 8)
+            if pgyLevel >= minPGY && pgyLevel <= 8 {
                 levelsWithData.insert(pgyLevel)
             }
         }
@@ -224,10 +263,10 @@ struct AnalyticsView: View {
         }
 
         // Apply PGY level filter if selected
-        if let pgyLevel = selectedPGYLevelFilter, let currentPGY = appState.individualPGYLevel {
+        if let pgyLevel = selectedPGYLevelFilter, let currentPGY = currentFellowPGYLevel {
             let currentAcademicYear = academicYear(for: Date())
             // Calculate which academic year corresponds to this PGY level
-            let yearsAgo = currentPGY.rawValue - pgyLevel
+            let yearsAgo = currentPGY - pgyLevel
             let targetAcademicYear = currentAcademicYear - yearsAgo
 
             cases = cases.filter { caseEntry in
@@ -1136,22 +1175,24 @@ struct AnalyticsView: View {
     }
 
     /// Group cases by PGY level based on fellow's current PGY level and academic year
+    /// Only includes PGY levels >= program's earliestPGYLevel (fellowship years only)
     private var casesByPGYYear: [ChartDataPoint] {
-        guard let currentPGY = appState.individualPGYLevel else {
+        guard let currentPGY = currentFellowPGYLevel else {
             // If no PGY level set, fall back to academic years
             return casesByAcademicYear
         }
 
         let currentAcademicYear = academicYear(for: Date())
+        let minPGY = earliestValidPGYLevel
         var grouped: [Int: Int] = [:] // PGY level -> case count
 
         for caseEntry in procedureFilteredCases {
             let caseAcademicYear = academicYear(for: caseEntry.createdAt)
             let yearsAgo = currentAcademicYear - caseAcademicYear
-            let pgyLevel = currentPGY.rawValue - yearsAgo
+            let pgyLevel = currentPGY - yearsAgo
 
-            // Only include if PGY level is valid (1-8)
-            if pgyLevel >= 1 && pgyLevel <= 8 {
+            // Only include if PGY level is valid (>= earliest fellowship PGY and <= 8)
+            if pgyLevel >= minPGY && pgyLevel <= 8 {
                 grouped[pgyLevel, default: 0] += 1
             }
         }

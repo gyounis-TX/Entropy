@@ -359,7 +359,7 @@ struct BadgeCatalog {
                 id: "total-cases-100",
                 title: "Century",
                 description: "Logged 100 total cases",
-                iconName: "100.circle.fill",
+                iconName: "c.circle.fill",  // C = 100 in Roman numerals
                 badgeType: .totalCases,
                 criteria: .totalCases(count: 100),
                 tier: .bronze,

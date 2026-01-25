@@ -32,6 +32,14 @@ func generateWeekOptions() -> [WeekOption] {
     return options
 }
 
+// MARK: - Attestation Filter (for institutional fellow role)
+
+enum AttestationFilter: String, CaseIterable {
+    case all = "All"
+    case attested = "Attested"
+    case unattested = "Unattested"
+}
+
 struct LogView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
@@ -97,6 +105,7 @@ struct LogView: View {
     @State private var rejectedCaseToHandle: CaseEntry? = nil
     @State private var showingRejectedCaseActions = false
     @State private var showingAttestedCaseAlert = false
+    @State private var selectedAttestationFilter: AttestationFilter = .all
 
     @Query private var programs: [Program]
 
@@ -183,6 +192,16 @@ struct LogView: View {
                     return !hasCardiacImagingOnly && !hasEPOnly
                 }
             }
+        }
+
+        // Apply attestation filter (institutional mode only, but filter logic applies regardless)
+        switch selectedAttestationFilter {
+        case .all:
+            break  // No filtering
+        case .attested:
+            filteredCases = filteredCases.filter { $0.attestationStatus == .attested }
+        case .unattested:
+            filteredCases = filteredCases.filter { $0.attestationStatus != .attested }
         }
 
         return filteredCases
@@ -423,6 +442,17 @@ struct LogView: View {
             }
             .pickerStyle(.menu)
             .tint(Color(red: 0.05, green: 0.35, blue: 0.65))
+
+            // Attestation filter (institutional mode only - LogView is fellow-only)
+            if !appState.isIndividualMode {
+                Picker("", selection: $selectedAttestationFilter) {
+                    ForEach(AttestationFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Color(red: 0.05, green: 0.35, blue: 0.65))
+            }
 
             Spacer()
 

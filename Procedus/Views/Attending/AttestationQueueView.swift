@@ -66,12 +66,22 @@ struct AttestationQueueView: View {
         return attendings.contains { $0.id == id && !$0.isArchived }
     }
 
+    /// Set of graduated fellow IDs for filtering
+    private var graduatedFellowIds: Set<UUID> {
+        Set(users.filter { $0.hasGraduated }.map { $0.id })
+    }
+
     private var pendingCases: [CaseEntry] {
         guard let attendingId = currentAttendingId else { return [] }
+        let graduatedIds = graduatedFellowIds
         var cases = allCases
-            .filter {
-                ($0.attendingId == attendingId || $0.supervisorId == attendingId) &&
-                ($0.attestationStatus == .pending || $0.attestationStatus == .requested)
+            .filter { caseEntry in
+                let fellowId = caseEntry.fellowId ?? caseEntry.ownerId
+                let isFromGraduatedFellow = fellowId.map { graduatedIds.contains($0) } ?? false
+                return (caseEntry.attendingId == attendingId || caseEntry.supervisorId == attendingId) &&
+                    (caseEntry.attestationStatus == .pending || caseEntry.attestationStatus == .requested) &&
+                    !caseEntry.isNoninvasiveCase &&  // Exclude noninvasive cases
+                    !isFromGraduatedFellow  // Exclude cases from graduated fellows
             }
 
         // Apply fellow filter if selected
@@ -87,15 +97,19 @@ struct AttestationQueueView: View {
         Set(allMedia.map { $0.caseEntryId })
     }
 
-    /// Unique fellows who have pending cases
+    /// Unique active (non-graduated) fellows who have pending cases
     private var fellowsWithPendingCases: [User] {
         guard let attendingId = currentAttendingId else { return [] }
         let allPending = allCases.filter {
             ($0.attendingId == attendingId || $0.supervisorId == attendingId) &&
-            ($0.attestationStatus == .pending || $0.attestationStatus == .requested)
+            ($0.attestationStatus == .pending || $0.attestationStatus == .requested) &&
+            !$0.isNoninvasiveCase  // Exclude noninvasive cases
         }
         let fellowIds = Set(allPending.compactMap { $0.fellowId ?? $0.ownerId })
-        return users.filter { fellowIds.contains($0.id) }.sorted { $0.displayName < $1.displayName }
+        // Only include active (non-graduated) fellows in the dropdown
+        return users
+            .filter { fellowIds.contains($0.id) && !$0.hasGraduated }
+            .sorted { $0.displayName < $1.displayName }
     }
 
     var body: some View {
