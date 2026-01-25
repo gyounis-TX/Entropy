@@ -24,7 +24,7 @@ struct DutyHoursDashboardView: View {
     private var currentProgram: Program? { programs.first }
 
     private var fellows: [User] {
-        users.filter { $0.role == .fellow }
+        users.filter { $0.role == .fellow && !$0.hasGraduated }
     }
 
     enum ComplianceFilterStatus: String, CaseIterable {

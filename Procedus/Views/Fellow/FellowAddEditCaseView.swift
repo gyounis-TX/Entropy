@@ -550,12 +550,23 @@ struct AddEditCaseView: View {
             }
             .onAppear {
                 weeks = generateWeekOptions()
-                // All categories start collapsed
 
                 // Pre-populate default facility for new cases
                 if !isEditing && selectedFacilityId == nil {
                     if let defaultFacility = appState.defaultFacilityId {
                         selectedFacilityId = defaultFacility
+                    }
+                }
+
+                // Auto-expand the primary category for the initial case type (new cases only)
+                if !isEditing && procedureSectionsExpanded.isEmpty {
+                    switch selectedCaseType {
+                    case .invasive:
+                        procedureSectionsExpanded.insert("interventional-cardiology-ic-pci")
+                    case .ep:
+                        procedureSectionsExpanded.insert("electrophysiology-ep-ablation")
+                    case .noninvasive:
+                        procedureSectionsExpanded.insert("cardiac-imaging-ci-echo")
                     }
                 }
             }
@@ -605,14 +616,31 @@ struct AddEditCaseView: View {
 
     private var timeframeSection: some View {
         Section {
-            Picker("", selection: $selectedWeek) {
-                ForEach(weeks) { week in
-                    Text(week.label)
-                        .font(.subheadline)
-                        .tag(week.bucket)
+            HStack {
+                Spacer()
+                Menu {
+                    ForEach(weeks) { week in
+                        Button(week.label) {
+                            selectedWeek = week.bucket
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(weeks.first { $0.bucket == selectedWeek }?.label ?? "Select Week")
+                            .font(.subheadline)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(10)
                 }
+                .foregroundColor(.primary)
+                Spacer()
             }
-            .font(.subheadline)
+            .listRowBackground(Color.clear)
         } header: {
             Text("Procedure Timeframe")
                 .font(.caption)
@@ -635,11 +663,27 @@ struct AddEditCaseView: View {
                 selectedDevices.removeAll()
                 procedureSubOptions.removeAll()
                 bulkQuantities.removeAll()
+                // Clear expanded sections when switching case types
+                procedureSectionsExpanded.removeAll()
+
                 // Clear operator position when switching to noninvasive
                 if newValue == .noninvasive {
                     selectedOperatorPosition = nil
                     // Default to case entry mode
                     noninvasiveEntryMode = .caseEntry
+                }
+
+                // Auto-expand the primary category for the selected case type
+                switch newValue {
+                case .invasive:
+                    // Expand Coronary Intervention by default
+                    procedureSectionsExpanded.insert("interventional-cardiology-ic-pci")
+                case .ep:
+                    // Expand Ablation by default (most common EP procedure type)
+                    procedureSectionsExpanded.insert("electrophysiology-ep-ablation")
+                case .noninvasive:
+                    // Expand Echo by default (most common imaging type)
+                    procedureSectionsExpanded.insert("cardiac-imaging-ci-echo")
                 }
             }
         } header: {
@@ -863,7 +907,7 @@ struct AddEditCaseView: View {
     }
 
     // MARK: - Attending Section
-    
+
     private var attendingSection: some View {
         Section {
             if sortedAttendingsActive.isEmpty {
@@ -872,17 +916,34 @@ struct AddEditCaseView: View {
                     .foregroundColor(Color(UIColor.secondaryLabel))
                     .italic()
             } else {
-                Picker("", selection: $selectedAttendingId) {
-                    Text("Select Attending")
-                        .font(.subheadline)
-                        .tag(nil as UUID?)
-                    ForEach(sortedAttendingsActive) { attending in
-                        Text(attending.name)
-                            .font(.subheadline)
-                            .tag(attending.id as UUID?)
+                HStack {
+                    Spacer()
+                    Menu {
+                        Button("Select Attending") {
+                            selectedAttendingId = nil
+                        }
+                        ForEach(sortedAttendingsActive) { attending in
+                            Button(attending.name) {
+                                selectedAttendingId = attending.id
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(selectedAttendingId.flatMap { id in sortedAttendingsActive.first { $0.id == id }?.name } ?? "Select Attending")
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(10)
                     }
+                    .foregroundColor(selectedAttendingId != nil ? .primary : .secondary)
+                    Spacer()
                 }
-                .font(.subheadline)
+                .listRowBackground(Color.clear)
             }
         } header: {
             Text("Supervising Attending")
@@ -891,7 +952,7 @@ struct AddEditCaseView: View {
     }
     
     // MARK: - Facility Section
-    
+
     private var facilitySection: some View {
         Section {
             if sortedFacilitiesActive.isEmpty {
@@ -900,17 +961,34 @@ struct AddEditCaseView: View {
                     .foregroundColor(Color(UIColor.secondaryLabel))
                     .italic()
             } else {
-                Picker("", selection: $selectedFacilityId) {
-                    Text("Select Facility")
-                        .font(.subheadline)
-                        .tag(nil as UUID?)
-                    ForEach(sortedFacilitiesActive) { facility in
-                        Text(facility.shortName ?? facility.name)
-                            .font(.subheadline)
-                            .tag(facility.id as UUID?)
+                HStack {
+                    Spacer()
+                    Menu {
+                        Button("Select Facility") {
+                            selectedFacilityId = nil
+                        }
+                        ForEach(sortedFacilitiesActive) { facility in
+                            Button(facility.shortName ?? facility.name) {
+                                selectedFacilityId = facility.id
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(selectedFacilityId.flatMap { id in sortedFacilitiesActive.first { $0.id == id }.map { $0.shortName ?? $0.name } } ?? "Select Facility")
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(10)
                     }
+                    .foregroundColor(selectedFacilityId != nil ? .primary : .secondary)
+                    Spacer()
                 }
-                .font(.subheadline)
+                .listRowBackground(Color.clear)
             }
         } header: {
             Text("Training Facility")

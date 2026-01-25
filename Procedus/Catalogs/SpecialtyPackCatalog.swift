@@ -189,7 +189,7 @@ struct SpecialtyPackCatalog {
                 ProcedureTag(id: "ic-closure-tr", title: "TR Band", isClosureDevice: true)
             ])
         ],
-        defaultAccessSites: [.femoral, .radial, .brachial, .pedal, .pericardial, .transseptal],
+        defaultAccessSites: [.femoral, .radial, .brachial, .pedal, .subclavian, .axillary, .jugular, .pericardial, .transseptal],
         defaultComplications: [.bleeding, .vascular, .stroke, .renalInjury, .tamponade, .mi, .death]
     )
     

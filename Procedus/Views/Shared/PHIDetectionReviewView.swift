@@ -10,31 +10,24 @@ struct PHIDetectionReviewView: View {
     let onRedactAndSave: (UIImage) -> Void
     let onCropInstead: () -> Void
     let onCancel: () -> Void
-    let onRescanAsDiagram: (() -> Void)?
 
-    @State private var highlightedImage: UIImage?
-    @State private var selectedRegionIds: Set<UUID>
-    @State private var showingRedactionPreview = false
-    @State private var redactedImage: UIImage?
     @State private var showingManualRedaction = false
     @State private var manualRedactionRects: [CGRect] = []
+    @State private var showingSkipAttestation = false
+    @State private var skipAttestationConfirmed = false
 
     init(
         originalImage: UIImage,
         detectedRegions: [DetectedTextRegion],
         onRedactAndSave: @escaping (UIImage) -> Void,
         onCropInstead: @escaping () -> Void,
-        onCancel: @escaping () -> Void,
-        onRescanAsDiagram: (() -> Void)? = nil
+        onCancel: @escaping () -> Void
     ) {
         self.originalImage = originalImage
         self.detectedRegions = detectedRegions
         self.onRedactAndSave = onRedactAndSave
         self.onCropInstead = onCropInstead
         self.onCancel = onCancel
-        self.onRescanAsDiagram = onRescanAsDiagram
-        // Default: all regions selected for redaction
-        _selectedRegionIds = State(initialValue: Set(detectedRegions.map { $0.id }))
     }
 
     var body: some View {
@@ -43,11 +36,25 @@ struct PHIDetectionReviewView: View {
                 // Warning header
                 warningHeader
 
-                // Image with highlighted regions
+                // Image preview (no highlighted boxes)
                 ScrollView {
                     VStack(spacing: 16) {
                         imagePreview
-                        detectedTextList
+
+                        // Info text
+                        VStack(spacing: 8) {
+                            Text("\(detectedRegions.count) text region(s) detected")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            Text("Please crop or manually redact any areas containing patient information before saving.")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(12)
                     }
                     .padding()
                 }
@@ -55,7 +62,7 @@ struct PHIDetectionReviewView: View {
                 // Action buttons
                 actionButtons
             }
-            .navigationTitle("PHI Detected")
+            .navigationTitle("Text Detected")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -63,12 +70,6 @@ struct PHIDetectionReviewView: View {
                         onCancel()
                     }
                 }
-            }
-            .onAppear {
-                generateHighlightedImage()
-            }
-            .sheet(isPresented: $showingRedactionPreview) {
-                redactionPreviewSheet
             }
             .sheet(isPresented: $showingManualRedaction) {
                 ManualRedactionView(
@@ -87,6 +88,9 @@ struct PHIDetectionReviewView: View {
                     }
                 )
             }
+            .sheet(isPresented: $showingSkipAttestation) {
+                skipAttestationSheet
+            }
         }
     }
 
@@ -102,7 +106,7 @@ struct PHIDetectionReviewView: View {
                 Text("Text Detected")
                     .font(.headline)
                     .foregroundStyle(.white)
-                Text("This image contains text that may include PHI. You must redact or crop before saving.")
+                Text("This image may contain PHI. Please crop or manually redact any sensitive information.")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.9))
             }
@@ -110,255 +114,137 @@ struct PHIDetectionReviewView: View {
             Spacer()
         }
         .padding()
-        .background(Color.red)
+        .background(Color.orange)
     }
 
     // MARK: - Image Preview
 
     private var imagePreview: some View {
-        Group {
-            if let highlighted = highlightedImage {
-                Image(uiImage: highlighted)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxHeight: 300)
-                    .cornerRadius(12)
-                    .shadow(radius: 4)
-            } else {
-                Image(uiImage: originalImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxHeight: 300)
-                    .cornerRadius(12)
-                    .shadow(radius: 4)
-            }
-        }
-    }
-
-    // MARK: - Detected Text List
-
-    private var detectedTextList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Detected Text (\(detectedRegions.count))")
-                .font(.headline)
-                .foregroundStyle(ProcedusTheme.textPrimary)
-
-            ForEach(detectedRegions) { region in
-                HStack {
-                    Image(systemName: selectedRegionIds.contains(region.id) ? "checkmark.square.fill" : "square")
-                        .foregroundStyle(selectedRegionIds.contains(region.id) ? ProcedusTheme.primary : ProcedusTheme.textSecondary)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(region.text)
-                            .font(.subheadline)
-                            .foregroundStyle(ProcedusTheme.textPrimary)
-                            .lineLimit(1)
-
-                        Text("Confidence: \(Int(region.confidence * 100))%")
-                            .font(.caption2)
-                            .foregroundStyle(ProcedusTheme.textTertiary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "rectangle.inset.filled")
-                        .font(.caption)
-                        .foregroundStyle(.red.opacity(0.7))
-                }
-                .padding(12)
-                .background(selectedRegionIds.contains(region.id) ? Color.red.opacity(0.05) : ProcedusTheme.cardBackground)
-                .cornerRadius(8)
-                .onTapGesture {
-                    toggleRegionSelection(region.id)
-                }
-            }
-
-            // Select All / Deselect All
-            HStack {
-                Button("Select All") {
-                    selectedRegionIds = Set(detectedRegions.map { $0.id })
-                    generateHighlightedImage()
-                }
-                .font(.caption)
-                .foregroundStyle(ProcedusTheme.primary)
-
-                Spacer()
-
-                Button("Deselect All") {
-                    selectedRegionIds.removeAll()
-                    generateHighlightedImage()
-                }
-                .font(.caption)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            }
-            .padding(.top, 4)
-        }
+        Image(uiImage: originalImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxHeight: 300)
+            .cornerRadius(12)
+            .shadow(radius: 4)
     }
 
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            // Redact All button (primary action)
+            // Crop button (primary action)
             Button {
-                previewRedaction()
+                onCropInstead()
             } label: {
                 HStack {
-                    Image(systemName: "rectangle.inset.filled")
-                    Text(selectedRegionIds.count == detectedRegions.count ? "Redact All" : "Redact Selected (\(selectedRegionIds.count))")
+                    Image(systemName: "crop")
+                    Text("Crop Image")
                 }
                 .font(.headline)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(selectedRegionIds.isEmpty ? Color.gray : Color.red)
+                .background(ProcedusTheme.primary)
                 .cornerRadius(12)
             }
-            .disabled(selectedRegionIds.isEmpty)
 
-            HStack(spacing: 8) {
-                // Crop button
-                Button {
-                    onCropInstead()
-                } label: {
-                    HStack {
-                        Image(systemName: "crop")
-                        Text("Crop")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(ProcedusTheme.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(ProcedusTheme.primary.opacity(0.1))
-                    .cornerRadius(10)
+            // Manual redaction button
+            Button {
+                showingManualRedaction = true
+            } label: {
+                HStack {
+                    Image(systemName: "rectangle.badge.plus")
+                    Text("Draw Redaction Boxes")
                 }
-
-                // Manual redaction button
-                Button {
-                    showingManualRedaction = true
-                } label: {
-                    HStack {
-                        Image(systemName: "rectangle.badge.plus")
-                        Text("Manual")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.purple)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.purple.opacity(0.1))
-                    .cornerRadius(10)
-                }
-
-                // Hand-drawn diagram button
-                if let rescanAsDiagram = onRescanAsDiagram {
-                    Button {
-                        rescanAsDiagram()
-                    } label: {
-                        HStack {
-                            Image(systemName: "hand.draw")
-                            Text("Diagram")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                }
+                .font(.subheadline)
+                .foregroundStyle(.purple)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.purple.opacity(0.1))
+                .cornerRadius(12)
             }
 
-            // Help text for diagram mode
-            if onRescanAsDiagram != nil {
-                Text("Tap 'Diagram' if this is a hand-drawn sketch. Only the patient label area (top-right) will require redaction.")
-                    .font(.caption2)
-                    .foregroundStyle(ProcedusTheme.textTertiary)
-                    .multilineTextAlignment(.center)
+            // Skip (proceed without editing) - requires attestation
+            Button {
+                showingSkipAttestation = true
+            } label: {
+                Text("Proceed Without Editing")
+                    .font(.caption)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
             }
+            .padding(.top, 8)
         }
         .padding()
         .background(ProcedusTheme.cardBackground)
     }
 
-    // MARK: - Redaction Preview Sheet
+    // MARK: - Skip Attestation Sheet
 
-    private var redactionPreviewSheet: some View {
+    private var skipAttestationSheet: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Text("Preview Redaction")
-                    .font(.headline)
+            VStack(spacing: 24) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 50))
+                    .foregroundStyle(.orange)
 
-                if let redacted = redactedImage {
-                    Image(uiImage: redacted)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: 400)
-                        .cornerRadius(12)
-                }
+                Text("Proceed Without Editing?")
+                    .font(.title2)
+                    .fontWeight(.bold)
 
-                Text("Black rectangles will permanently cover the selected text regions.")
-                    .font(.caption)
+                Text("Text was detected in this image. By proceeding, you confirm that you have reviewed the image and it does not contain any Protected Health Information (PHI).")
+                    .font(.subheadline)
                     .foregroundStyle(ProcedusTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
+                // Attestation toggle
+                Button {
+                    skipAttestationConfirmed.toggle()
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: skipAttestationConfirmed ? "checkmark.square.fill" : "square")
+                            .font(.title2)
+                            .foregroundStyle(skipAttestationConfirmed ? ProcedusTheme.primary : ProcedusTheme.textSecondary)
+
+                        Text("I confirm this image does not contain any PHI, including patient names, dates of birth, medical record numbers, or other identifying information.")
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .background(ProcedusTheme.cardBackground)
+                .cornerRadius(12)
+
                 Spacer()
 
-                // Confirm button
+                // Continue button
                 Button {
-                    if let redacted = redactedImage {
-                        showingRedactionPreview = false
-                        onRedactAndSave(redacted)
-                    }
+                    showingSkipAttestation = false
+                    onRedactAndSave(originalImage)
                 } label: {
-                    Text("Confirm & Save")
+                    Text("Continue Without Editing")
                         .font(.headline)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(ProcedusTheme.primary)
+                        .background(skipAttestationConfirmed ? ProcedusTheme.primary : Color.gray)
                         .cornerRadius(12)
                 }
-                .padding()
+                .disabled(!skipAttestationConfirmed)
             }
             .padding()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Back") {
-                        showingRedactionPreview = false
+                        showingSkipAttestation = false
+                        skipAttestationConfirmed = false
                     }
                 }
             }
         }
-    }
-
-    // MARK: - Helpers
-
-    private func toggleRegionSelection(_ id: UUID) {
-        if selectedRegionIds.contains(id) {
-            selectedRegionIds.remove(id)
-        } else {
-            selectedRegionIds.insert(id)
-        }
-        generateHighlightedImage()
-    }
-
-    private func generateHighlightedImage() {
-        let selectedRegions = detectedRegions.filter { selectedRegionIds.contains($0.id) }
-        highlightedImage = RedactionService.shared.drawPreviewHighlights(
-            on: originalImage,
-            regions: selectedRegions
-        )
-    }
-
-    private func previewRedaction() {
-        let selectedRegions = detectedRegions.filter { selectedRegionIds.contains($0.id) }
-        redactedImage = RedactionService.shared.applyRedaction(
-            to: originalImage,
-            regions: selectedRegions
-        )
-        showingRedactionPreview = true
     }
 }
 

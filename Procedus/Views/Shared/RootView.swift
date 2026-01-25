@@ -253,62 +253,63 @@ struct FellowContentWrapper<Content: View>: View {
     // MARK: - Unified Top Bar
 
     private var unifiedTopBar: some View {
-        HStack(spacing: 12) {
-            // Left: Notification logo + Settings gear
-            HStack(spacing: 10) {
-                NotificationBellButton(
-                    role: .fellow,
-                    badgeCount: unreadNotificationCount
-                ) {
-                    showingNotifications = true
-                }
-
-                // Settings gear icon (Fellow blue)
-                Button {
-                    showingSettings = true
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(settingsGearColor)
-                        .frame(width: 28, height: 28)
-                }
-            }
-
-            Spacer()
-
-            // Center: Tab title
+        ZStack {
+            // Center: Tab title (truly centered)
             Text(currentTabTitle)
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundStyle(ProcedusTheme.textPrimary)
 
-            Spacer()
-
-            // Right: Export and Add buttons (only on Log tab)
-            if showCaseLogActions {
-                HStack(spacing: 16) {
-                    Button {
-                        showingExportOptions = true
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 18))
-                            .foregroundStyle(myCases.isEmpty ? inactiveIconColor.opacity(0.5) : inactiveIconColor)
+            // Left and Right items
+            HStack(spacing: 12) {
+                // Left: Notification logo + Settings gear
+                HStack(spacing: 10) {
+                    NotificationBellButton(
+                        role: .fellow,
+                        badgeCount: unreadNotificationCount
+                    ) {
+                        showingNotifications = true
                     }
-                    .disabled(myCases.isEmpty)
 
+                    // Settings gear icon (Fellow blue)
                     Button {
-                        showingAddCase = true
+                        showingSettings = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(activeIconColor)
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(settingsGearColor)
+                            .frame(width: 28, height: 28)
                     }
                 }
-            } else {
-                // Placeholder to balance the layout when buttons aren't shown
-                HStack(spacing: 16) {
-                    Color.clear.frame(width: 18, height: 18)
-                    Color.clear.frame(width: 18, height: 18)
+
+                Spacer()
+
+                // Right: Export and Add buttons (only on Log tab)
+                if showCaseLogActions {
+                    HStack(spacing: 16) {
+                        Button {
+                            showingExportOptions = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 18))
+                                .foregroundStyle(myCases.isEmpty ? inactiveIconColor.opacity(0.5) : inactiveIconColor)
+                        }
+                        .disabled(myCases.isEmpty)
+
+                        Button {
+                            showingAddCase = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(activeIconColor)
+                        }
+                    }
+                } else {
+                    // Placeholder to balance the layout when buttons aren't shown
+                    HStack(spacing: 16) {
+                        Color.clear.frame(width: 18, height: 18)
+                        Color.clear.frame(width: 18, height: 18)
+                    }
                 }
             }
         }

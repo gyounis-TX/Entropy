@@ -440,7 +440,7 @@ struct IndividualAddEditCaseView: View {
     }
 
     // MARK: - Attending Section
-    
+
     private var attendingSection: some View {
         Section {
             if attendings.isEmpty {
@@ -448,15 +448,34 @@ struct IndividualAddEditCaseView: View {
                     .font(.clinicalCaption)
                     .foregroundStyle(ProcedusTheme.textTertiary)
             } else {
-                Picker("", selection: $selectedAttendingId) {
-                    Text("Select...").tag(nil as UUID?)
-                    ForEach(attendings) { attending in
-                        Text(attending.name).tag(attending.id as UUID?)
+                HStack {
+                    Spacer()
+                    Menu {
+                        Button("Select...") {
+                            selectedAttendingId = nil
+                        }
+                        ForEach(attendings) { attending in
+                            Button(attending.name) {
+                                selectedAttendingId = attending.id
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(selectedAttendingId.flatMap { id in attendings.first { $0.id == id }?.name } ?? "Select...")
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(10)
                     }
+                    .foregroundColor(selectedAttendingId != nil ? .primary : .secondary)
+                    Spacer()
                 }
-                .pickerStyle(.menu)
-                .tint(ProcedusTheme.primary)
-                .font(.subheadline)
+                .listRowBackground(Color.clear)
             }
         } header: {
             HStack(spacing: 2) {
@@ -466,11 +485,10 @@ struct IndividualAddEditCaseView: View {
             .font(.clinicalFootnote)
             .foregroundStyle(ProcedusTheme.textSecondary)
         }
-        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
     
     // MARK: - Facility Section (REQUIRED)
-    
+
     private var facilitySection: some View {
         Section {
             if facilities.isEmpty {
@@ -478,28 +496,48 @@ struct IndividualAddEditCaseView: View {
                     .font(.clinicalCaption)
                     .foregroundStyle(ProcedusTheme.textTertiary)
             } else {
-                Picker("", selection: $selectedFacilityId) {
-                    // NO "None" option - facility is REQUIRED
-                    Text("Select...").tag(nil as UUID?)
-                    ForEach(facilities) { facility in
-                        Text(facility.name).tag(facility.id as UUID?)
+                VStack(spacing: 8) {
+                    HStack {
+                        Spacer()
+                        Menu {
+                            Button("Select...") {
+                                selectedFacilityId = nil
+                            }
+                            ForEach(facilities) { facility in
+                                Button(facility.name) {
+                                    selectedFacilityId = facility.id
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(selectedFacilityId.flatMap { id in facilities.first { $0.id == id }?.name } ?? "Select...")
+                                    .font(.subheadline)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color(UIColor.tertiarySystemFill))
+                            .cornerRadius(10)
+                        }
+                        .foregroundColor(selectedFacilityId != nil ? .primary : .secondary)
+                        Spacer()
+                    }
+
+                    // Warning when facility not selected
+                    if selectedFacilityId == nil {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.warning)
+                            Text("Facility is required")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.warning)
+                        }
                     }
                 }
-                .pickerStyle(.menu)
-                .tint(ProcedusTheme.primary)
-                .font(.subheadline)
-            }
-
-            // Warning when facility not selected
-            if selectedFacilityId == nil && !facilities.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(ProcedusTheme.warning)
-                    Text("Facility is required")
-                        .font(.caption)
-                        .foregroundStyle(ProcedusTheme.warning)
-                }
+                .listRowBackground(Color.clear)
             }
         } header: {
             HStack(spacing: 2) {
@@ -509,27 +547,42 @@ struct IndividualAddEditCaseView: View {
             .font(.clinicalFootnote)
             .foregroundStyle(ProcedusTheme.textSecondary)
         }
-        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
     
     // MARK: - Timeframe Section
-    
+
     private var timeframeSection: some View {
         Section {
-            Picker("", selection: $selectedWeekBucket) {
-                ForEach(availableWeekBuckets, id: \.self) { bucket in
-                    Text(bucket.toWeekTimeframeLabel()).tag(bucket)
+            HStack {
+                Spacer()
+                Menu {
+                    ForEach(availableWeekBuckets, id: \.self) { bucket in
+                        Button(bucket.toWeekTimeframeLabel()) {
+                            selectedWeekBucket = bucket
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(selectedWeekBucket.toWeekTimeframeLabel())
+                            .font(.subheadline)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(10)
                 }
+                .foregroundColor(.primary)
+                Spacer()
             }
-            .pickerStyle(.menu)
-            .tint(ProcedusTheme.primary)
-            .font(.subheadline)
+            .listRowBackground(Color.clear)
         } header: {
             Text("Procedure Timeframe")
                 .font(.clinicalFootnote)
                 .foregroundStyle(ProcedusTheme.textSecondary)
         }
-        .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
 
     // MARK: - Case Type Toggle Section (Cardiology with both imaging and other packs)

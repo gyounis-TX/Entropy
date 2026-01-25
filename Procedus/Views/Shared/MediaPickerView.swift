@@ -5,6 +5,7 @@
 import SwiftUI
 import PhotosUI
 import AVFoundation
+import UniformTypeIdentifiers
 
 /// Result from media picker
 struct MediaPickerResult {
@@ -24,9 +25,11 @@ struct MediaPickerView: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var showingCamera = false
     @State private var showingPhotoPicker = false
+    @State private var showingFilePicker = false
     @State private var showingSourcePicker = true
     @State private var isProcessing = false
     @State private var errorMessage: String?
+    @State private var selectedVideoSize: Int?
 
     var body: some View {
         NavigationStack {
@@ -72,6 +75,13 @@ struct MediaPickerView: View {
                     handleCameraCapture(image)
                 }
             }
+            .fileImporter(
+                isPresented: $showingFilePicker,
+                allowedContentTypes: [.image, .movie],
+                allowsMultipleSelection: false
+            ) { result in
+                handleFileImport(result)
+            }
         }
     }
 
@@ -83,18 +93,18 @@ struct MediaPickerView: View {
                 .font(.headline)
                 .foregroundStyle(ProcedusTheme.textPrimary)
 
-            HStack(spacing: 24) {
+            HStack(spacing: 16) {
                 // Camera button
                 Button {
                     checkCameraPermissionAndShow()
                 } label: {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 10) {
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 40))
+                            .font(.system(size: 32))
                         Text("Camera")
-                            .font(.subheadline)
+                            .font(.caption)
                     }
-                    .frame(width: 120, height: 120)
+                    .frame(width: 100, height: 100)
                     .foregroundStyle(ProcedusTheme.primary)
                     .background(ProcedusTheme.primary.opacity(0.1))
                     .cornerRadius(16)
@@ -104,17 +114,54 @@ struct MediaPickerView: View {
                 Button {
                     showingPhotoPicker = true
                 } label: {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 10) {
                         Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 40))
+                            .font(.system(size: 32))
                         Text("Library")
-                            .font(.subheadline)
+                            .font(.caption)
                     }
-                    .frame(width: 120, height: 120)
+                    .frame(width: 100, height: 100)
                     .foregroundStyle(ProcedusTheme.accent)
                     .background(ProcedusTheme.accent.opacity(0.1))
                     .cornerRadius(16)
                 }
+
+                // Files button
+                Button {
+                    showingFilePicker = true
+                } label: {
+                    VStack(spacing: 10) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 32))
+                        Text("Files")
+                            .font(.caption)
+                    }
+                    .frame(width: 100, height: 100)
+                    .foregroundStyle(.orange)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(16)
+                }
+            }
+
+            // Video size indicator (if video was selected)
+            if let size = selectedVideoSize {
+                HStack(spacing: 8) {
+                    Image(systemName: "video.fill")
+                        .foregroundStyle(.secondary)
+                    Text("Video size: \(MediaStorageService.shared.formattedFileSize(size))")
+                        .font(.subheadline)
+                    if size > CaseMedia.maxFileSizeBytes {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(size > CaseMedia.maxFileSizeBytes ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
+                .cornerRadius(8)
             }
 
             Text("Maximum file size: 10 MB")
@@ -183,6 +230,7 @@ struct MediaPickerView: View {
     private func processSelectedItem(_ item: PhotosPickerItem) async {
         isProcessing = true
         errorMessage = nil
+        selectedVideoSize = nil
 
         // Try loading as image first
         if let data = try? await item.loadTransferable(type: Data.self) {
@@ -199,35 +247,96 @@ struct MediaPickerView: View {
                 isProcessing = false
                 let result = MediaPickerResult(image: image, videoURL: nil, mediaType: .image)
                 onMediaSelected(result)
-                // Don't dismiss - let the parent flow handle navigation
                 return
             }
         }
 
         // Try loading as video
         if let movie = try? await item.loadTransferable(type: VideoTransferable.self) {
-            // Check file size
+            // Check file size and show it
             if let attrs = try? FileManager.default.attributesOfItem(atPath: movie.url.path),
-               let size = attrs[.size] as? Int,
-               size > CaseMedia.maxFileSizeBytes {
-                isProcessing = false
-                errorMessage = "Video exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(size)))"
-                selectedItem = nil
-                // Clean up temp file
-                try? FileManager.default.removeItem(at: movie.url)
-                return
+               let size = attrs[.size] as? Int {
+
+                selectedVideoSize = size
+
+                if size > CaseMedia.maxFileSizeBytes {
+                    isProcessing = false
+                    errorMessage = "Video exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(size)))"
+                    selectedItem = nil
+                    try? FileManager.default.removeItem(at: movie.url)
+                    return
+                }
             }
 
             isProcessing = false
             let result = MediaPickerResult(image: nil, videoURL: movie.url, mediaType: .video)
             onMediaSelected(result)
-            // Don't dismiss - let the parent flow handle navigation
             return
         }
 
         isProcessing = false
         errorMessage = "Unable to load selected media"
         selectedItem = nil
+    }
+
+    // MARK: - Handle File Import
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+
+            // Start accessing security-scoped resource
+            guard url.startAccessingSecurityScopedResource() else {
+                errorMessage = "Unable to access file"
+                return
+            }
+
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            // Check file size
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let size = attrs[.size] as? Int else {
+                errorMessage = "Unable to read file size"
+                return
+            }
+
+            if size > CaseMedia.maxFileSizeBytes {
+                errorMessage = "File exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(size)))"
+                return
+            }
+
+            // Process based on file type
+            let pathExtension = url.pathExtension.lowercased()
+            let imageExtensions = ["jpg", "jpeg", "png", "heic", "heif", "gif", "bmp", "tiff"]
+            let videoExtensions = ["mov", "mp4", "m4v", "avi"]
+
+            if imageExtensions.contains(pathExtension) {
+                if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+                    let result = MediaPickerResult(image: image, videoURL: nil, mediaType: .image)
+                    onMediaSelected(result)
+                } else {
+                    errorMessage = "Unable to load image"
+                }
+            } else if videoExtensions.contains(pathExtension) {
+                selectedVideoSize = size
+
+                // Copy video to temp location
+                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "." + pathExtension)
+                do {
+                    try FileManager.default.copyItem(at: url, to: tempURL)
+                    let result = MediaPickerResult(image: nil, videoURL: tempURL, mediaType: .video)
+                    onMediaSelected(result)
+                } catch {
+                    errorMessage = "Failed to copy video file"
+                }
+            } else {
+                errorMessage = "Unsupported file type"
+            }
+
+        case .failure(let error):
+            errorMessage = "Failed to import file: \(error.localizedDescription)"
+        }
     }
 }
 

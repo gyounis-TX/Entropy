@@ -112,7 +112,77 @@ class NotificationManager: ObservableObject {
             )
         }
     }
-    
+
+    // MARK: - Duty Hours Notifications
+
+    /// Notify about duty hours warning (approaching limit)
+    func notifyDutyHoursWarning(
+        toFellowId: UUID,
+        fellowName: String,
+        warningTypes: [DutyHoursViolationType],
+        adminIds: [UUID],
+        programId: UUID?
+    ) {
+        guard !warningTypes.isEmpty else { return }
+
+        let warningDescriptions = warningTypes.map { $0.displayName }
+        let warningList = warningDescriptions.joined(separator: ", ")
+
+        // Notify fellow
+        createNotification(
+            userId: toFellowId,
+            title: "Duty Hours Warning",
+            message: "You are approaching ACGME duty hours limits: \(warningList). Please monitor your hours.",
+            type: .dutyHoursWarning,
+            caseId: nil
+        )
+
+        // Notify admin(s)
+        for adminId in adminIds {
+            createNotification(
+                userId: adminId,
+                title: "Fellow Duty Hours Warning",
+                message: "\(fellowName) is approaching ACGME duty hours limits: \(warningList)",
+                type: .dutyHoursWarning,
+                caseId: nil
+            )
+        }
+    }
+
+    /// Notify about duty hours violation (limit exceeded)
+    func notifyDutyHoursViolation(
+        toFellowId: UUID,
+        fellowName: String,
+        violationTypes: [DutyHoursViolationType],
+        adminIds: [UUID],
+        programId: UUID?
+    ) {
+        guard !violationTypes.isEmpty else { return }
+
+        let violationDescriptions = violationTypes.map { $0.displayName }
+        let violationList = violationDescriptions.joined(separator: ", ")
+
+        // Notify fellow
+        createNotification(
+            userId: toFellowId,
+            title: "Duty Hours Violation",
+            message: "ACGME duty hours violation detected: \(violationList). Please contact your program director.",
+            type: .dutyHoursViolation,
+            caseId: nil
+        )
+
+        // Notify admin(s)
+        for adminId in adminIds {
+            createNotification(
+                userId: adminId,
+                title: "Fellow Duty Hours Violation",
+                message: "\(fellowName) has a duty hours violation: \(violationList). Immediate attention required.",
+                type: .dutyHoursViolation,
+                caseId: nil
+            )
+        }
+    }
+
     // MARK: - Private Helpers
     
     private func createNotification(

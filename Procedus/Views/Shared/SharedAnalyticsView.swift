@@ -78,7 +78,7 @@ struct AnalyticsView: View {
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
     @State private var selectedChartType: AnalyticsChartType = .bar
-    @State private var selectedChartGrouping: ChartGrouping = .weeks
+    @State private var selectedChartGrouping: ChartGrouping = .months
     @State private var showChart = true
     @State private var notesSearchText: String = ""
     @State private var showingProcedureFilter = false
@@ -651,55 +651,51 @@ struct AnalyticsView: View {
 
     private var rangeSection: some View {
         Section {
-            HStack {
-                Text("Time Range")
-                    .font(.clinicalBody)
-                    .foregroundStyle(ProcedusTheme.textPrimary)
-
-                Spacer()
-
-                Menu {
-                    // Standard time ranges (excluding generic PGY and custom)
-                    ForEach(standardTimeRanges, id: \.self) { range in
-                        Button {
-                            selectedRange = range
-                            selectedPGYLevelFilter = nil
-                        } label: {
-                            if selectedPGYLevelFilter == nil && selectedRange == range {
-                                Label(range.rawValue, systemImage: "checkmark")
-                            } else {
-                                Text(range.rawValue)
-                            }
+            Menu {
+                // Standard time ranges (excluding generic PGY and custom)
+                ForEach(standardTimeRanges, id: \.self) { range in
+                    Button {
+                        selectedRange = range
+                        selectedPGYLevelFilter = nil
+                    } label: {
+                        if selectedPGYLevelFilter == nil && selectedRange == range {
+                            Label(range.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(range.rawValue)
                         }
                     }
-
-                    // Dynamic PGY levels (only if PGY level is set and there's data)
-                    if !availablePGYLevels.isEmpty {
-                        Divider()
-                        ForEach(availablePGYLevels, id: \.level) { pgyOption in
-                            Button {
-                                selectedPGYLevelFilter = pgyOption.level
-                                selectedRange = .pgy
-                                selectedChartGrouping = .pgyYears
-                            } label: {
-                                if selectedPGYLevelFilter == pgyOption.level {
-                                    Label(pgyOption.displayName, systemImage: "checkmark")
-                                } else {
-                                    Text(pgyOption.displayName)
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(timeRangeDisplayName)
-                            .font(.clinicalBody)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 10))
-                    }
-                    .foregroundColor(ProcedusTheme.primary)
                 }
+
+                // Dynamic PGY levels (only if PGY level is set and there's data)
+                if !availablePGYLevels.isEmpty {
+                    Divider()
+                    ForEach(availablePGYLevels, id: \.level) { pgyOption in
+                        Button {
+                            selectedPGYLevelFilter = pgyOption.level
+                            selectedRange = .pgy
+                            selectedChartGrouping = .pgyYears
+                        } label: {
+                            if selectedPGYLevelFilter == pgyOption.level {
+                                Label(pgyOption.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(pgyOption.displayName)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(timeRangeDisplayName)
+                        .font(.clinicalBody)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10))
+                }
+                .foregroundColor(ProcedusTheme.primary)
             }
+        } header: {
+            Text("Time Range")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
@@ -708,25 +704,19 @@ struct AnalyticsView: View {
 
     private var facilityFilterSection: some View {
         Section {
-            HStack {
-                Text("Hospital")
-                    .font(.clinicalBody)
-                    .foregroundStyle(ProcedusTheme.textPrimary)
-
-                Spacer()
-
-                Picker("", selection: $selectedFacilityId) {
-                    Text("All Hospitals").tag(nil as UUID?)
-                    ForEach(facilities) { facility in
-                        Text(facility.name).tag(facility.id as UUID?)
-                    }
+            Picker("", selection: $selectedFacilityId) {
+                Text("All Hospitals").tag(nil as UUID?)
+                ForEach(facilities) { facility in
+                    Text(facility.name).tag(facility.id as UUID?)
                 }
-                .pickerStyle(.menu)
-                .tint(ProcedusTheme.primary)
-                .labelsHidden()
-                .controlSize(.small)
-                .fixedSize()
             }
+            .pickerStyle(.menu)
+            .tint(ProcedusTheme.primary)
+            .labelsHidden()
+        } header: {
+            Text("Hospital")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }
@@ -735,25 +725,19 @@ struct AnalyticsView: View {
 
     private var attendingFilterSection: some View {
         Section {
-            HStack {
-                Text("Attending")
-                    .font(.clinicalBody)
-                    .foregroundStyle(ProcedusTheme.textPrimary)
-
-                Spacer()
-
-                Picker("", selection: $selectedAttendingId) {
-                    Text("All Attendings").tag(nil as UUID?)
-                    ForEach(attendings.sorted { $0.name < $1.name }) { attending in
-                        Text(attending.name).tag(attending.id as UUID?)
-                    }
+            Picker("", selection: $selectedAttendingId) {
+                Text("All Attendings").tag(nil as UUID?)
+                ForEach(attendings.sorted { $0.name < $1.name }) { attending in
+                    Text(attending.name).tag(attending.id as UUID?)
                 }
-                .pickerStyle(.menu)
-                .tint(ProcedusTheme.primary)
-                .labelsHidden()
-                .controlSize(.small)
-                .fixedSize()
             }
+            .pickerStyle(.menu)
+            .tint(ProcedusTheme.primary)
+            .labelsHidden()
+        } header: {
+            Text("Attending")
+                .font(.clinicalFootnote)
+                .foregroundStyle(ProcedusTheme.textSecondary)
         }
         .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
     }

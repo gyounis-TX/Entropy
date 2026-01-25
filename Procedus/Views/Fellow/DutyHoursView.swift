@@ -86,7 +86,8 @@ struct DutyHoursView: View {
                     SimpleWeeklyHoursView(
                         userEntries: userEntries,
                         userId: userId,
-                        programId: appState.currentUser?.programId
+                        programId: appState.currentUser?.programId,
+                        fellowName: appState.currentUser?.fullName ?? "Fellow"
                     )
                 } else {
                     comprehensiveContent
@@ -175,31 +176,132 @@ struct SimpleWeeklyHoursView: View {
     let userEntries: [DutyHoursEntry]
     let userId: UUID?
     let programId: UUID?
+    let fellowName: String
 
     @Environment(\.modelContext) private var modelContext
 
+    @Query private var users: [User]
+    @Query(sort: \DutyHoursShift.shiftDate, order: .reverse) private var allShifts: [DutyHoursShift]
+
     @State private var weeks: [String] = []
     @State private var hoursInput: [String: String] = [:]
+    @State private var showingSavedConfirmation = false
+    @FocusState private var isAnyFieldFocused: Bool
+
+    private var hasUnsavedChanges: Bool {
+        for (weekBucket, inputValue) in hoursInput {
+            guard !inputValue.isEmpty else { continue }
+            if let existing = userEntries.first(where: { $0.weekBucket == weekBucket }) {
+                if String(format: "%.0f", existing.hours) != inputValue {
+                    return true
+                }
+            } else {
+                return true
+            }
+        }
+        return false
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(weeks, id: \.self) { weekBucket in
-                    WeekHoursRow(
-                        weekBucket: weekBucket,
-                        hours: binding(for: weekBucket),
-                        existingEntry: userEntries.first { $0.weekBucket == weekBucket },
-                        onSave: { saveEntry(weekBucket: weekBucket) }
-                    )
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(weeks, id: \.self) { weekBucket in
+                        WeekHoursRow(
+                            weekBucket: weekBucket,
+                            hours: binding(for: weekBucket),
+                            existingEntry: userEntries.first { $0.weekBucket == weekBucket },
+                            onSave: { saveEntry(weekBucket: weekBucket) }
+                        )
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
+                .padding(.bottom, 80) // Space for Done button
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+
+            // Done button
+            VStack(spacing: 0) {
+                Divider()
+                HStack {
+                    if showingSavedConfirmation {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Hours Saved")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        saveAllEntries()
+                        isAnyFieldFocused = false
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
+                        withAnimation {
+                            showingSavedConfirmation = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showingSavedConfirmation = false
+                            }
+                        }
+                    } label: {
+                        Text("Done")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 12)
+                            .background(ProcedusTheme.primary)
+                            .cornerRadius(10)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(UIColor.systemBackground))
+            }
         }
         .onAppear {
             generateWeeks()
             loadExistingEntries()
         }
+    }
+
+    private func saveAllEntries() {
+        for weekBucket in weeks {
+            saveEntry(weekBucket: weekBucket)
+        }
+
+        // Check compliance and notify
+        checkComplianceAndNotify()
+    }
+
+    /// Check duty hours compliance and send notifications for warnings/violations
+    private func checkComplianceAndNotify() {
+        guard let userId = userId else { return }
+
+        // Get admin IDs from the same program
+        let adminIds = users
+            .filter { $0.role == .admin && $0.programId == programId && !$0.isArchived }
+            .map { $0.id }
+
+        // Get user's shifts
+        let userShifts = allShifts.filter { $0.userId == userId }
+
+        // Check and notify
+        DutyHoursComplianceService.shared.checkAndNotify(
+            userId: userId,
+            fellowName: fellowName,
+            programId: programId,
+            shifts: userShifts,
+            simpleEntries: userEntries,
+            adminIds: adminIds
+        )
     }
 
     private func binding(for weekBucket: String) -> Binding<String> {

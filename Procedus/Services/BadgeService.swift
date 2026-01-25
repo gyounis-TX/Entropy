@@ -201,36 +201,75 @@ class BadgeService {
         return (current: currentCount, next: nextMilestone, percentage: percentage)
     }
 
-    /// Get all progress data for dashboard
+    /// Get all progress data for dashboard based on enabled specialty packs
     func getAllProgress(
         fellowId: UUID,
         cases: [CaseEntry],
-        earnedBadges: [BadgeEarned]
+        earnedBadges: [BadgeEarned],
+        enabledPackIds: Set<String> = []
     ) -> [BadgeProgress] {
         var progress: [BadgeProgress] = []
+        var keyProcedures: [(tagId: String, name: String, iconName: String)] = []
 
-        // Key procedures to track
-        let keyProcedures = [
-            ("ic-pci-stent", "Coronary Stent"),
-            ("ic-dx-coro", "Coronary Angio"),
-            ("ic-struct-tavr", "TAVR"),
-            ("ep-abl-pvi", "PVI")
-        ]
+        // Add procedures based on enabled specialty packs
+        let hasInterventional = enabledPackIds.contains("interventional-cardiology")
+        let hasEP = enabledPackIds.contains("electrophysiology")
 
-        for (tagId, name) in keyProcedures {
+        if hasInterventional {
+            // Coronary interventions
+            keyProcedures.append(("ic-pci-stent", "Coronary Stent", "heart.fill"))
+            keyProcedures.append(("ic-dx-coro", "Coronary Angio", "heart.text.square.fill"))
+            keyProcedures.append(("ic-struct-tavr", "TAVR", "bolt.heart.fill"))
+            // Peripheral interventions (from interventional cardiology pack)
+            keyProcedures.append(contentsOf: peripheralMilestones())
+        }
+
+        if hasEP {
+            // Ablations
+            keyProcedures.append(("ep-abl-pvi", "PVI", "waveform.path.ecg"))
+            // Could add category-based progress for all ablations
+            // Implants
+            keyProcedures.append(("ep-dev-ppm-dp", "Pacemaker", "waveform.badge.plus"))
+            keyProcedures.append(("ep-dev-icd", "ICD", "bolt.badge.checkmark.fill"))
+            // EP Studies
+            keyProcedures.append(("ep-dx-eps", "EP Study", "bolt"))
+        }
+
+        // If no cardiology packs, just show total cases
+        if keyProcedures.isEmpty {
+            if let totalData = progressTowardTotalCases(
+                fellowId: fellowId,
+                cases: cases,
+                earnedBadges: earnedBadges
+            ) {
+                progress.append(BadgeProgress(
+                    title: "Total Cases",
+                    current: totalData.current,
+                    next: totalData.next,
+                    percentage: totalData.percentage,
+                    iconName: "number.circle.fill"
+                ))
+            }
+            return progress
+        }
+
+        for (tagId, name, iconName) in keyProcedures {
             if let data = progressTowardNextMilestone(
                 procedureTagId: tagId,
                 fellowId: fellowId,
                 cases: cases,
                 earnedBadges: earnedBadges
             ) {
-                progress.append(BadgeProgress(
-                    title: name,
-                    current: data.current,
-                    next: data.next,
-                    percentage: data.percentage,
-                    iconName: "heart.fill"
-                ))
+                // Only show if user has at least 1 procedure in this category
+                if data.current > 0 {
+                    progress.append(BadgeProgress(
+                        title: name,
+                        current: data.current,
+                        next: data.next,
+                        percentage: data.percentage,
+                        iconName: iconName
+                    ))
+                }
             }
         }
 
@@ -250,6 +289,17 @@ class BadgeService {
         }
 
         return progress
+    }
+
+    /// Get peripheral intervention milestone procedures
+    private func peripheralMilestones() -> [(tagId: String, name: String, iconName: String)] {
+        // Track peripheral interventions as a category-based milestone
+        // Instead of individual procedures, we'll track the most common ones
+        return [
+            ("ic-periph-iliac", "Iliac Intervention", "figure.walk"),
+            ("ic-periph-fem", "Femoral Intervention", "figure.walk"),
+            ("ic-periph-renal", "Renal Intervention", "figure.walk")
+        ]
     }
 
     // MARK: - Helpers

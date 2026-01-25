@@ -791,6 +791,7 @@ struct SettingsView: View {
             }
             newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
             newCase.attestedAt = caseDate.addingTimeInterval(3600) // 1 hour later
+            newCase.attestorId = newCase.attendingId  // Set attestorId for evaluation attribution
 
             modelContext.insert(newCase)
         }
@@ -922,6 +923,12 @@ struct SettingsView: View {
         let allBadges = (try? modelContext.fetch(FetchDescriptor<BadgeEarned>())) ?? []
         for badge in allBadges where badge.fellowId == individualUserId {
             modelContext.delete(badge)
+        }
+
+        // Delete notifications for individual user
+        let allNotifications = (try? modelContext.fetch(FetchDescriptor<Procedus.Notification>())) ?? []
+        for notification in allNotifications where notification.userId == individualUserId {
+            modelContext.delete(notification)
         }
 
         try? modelContext.save()
@@ -1855,6 +1862,21 @@ struct InstitutionalProfileEditSheet: View {
                         Text(appState.userRole.displayName)
                             .foregroundColor(.secondary)
                     }
+
+                    // Show PGY level for fellows
+                    if appState.userRole == .fellow {
+                        HStack {
+                            Text("Training Year")
+                            Spacer()
+                            if let pgy = currentFellowPGY {
+                                Text("PGY-\(pgy)")
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("Not Set")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
                 } header: {
                     Text("Current Identity")
                 }
@@ -1893,12 +1915,20 @@ struct InstitutionalProfileEditSheet: View {
                             ForEach(fellows.sorted { $0.displayName < $1.displayName }) { fellow in
                                 Button {
                                     appState.selectedFellowId = fellow.id
+                                    appState.currentUser = fellow  // Also update currentUser
                                 } label: {
                                     HStack {
-                                        Text(fellow.displayName)
-                                            .foregroundColor(.primary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(fellow.displayName)
+                                                .foregroundColor(.primary)
+                                            if let pgy = fellow.trainingYear {
+                                                Text("PGY-\(pgy)")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
                                         Spacer()
-                                        if appState.selectedFellowId == fellow.id {
+                                        if appState.selectedFellowId == fellow.id || appState.currentUser?.id == fellow.id {
                                             Image(systemName: "checkmark")
                                                 .foregroundColor(.blue)
                                                 .fontWeight(.semibold)
@@ -1957,9 +1987,14 @@ struct InstitutionalProfileEditSheet: View {
             }
             return "Not Selected"
         case .fellow:
+            // Check selectedFellowId first
             if let id = appState.selectedFellowId,
                let fellow = fellows.first(where: { $0.id == id }) {
                 return fellow.displayName
+            }
+            // Fallback to currentUser if selectedFellowId not set but currentUser exists
+            if let currentUser = appState.currentUser, currentUser.role == .fellow {
+                return currentUser.displayName
             }
             return "Not Selected"
         case .admin:
@@ -1972,6 +2007,17 @@ struct InstitutionalProfileEditSheet: View {
             }
             return "Admin"
         }
+    }
+
+    private var currentFellowPGY: Int? {
+        if let id = appState.selectedFellowId,
+           let fellow = fellows.first(where: { $0.id == id }) {
+            return fellow.trainingYear
+        }
+        if let currentUser = appState.currentUser, currentUser.role == .fellow {
+            return currentUser.trainingYear
+        }
+        return nil
     }
 }
 
@@ -4426,14 +4472,25 @@ struct FellowIdentityPickerSheet: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(fellow.displayName)
                                             .foregroundColor(Color(UIColor.label))
-                                        if !fellow.email.isEmpty {
-                                            Text(fellow.email)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
+                                        HStack(spacing: 8) {
+                                            if let pgy = fellow.trainingYear {
+                                                Text("PGY-\(pgy)")
+                                                    .font(.caption)
+                                                    .foregroundColor(.blue)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.blue.opacity(0.1))
+                                                    .cornerRadius(4)
+                                            }
+                                            if !fellow.email.isEmpty {
+                                                Text(fellow.email)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
                                         }
                                     }
                                     Spacer()
-                                    if appState.selectedFellowId == fellow.id {
+                                    if appState.selectedFellowId == fellow.id || appState.currentUser?.id == fellow.id {
                                         Image(systemName: "checkmark")
                                             .foregroundColor(.blue)
                                             .fontWeight(.semibold)

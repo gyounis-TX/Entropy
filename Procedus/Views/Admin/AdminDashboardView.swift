@@ -119,9 +119,6 @@ struct AdminDashboardView: View {
                     // Management Section
                     managementSection
 
-                    // Dashboards Section
-                    dashboardsSection
-
                     // Communications Section
                     communicationsSection
 
@@ -191,6 +188,17 @@ struct AdminDashboardView: View {
 
     private var dashboardFloatingBar: some View {
         HStack(spacing: 0) {
+            // Admin Home Button
+            VStack(spacing: 4) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(ProcedusTheme.primary)
+                Text("Admin")
+                    .font(.caption2)
+                    .foregroundStyle(ProcedusTheme.primary)
+            }
+            .frame(maxWidth: .infinity)
+
             // Attestation Dashboard Button
             Button { showingAttestationDashboard = true } label: {
                 VStack(spacing: 4) {
@@ -514,6 +522,14 @@ struct AdminDashboardView: View {
             }
         }
 
+        // Delete notifications (especially badge notifications from dev data)
+        let notificationsDescriptor = FetchDescriptor<Procedus.Notification>()
+        if let allNotifications = try? modelContext.fetch(notificationsDescriptor) {
+            for notification in allNotifications {
+                modelContext.delete(notification)
+            }
+        }
+
         // Reset program to fresh state
         if let program = currentProgram {
             program.name = ""
@@ -612,7 +628,7 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Create attendings
+        // Create attendings (active)
         var createdAttendingIds: [UUID] = []
         let attendingData = [
             ("Dr. Nick", "Riviera", "drnick@springfield.com"),
@@ -638,6 +654,38 @@ struct AdminDashboardView: View {
                         accountMode: .institutional,
                         programId: program.id
                     )
+                    modelContext.insert(user)
+                    attending.userId = user.id
+                }
+            }
+        }
+
+        // Create archived Simpson attendings (for historical cases)
+        var archivedAttendingIds: [UUID] = []
+        let archivedAttendingData = [
+            ("Leo", "Simpson", "leo@springfield.com"),
+            ("Homer", "Simpson", "homer@springfield.com")
+        ]
+        for (first, last, email) in archivedAttendingData {
+            if let existing = attendings.first(where: { $0.firstName == first && $0.lastName == last }) {
+                archivedAttendingIds.append(existing.id)
+            } else {
+                let attending = Attending(firstName: first, lastName: last)
+                attending.programId = program.id
+                attending.isArchived = true  // Archived
+                modelContext.insert(attending)
+                archivedAttendingIds.append(attending.id)
+
+                if !allUsers.contains(where: { $0.email == email }) {
+                    let user = User(
+                        email: email,
+                        firstName: first,
+                        lastName: last,
+                        role: .attending,
+                        accountMode: .institutional,
+                        programId: program.id
+                    )
+                    user.isArchived = true  // Archived user as well
                     modelContext.insert(user)
                     attending.userId = user.id
                 }
@@ -771,7 +819,15 @@ struct AdminDashboardView: View {
             operatorPosition: OperatorPosition = .primary
         ) {
             let weekBucket = CaseEntry.makeWeekBucket(for: caseDate)
-            let attendingId = createdAttendingIds.randomElement()!
+            // Use archived Simpson attendings for older cases (>2 years old)
+            let twoYearsAgo = calendar.date(byAdding: .year, value: -2, to: Date()) ?? Date()
+            let attendingId: UUID
+            if caseDate < twoYearsAgo && !archivedAttendingIds.isEmpty {
+                // 70% chance of archived attending for old cases
+                attendingId = Int.random(in: 0..<10) < 7 ? archivedAttendingIds.randomElement()! : createdAttendingIds.randomElement()!
+            } else {
+                attendingId = createdAttendingIds.randomElement()!
+            }
 
             let newCase = CaseEntry(
                 fellowId: fellowId,
@@ -789,9 +845,10 @@ struct AdminDashboardView: View {
             newCase.complicationIds = complications
             newCase.operatorPositionRaw = operatorPosition.rawValue
 
-            // Mark as attested
+            // Mark as attested - set attestorId to the attending who attested
             newCase.attestationStatusRaw = AttestationStatus.attested.rawValue
             newCase.attestedAt = caseDate.addingTimeInterval(3600)
+            newCase.attestorId = attendingId  // Critical: set attestorId for attending dashboard and evaluations
 
             // Add random evaluations (1-5 rating for each field)
             var evalResponses: [String: String] = [:]
@@ -1136,12 +1193,69 @@ struct AdminDashboardView: View {
         }
 
         // =========================================
-        // DUTY HOURS FOR GRADUATED FELLOWS (3 years of fellowship)
+        // DUTY HOURS FOR ALL FELLOWS (based on academic year start July 1)
         // =========================================
-        let fellowshipWeeks = 156  // 3 years
+
+        // Helper: Calculate weeks since academic year start for a PGY level
+        // PGY4 = fellowship year 1 (started most recent July 1)
+        // PGY5 = fellowship year 2 (started July 1 one year ago)
+        // PGY6 = fellowship year 3 (started July 1 two years ago)
+        func academicYearStart(for pgyLevel: Int) -> Date {
+            let now = Date()
+            let currentYear = calendar.component(.year, from: now)
+            let currentMonth = calendar.component(.month, from: now)
+
+            // Fellowship years since PGY4
+            let fellowshipYears = pgyLevel - 4
+
+            // If we're before July, academic year started last calendar year
+            let academicStartYear = currentMonth >= 7 ? currentYear - fellowshipYears : currentYear - 1 - fellowshipYears
+
+            var components = DateComponents()
+            components.year = academicStartYear
+            components.month = 7
+            components.day = 1
+            return calendar.date(from: components) ?? now
+        }
+
+        func weeksSince(_ startDate: Date) -> Int {
+            let now = Date()
+            let weeks = calendar.dateComponents([.weekOfYear], from: startDate, to: now).weekOfYear ?? 0
+            return max(0, weeks)
+        }
+
+        // DUTY HOURS FOR ACTIVE FELLOWS
+        let activeFellowPGYLevels = [4, 5, 6]  // Lisa PGY4, Maggie PGY5, Bart PGY6
+
+        for (index, fellowId) in activeFellowIds.enumerated() {
+            let pgyLevel = activeFellowPGYLevels[index]
+            let startDate = academicYearStart(for: pgyLevel)
+            let weeksInFellowship = weeksSince(startDate)
+
+            for weekOffset in 0..<weeksInFellowship {
+                let weekDate = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: Date()) ?? Date()
+                let weekBucket = weekDate.toWeekBucket()
+                let hours = Double.random(in: 55...75)  // Realistic work hours
+
+                let dutyEntry = DutyHoursEntry(
+                    userId: fellowId,
+                    programId: program.id,
+                    weekBucket: weekBucket,
+                    hours: hours,
+                    notes: nil
+                )
+                modelContext.insert(dutyEntry)
+            }
+        }
+
+        // DUTY HOURS FOR GRADUATED FELLOWS (3 years of fellowship, ended 6 months ago)
+        let graduatedFellowshipWeeks = 156  // 3 years
 
         for fellowId in graduatedFellowIds {
-            for weekOffset in 0..<fellowshipWeeks {
+            // Graduated 6 months ago, so their duty hours ended 6 months back
+            let graduationOffset = 26  // ~6 months in weeks
+
+            for weekOffset in graduationOffset..<(graduationOffset + graduatedFellowshipWeeks) {
                 let weekDate = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: Date()) ?? Date()
                 let weekBucket = weekDate.toWeekBucket()
                 let hours = Double.random(in: 55...75)  // Realistic work hours
@@ -1184,6 +1298,18 @@ struct AdminDashboardView: View {
         let teachingLabels = ["Teaching Example", "Interesting Case", "Classic Finding", "Rare Finding", "Good Outcome"]
         let privateLabels = ["Personal Reference", "Follow-up", "To Review"]
 
+        // Medical image types for simulation
+        let medicalImageTypes: [(icon: String, title: String, color: UIColor)] = [
+            ("waveform.path.ecg", "ECG Recording", UIColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1.0)),
+            ("heart.fill", "Echocardiogram", UIColor(red: 0.9, green: 0.3, blue: 0.3, alpha: 1.0)),
+            ("circle.hexagonpath", "Coronary Angiogram", UIColor(red: 0.3, green: 0.6, blue: 0.9, alpha: 1.0)),
+            ("bolt.heart.fill", "EP Study", UIColor(red: 0.9, green: 0.6, blue: 0.2, alpha: 1.0)),
+            ("lungs.fill", "Chest X-Ray", UIColor(red: 0.7, green: 0.7, blue: 0.8, alpha: 1.0)),
+            ("figure.walk.motion", "Stress Test", UIColor(red: 0.4, green: 0.8, blue: 0.6, alpha: 1.0)),
+            ("waveform.path.ecg.rectangle", "Holter Monitor", UIColor(red: 0.6, green: 0.4, blue: 0.8, alpha: 1.0)),
+            ("arrowtriangle.up.heart.fill", "Cath Lab Image", UIColor(red: 0.8, green: 0.4, blue: 0.5, alpha: 1.0))
+        ]
+
         for fellowInfo in fellows {
             let fellowCases = allCases.filter { $0.ownerId == fellowInfo.id || $0.fellowId == fellowInfo.id }
             let caseCount = fellowCases.count
@@ -1193,21 +1319,36 @@ struct AdminDashboardView: View {
             let selectedCases = fellowCases.shuffled().prefix(imageCaseCount)
 
             for (index, caseEntry) in selectedCases.enumerated() {
-                // Create sample media entry
+                // Pick a random medical image type
+                let imageType = medicalImageTypes[index % medicalImageTypes.count]
+
+                // Generate actual medical simulation image
+                guard let simulatedImage = generateMedicalSimulationImage(
+                    icon: imageType.icon,
+                    title: imageType.title,
+                    accentColor: imageType.color,
+                    caseNumber: index + 1
+                ) else { continue }
+
+                // Save the image using MediaStorageService
+                guard let savedResult = MediaStorageService.shared.saveImage(simulatedImage, forCaseId: caseEntry.id) else { continue }
+
+                // Create media entry with actual saved path
                 let media = CaseMedia(
                     caseEntryId: caseEntry.id,
                     ownerId: fellowInfo.id,
                     ownerName: fellowInfo.name,
                     mediaType: .image,
-                    fileName: "sample_image_\(index + 1).jpg",
-                    localPath: "dev_sample_\(UUID().uuidString).jpg"
+                    fileName: "medical_\(imageType.title.replacingOccurrences(of: " ", with: "_"))_\(index + 1).jpg",
+                    localPath: savedResult.localPath
                 )
 
-                // Set some metadata
-                media.fileSizeBytes = Int.random(in: 500_000...2_000_000)
-                media.contentHash = UUID().uuidString
-                media.width = 1920
-                media.height = 1080
+                // Set metadata from actual saved image
+                media.fileSizeBytes = savedResult.fileSize
+                media.contentHash = savedResult.contentHash
+                media.width = savedResult.width
+                media.height = savedResult.height
+                media.thumbnailPath = savedResult.thumbnailPath
                 media.caseDate = caseEntry.createdAt
                 media.textDetectionRan = true
                 media.textWasDetected = false
@@ -1222,8 +1363,8 @@ struct AdminDashboardView: View {
 
                 // Add appropriate labels
                 if isShared {
-                    media.searchTerms = [teachingLabels.randomElement()!, teachingLabels.randomElement()!]
-                    media.comment = "Great teaching case example."
+                    media.searchTerms = [teachingLabels.randomElement()!, imageType.title]
+                    media.comment = "Great teaching case example - \(imageType.title)"
                 } else {
                     media.searchTerms = [privateLabels.randomElement()!]
                 }
@@ -1233,6 +1374,109 @@ struct AdminDashboardView: View {
         }
 
         try? modelContext.save()
+    }
+
+    /// Generate a simulated medical image with icon and text
+    private func generateMedicalSimulationImage(icon: String, title: String, accentColor: UIColor, caseNumber: Int) -> UIImage? {
+        let size = CGSize(width: 800, height: 600)
+        let renderer = UIGraphicsImageRenderer(size: size)
+
+        return renderer.image { context in
+            let ctx = context.cgContext
+
+            // Dark medical background gradient
+            let backgroundColors = [
+                UIColor(red: 0.05, green: 0.08, blue: 0.12, alpha: 1.0).cgColor,
+                UIColor(red: 0.1, green: 0.15, blue: 0.2, alpha: 1.0).cgColor
+            ]
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                       colors: backgroundColors as CFArray,
+                                       locations: [0, 1])!
+            ctx.drawLinearGradient(gradient,
+                                   start: CGPoint(x: 0, y: 0),
+                                   end: CGPoint(x: size.width, y: size.height),
+                                   options: [])
+
+            // Draw grid lines (medical monitor style)
+            ctx.setStrokeColor(UIColor(white: 0.2, alpha: 0.5).cgColor)
+            ctx.setLineWidth(0.5)
+            let gridSpacing: CGFloat = 40
+            for x in stride(from: 0, through: size.width, by: gridSpacing) {
+                ctx.move(to: CGPoint(x: x, y: 0))
+                ctx.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for y in stride(from: 0, through: size.height, by: gridSpacing) {
+                ctx.move(to: CGPoint(x: 0, y: y))
+                ctx.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            ctx.strokePath()
+
+            // Draw simulated waveform/data visualization
+            ctx.setStrokeColor(accentColor.cgColor)
+            ctx.setLineWidth(2.5)
+            ctx.move(to: CGPoint(x: 50, y: size.height * 0.6))
+
+            // Create a medical-looking waveform
+            let wavePoints = 30
+            for i in 0..<wavePoints {
+                let x = 50 + (size.width - 100) * CGFloat(i) / CGFloat(wavePoints - 1)
+                var y = size.height * 0.6
+
+                // Add ECG-like peaks at certain intervals
+                if i % 5 == 2 {
+                    y -= CGFloat.random(in: 80...150)  // R wave
+                } else if i % 5 == 3 {
+                    y += CGFloat.random(in: 20...40)   // S wave
+                } else {
+                    y += CGFloat.random(in: -15...15)  // Baseline noise
+                }
+
+                ctx.addLine(to: CGPoint(x: x, y: y))
+            }
+            ctx.strokePath()
+
+            // Draw SF Symbol icon
+            let iconConfig = UIImage.SymbolConfiguration(pointSize: 80, weight: .medium)
+            if let symbolImage = UIImage(systemName: icon, withConfiguration: iconConfig)?
+                .withTintColor(accentColor, renderingMode: .alwaysOriginal) {
+                let iconRect = CGRect(x: size.width - 150, y: 40, width: 100, height: 100)
+                symbolImage.draw(in: iconRect)
+            }
+
+            // Draw title text
+            let titleAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 28, weight: .bold),
+                .foregroundColor: UIColor.white
+            ]
+            let titleString = NSAttributedString(string: title, attributes: titleAttributes)
+            titleString.draw(at: CGPoint(x: 50, y: 40))
+
+            // Draw subtitle
+            let subtitleAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 16, weight: .medium),
+                .foregroundColor: UIColor(white: 0.7, alpha: 1.0)
+            ]
+            let subtitleString = NSAttributedString(string: "Simulated Medical Image • Case #\(caseNumber)", attributes: subtitleAttributes)
+            subtitleString.draw(at: CGPoint(x: 50, y: 80))
+
+            // Draw timestamp
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            let timestampAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+                .foregroundColor: accentColor
+            ]
+            let timestampString = NSAttributedString(string: dateFormatter.string(from: Date()), attributes: timestampAttributes)
+            timestampString.draw(at: CGPoint(x: 50, y: size.height - 40))
+
+            // Draw "DEV MODE" watermark
+            let watermarkAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+                .foregroundColor: UIColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 0.6)
+            ]
+            let watermarkString = NSAttributedString(string: "DEV MODE • SIMULATED DATA", attributes: watermarkAttributes)
+            watermarkString.draw(at: CGPoint(x: size.width - 250, y: size.height - 40))
+        }
     }
 
     private func checkAndAwardBadgesForFellow(_ fellowId: UUID, programId: UUID) {
@@ -1477,7 +1721,7 @@ struct ProcedureCountsView: View {
     @State private var expandedProcedures: Set<String> = []
 
     private var fellows: [User] {
-        allUsers.filter { $0.role == .fellow }
+        allUsers.filter { $0.role == .fellow && !$0.hasGraduated }
     }
 
     private var procedureData: [(procedureId: String, procedureTitle: String, cases: [CaseEntry])] {
@@ -3011,6 +3255,7 @@ struct FellowManagementView: View {
                 if let fellow = fellowToGraduate {
                     fellow.hasGraduated = true
                     fellow.graduatedAt = Date()
+                    fellow.trainingYear = nil  // Clear PGY year when graduated
                     fellow.updatedAt = Date()
                     try? modelContext.save()
                 }
@@ -3047,7 +3292,20 @@ struct FellowRowNew: View {
                         .font(.body)
                         .foregroundColor(Color(UIColor.label))
 
-                    if let year = fellow.trainingYear {
+                    if fellow.hasGraduated {
+                        HStack(spacing: 4) {
+                            Image(systemName: "graduationcap.fill")
+                                .font(.caption2)
+                            Text("Graduated")
+                        }
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(4)
+                    } else if let year = fellow.trainingYear {
                         Text("PGY-\(year)")
                             .font(.caption)
                             .fontWeight(.medium)
@@ -3151,20 +3409,50 @@ struct AddEditFellowSheet: View {
             Form {
                 // Fellow Information Section
                 Section {
-                    TextField("First Name", text: $firstName)
-                    TextField("Last Name", text: $lastName)
-                    TextField("Email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                    Picker("Training Year", selection: $trainingYear) {
-                        ForEach(1...maxTrainingYear, id: \.self) { year in
-                            Text("PGY-\(year)").tag(year)
+                    if fellow?.hasGraduated == true {
+                        // Graduated fellows are view-only
+                        HStack {
+                            Text("Name")
+                            Spacer()
+                            Text("\(firstName) \(lastName)")
+                                .foregroundColor(.secondary)
+                        }
+                        HStack {
+                            Text("Email")
+                            Spacer()
+                            Text(email.isEmpty ? "Not set" : email)
+                                .foregroundColor(.secondary)
+                        }
+                        HStack {
+                            Text("Status")
+                            Spacer()
+                            HStack(spacing: 4) {
+                                Image(systemName: "graduationcap.fill")
+                                    .foregroundColor(.blue)
+                                Text("Graduated")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    } else {
+                        TextField("First Name", text: $firstName)
+                        TextField("Last Name", text: $lastName)
+                        TextField("Email", text: $email)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
+                        Picker("Training Year", selection: $trainingYear) {
+                            ForEach(1...maxTrainingYear, id: \.self) { year in
+                                Text("PGY-\(year)").tag(year)
+                            }
                         }
                     }
                 } header: {
                     Text("Fellow Information")
                 } footer: {
-                    Text("Email is required for the fellow to join the program with an invite code.")
+                    if fellow?.hasGraduated == true {
+                        Text("Graduated fellows cannot be edited. Reinstate to make changes.")
+                    } else {
+                        Text("Email is required for the fellow to join the program with an invite code.")
+                    }
                 }
 
                 // Statistics Section (only for existing fellows)
@@ -3224,11 +3512,13 @@ struct AddEditFellowSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(fellow?.hasGraduated == true ? "Done" : "Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(firstName.isEmpty || lastName.isEmpty)
+                if fellow?.hasGraduated != true {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { save() }
+                            .disabled(firstName.isEmpty || lastName.isEmpty)
+                    }
                 }
             }
             .onAppear {
@@ -3278,6 +3568,7 @@ struct AddEditFellowSheet: View {
         guard let fellow = fellow else { return }
         fellow.hasGraduated = true
         fellow.graduatedAt = Date()
+        fellow.trainingYear = nil  // Clear PGY year when graduated
         fellow.updatedAt = Date()
         try? modelContext.save()
         dismiss()
@@ -5702,7 +5993,7 @@ struct AttestationDashboardView: View {
     }
 
     private var fellows: [User] {
-        allUsers.filter { $0.role == .fellow }.sorted { $0.displayName < $1.displayName }
+        allUsers.filter { $0.role == .fellow && !$0.hasGraduated }.sorted { $0.displayName < $1.displayName }
     }
 
     private var activeAttendings: [Attending] {
@@ -6201,7 +6492,7 @@ struct AdminCaseLogView: View {
     }
 
     private var fellows: [User] {
-        allUsers.filter { $0.role == .fellow }.sorted { $0.displayName < $1.displayName }
+        allUsers.filter { $0.role == .fellow && !$0.hasGraduated }.sorted { $0.displayName < $1.displayName }
     }
 
     private var activeFacilities: [TrainingFacility] {
@@ -6544,7 +6835,7 @@ struct ReportsByFellowView: View {
     @State private var selectedFellow: User?
 
     private var fellows: [User] {
-        allUsers.filter { $0.role == .fellow }.sorted { $0.displayName < $1.displayName }
+        allUsers.filter { $0.role == .fellow && !$0.hasGraduated }.sorted { $0.displayName < $1.displayName }
     }
 
     var body: some View {
@@ -6677,19 +6968,11 @@ struct EvaluationSummaryView: View {
     @Query private var evaluationFields: [EvaluationField]
     @Query private var attendings: [Attending]
 
-    @State private var sortOption: EvaluationSortOption = .fellowName
+    @State private var showGraduated: Bool = false
     @State private var filterPGY: Int? = nil
-    @State private var showingFilters = false
     @State private var selectedDateRange: ProcedusAnalyticsRange = .allTime
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
-
-    enum EvaluationSortOption: String, CaseIterable {
-        case fellowName = "Name"
-        case pgyYear = "PGY Year"
-        case evaluationCount = "Evaluations"
-        case averageRating = "Avg Rating"
-    }
 
     private var dateFilteredCases: [CaseEntry] {
         let calendar = Calendar.current
@@ -6721,23 +7004,39 @@ struct EvaluationSummaryView: View {
 
     private var fellows: [User] {
         var list = allUsers.filter { $0.role == .fellow && !$0.isArchived }
+        // Filter by graduated status
+        list = list.filter { showGraduated ? $0.hasGraduated : !$0.hasGraduated }
         if let pgy = filterPGY {
             list = list.filter { $0.trainingYear == pgy }
         }
-        return list.sorted { sortComparison($0, $1) }
+        // Sort by PGY year (ascending), then by name
+        return list.sorted {
+            let pgy1 = $0.trainingYear ?? 99
+            let pgy2 = $1.trainingYear ?? 99
+            if pgy1 != pgy2 {
+                return pgy1 < pgy2
+            }
+            return $0.displayName < $1.displayName
+        }
     }
 
-    private func sortComparison(_ a: User, _ b: User) -> Bool {
-        switch sortOption {
-        case .fellowName:
-            return a.displayName < b.displayName
-        case .pgyYear:
-            return (a.trainingYear ?? 0) < (b.trainingYear ?? 0)
-        case .evaluationCount:
-            return casesWithEvaluations(for: a).count > casesWithEvaluations(for: b).count
-        case .averageRating:
-            return averageRating(for: a) > averageRating(for: b)
+    /// Group fellows by PGY year
+    private var fellowsByPGY: [(pgy: Int?, fellows: [User])] {
+        var grouped: [Int?: [User]] = [:]
+        for fellow in fellows {
+            let pgy = fellow.trainingYear
+            grouped[pgy, default: []].append(fellow)
         }
+        // Sort groups by PGY year (nil at end)
+        return grouped.sorted { ($0.key ?? 99) < ($1.key ?? 99) }
+            .map { (pgy: $0.key, fellows: $0.value) }
+    }
+
+    /// PGY levels available for filtering based on current toggle
+    private var availablePGYLevels: [Int] {
+        let relevantFellows = allUsers.filter { $0.role == .fellow && !$0.isArchived && (showGraduated ? $0.hasGraduated : !$0.hasGraduated) }
+        let pgySet = Set(relevantFellows.compactMap { $0.trainingYear })
+        return pgySet.sorted()
     }
 
     private func casesWithEvaluations(for fellow: User) -> [CaseEntry] {
@@ -6773,21 +7072,23 @@ struct EvaluationSummaryView: View {
 
     var body: some View {
         List {
-            // Sort/Filter Section
+            // Active/Graduated Toggle
             Section {
-                HStack {
-                    Text("Sort by")
-                        .font(.subheadline)
-                        .foregroundColor(Color(UIColor.secondaryLabel))
-                    Spacer()
-                    Picker("Sort", selection: $sortOption) {
-                        ForEach(EvaluationSortOption.allCases, id: \.self) { option in
-                            Text(option.rawValue).tag(option)
-                        }
-                    }
-                    .pickerStyle(.menu)
+                Picker("Fellow Status", selection: $showGraduated) {
+                    Text("Current").tag(false)
+                    Text("Graduated").tag(true)
                 }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+            .onChange(of: showGraduated) { _, _ in
+                // Reset PGY filter when switching between active/graduated
+                filterPGY = nil
+            }
 
+            // Filter Section
+            Section {
                 HStack {
                     Text("Filter PGY")
                         .font(.subheadline)
@@ -6795,7 +7096,7 @@ struct EvaluationSummaryView: View {
                     Spacer()
                     Picker("PGY", selection: $filterPGY) {
                         Text("All").tag(nil as Int?)
-                        ForEach(1...7, id: \.self) { year in
+                        ForEach(availablePGYLevels, id: \.self) { year in
                             Text("PGY-\(year)").tag(year as Int?)
                         }
                     }
@@ -6827,51 +7128,54 @@ struct EvaluationSummaryView: View {
                 }
             }
 
-            // Fellows List
-            Section {
-                if !hasAnyEvaluations {
+            // Fellows List - Grouped by PGY Year
+            if !hasAnyEvaluations {
+                Section {
                     Text("No evaluations recorded yet")
                         .font(.subheadline)
                         .foregroundColor(Color(UIColor.secondaryLabel))
                         .italic()
-                } else {
-                    ForEach(fellows) { fellow in
-                        let fellowCases = casesWithEvaluations(for: fellow)
-
-                        if !fellowCases.isEmpty {
-                            NavigationLink {
-                                FellowEvaluationDetailView(
-                                    fellow: fellow,
-                                    cases: fellowCases,
-                                    evaluationFields: Array(evaluationFields.filter { !$0.isArchived }),
-                                    attendings: Array(attendings)
-                                )
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(fellow.displayName)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        HStack(spacing: 8) {
-                                            if let pgy = fellow.trainingYear {
-                                                Text("PGY-\(pgy)")
-                                                    .font(.caption)
-                                                    .foregroundColor(Color(UIColor.secondaryLabel))
-                                            }
+                }
+            } else {
+                ForEach(fellowsByPGY, id: \.pgy) { group in
+                    let fellowsWithEvals = group.fellows.filter { !casesWithEvaluations(for: $0).isEmpty }
+                    if !fellowsWithEvals.isEmpty {
+                        Section {
+                            ForEach(fellowsWithEvals) { fellow in
+                                let fellowCases = casesWithEvaluations(for: fellow)
+                                NavigationLink {
+                                    FellowEvaluationDetailView(
+                                        fellow: fellow,
+                                        cases: fellowCases,
+                                        evaluationFields: Array(evaluationFields.filter { !$0.isArchived }),
+                                        attendings: Array(attendings)
+                                    )
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(fellow.displayName)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
                                             Text("\(fellowCases.count) evaluations")
                                                 .font(.caption)
                                                 .foregroundColor(Color(UIColor.secondaryLabel))
                                         }
-                                    }
-                                    Spacer()
-                                    let avg = averageRating(for: fellow)
-                                    if avg > 0 {
-                                        RatingStarsView(rating: avg)
-                                        Text(String(format: "%.1f", avg))
-                                            .font(.caption)
-                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                        Spacer()
+                                        let avg = averageRating(for: fellow)
+                                        if avg > 0 {
+                                            RatingStarsView(rating: avg)
+                                            Text(String(format: "%.1f", avg))
+                                                .font(.caption)
+                                                .foregroundColor(Color(UIColor.secondaryLabel))
+                                        }
                                     }
                                 }
+                            }
+                        } header: {
+                            if let pgy = group.pgy {
+                                Text("PGY-\(pgy)")
+                            } else {
+                                Text("No PGY Assigned")
                             }
                         }
                     }
@@ -7345,9 +7649,18 @@ struct ExportDataView: View {
     @State private var selectedRange: ProcedusAnalyticsRange = .allTime
     @State private var customStartDate: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var customEndDate: Date = Date()
+    @State private var showingGraduatedFellows = false
+
+    private var currentFellows: [User] {
+        allUsers.filter { $0.role == .fellow && !$0.hasGraduated }.sorted { $0.displayName < $1.displayName }
+    }
+
+    private var graduatedFellows: [User] {
+        allUsers.filter { $0.role == .fellow && $0.hasGraduated }.sorted { $0.displayName < $1.displayName }
+    }
 
     private var fellows: [User] {
-        allUsers.filter { $0.role == .fellow }.sorted { $0.displayName < $1.displayName }
+        showingGraduatedFellows ? graduatedFellows : currentFellows
     }
 
     private var dateRangeString: String {
@@ -7413,6 +7726,15 @@ struct ExportDataView: View {
 
     var body: some View {
         List {
+            // Fellow Status Toggle
+            Section {
+                Picker("Fellows", selection: $showingGraduatedFellows) {
+                    Text("Current (\(currentFellows.count))").tag(false)
+                    Text("Graduated (\(graduatedFellows.count))").tag(true)
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section {
                 Picker("Export Type", selection: $exportType) {
                     Text("Case Log").tag("log")
@@ -7480,22 +7802,29 @@ struct ExportDataView: View {
             }
 
             Section {
-                ForEach(fellows) { fellow in
-                    Button {
-                        exportForFellow(fellow)
-                    } label: {
-                        HStack {
-                            Text(fellow.displayName)
-                                .font(.subheadline)
-                                .foregroundColor(Color(UIColor.label))
-                            Spacer()
-                            Image(systemName: "arrow.down.doc")
-                                .foregroundColor(.blue)
+                if fellows.isEmpty {
+                    Text(showingGraduatedFellows ? "No graduated fellows" : "No current fellows")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .italic()
+                } else {
+                    ForEach(fellows) { fellow in
+                        Button {
+                            exportForFellow(fellow)
+                        } label: {
+                            HStack {
+                                Text(fellow.displayName)
+                                    .font(.subheadline)
+                                    .foregroundColor(Color(UIColor.label))
+                                Spacer()
+                                Image(systemName: "arrow.down.doc")
+                                    .foregroundColor(.blue)
+                            }
                         }
                     }
                 }
             } header: {
-                Text("Export by Fellow")
+                Text(showingGraduatedFellows ? "Export by Graduated Fellow" : "Export by Fellow")
             }
         }
         .navigationTitle("Export Data")

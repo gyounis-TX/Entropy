@@ -160,7 +160,8 @@ struct BadgeDashboardView: View {
         return BadgeService.shared.getAllProgress(
             fellowId: fellowId,
             cases: allCases,
-            earnedBadges: myEarnedBadges
+            earnedBadges: myEarnedBadges,
+            enabledPackIds: appState.enabledSpecialtyPackIds
         )
     }
 
@@ -220,11 +221,11 @@ struct BadgeDashboardView: View {
 
                     cocatsProgressSection
 
+                    earnedBadgesSection
+
                     if !progressData.isEmpty {
                         progressSection
                     }
-
-                    earnedBadgesSection
                 }
                 .padding()
             }

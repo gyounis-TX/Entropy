@@ -34,6 +34,12 @@ struct AttendingAnalyticsView: View {
         return allCases.filter { $0.attestorId == attendingId && $0.attestationStatus == .attested }
     }
 
+    // Cases pending attestation by this attending
+    private var pendingCases: [CaseEntry] {
+        guard let attendingId = currentAttendingId else { return [] }
+        return allCases.filter { $0.attestorId == attendingId && $0.attestationStatus == .pending }
+    }
+
     // Cases filtered by time range
     private var filteredCases: [CaseEntry] {
         let calendar = Calendar.current
@@ -191,19 +197,19 @@ struct AttendingAnalyticsView: View {
             }
 
             HStack {
+                Text("Pending Attestations")
+                Spacer()
+                Text("\(pendingCases.count)")
+                    .font(.headline)
+                    .foregroundStyle(Color.orange)
+            }
+
+            HStack {
                 Text("Unique Trainees")
                 Spacer()
                 Text("\(Set(filteredCases.compactMap { $0.fellowId ?? $0.ownerId }).count)")
                     .font(.headline)
                     .foregroundStyle(Color.blue)
-            }
-
-            HStack {
-                Text("Total Procedures Supervised")
-                Spacer()
-                Text("\(filteredCases.reduce(0) { $0 + $1.procedureTagIds.count })")
-                    .font(.headline)
-                    .foregroundStyle(Color.purple)
             }
         } header: {
             Text("Summary")

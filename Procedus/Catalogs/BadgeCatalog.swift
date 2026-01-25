@@ -114,6 +114,16 @@ struct BadgeCatalog {
                 criteria: .firstProcedure(procedureTagId: "ic-dx-rhc"),
                 tier: .bronze,
                 pointValue: 15
+            ),
+            Badge(
+                id: "first-peripheral-any",
+                title: "First Peripheral Intervention",
+                description: "Participated in your first peripheral arterial intervention",
+                iconName: "figure.walk",
+                badgeType: .firstProcedure,
+                criteria: .firstProcedureInCategory(category: ProcedureCategory.peripheralArterial.rawValue),
+                tier: .bronze,
+                pointValue: 25
             )
         ]
     }

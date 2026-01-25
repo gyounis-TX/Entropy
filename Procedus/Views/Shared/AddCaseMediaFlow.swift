@@ -11,10 +11,11 @@ import CoreMedia
 enum MediaFlowState {
     case picker
     case scanning
-    case reviewPHI(image: UIImage, regions: [DetectedTextRegion], isDiagram: Bool)
+    case reviewPHI(image: UIImage, regions: [DetectedTextRegion])
     case confirmNoPHI(image: UIImage)
-    case crop(image: UIImage, isDiagram: Bool)
+    case crop(image: UIImage)
     case labels(image: UIImage, wasRedacted: Bool)
+    case videoConfirmNoPHI(videoURL: URL)
     case videoRedaction(videoURL: URL, regions: [DetectedTextRegion])
     case videoLabels(videoURL: URL, wasRedacted: Bool)
 }
@@ -72,24 +73,18 @@ struct AddCaseMediaFlow: View {
             case .scanning:
                 scanningView
 
-            case .reviewPHI(let image, let regions, let isDiagram):
+            case .reviewPHI(let image, let regions):
                 PHIDetectionReviewView(
                     originalImage: image,
                     detectedRegions: regions,
-                    onRedactAndSave: { redactedImage in
-                        flowState = .labels(image: redactedImage, wasRedacted: true)
+                    onRedactAndSave: { processedImage in
+                        flowState = .labels(image: processedImage, wasRedacted: true)
                     },
                     onCropInstead: {
-                        flowState = .crop(image: image, isDiagram: isDiagram)
+                        flowState = .crop(image: image)
                     },
                     onCancel: {
                         dismiss()
-                    },
-                    onRescanAsDiagram: isDiagram ? nil : {
-                        // Rescan the image as a hand-drawn diagram
-                        Task {
-                            await scanImage(image, isHandDrawnDiagram: true)
-                        }
                     }
                 )
 
@@ -104,13 +99,13 @@ struct AddCaseMediaFlow: View {
                     }
                 )
 
-            case .crop(let image, let isDiagram):
+            case .crop(let image):
                 ImageCropView(
                     image: image,
                     onCropComplete: { croppedImage in
-                        // Re-scan cropped image with same diagram setting
+                        // Re-scan cropped image
                         Task {
-                            await scanImage(croppedImage, isHandDrawnDiagram: isDiagram)
+                            await scanImage(croppedImage)
                         }
                     },
                     onCancel: {
@@ -129,6 +124,18 @@ struct AddCaseMediaFlow: View {
                         saveImage(image, wasRedacted: wasRedacted)
                     },
                     onCancel: {
+                        dismiss()
+                    }
+                )
+
+            case .videoConfirmNoPHI(let videoURL):
+                VideoNoPHIConfirmationView(
+                    videoURL: videoURL,
+                    onConfirm: {
+                        flowState = .videoLabels(videoURL: videoURL, wasRedacted: false)
+                    },
+                    onCancel: {
+                        try? FileManager.default.removeItem(at: videoURL)
                         dismiss()
                     }
                 )
@@ -214,13 +221,13 @@ struct AddCaseMediaFlow: View {
     // MARK: - Scan Image
 
     @MainActor
-    private func scanImage(_ image: UIImage, isHandDrawnDiagram: Bool = false) async {
+    private func scanImage(_ image: UIImage) async {
         flowState = .scanning
 
-        let result = await TextDetectionService.shared.detectText(in: image, isHandDrawnDiagram: isHandDrawnDiagram)
+        let result = await TextDetectionService.shared.detectText(in: image)
 
         if result.textWasDetected {
-            flowState = .reviewPHI(image: image, regions: result.regions, isDiagram: result.isHandDrawnDiagram)
+            flowState = .reviewPHI(image: image, regions: result.regions)
         } else {
             flowState = .confirmNoPHI(image: image)
         }
@@ -238,8 +245,8 @@ struct AddCaseMediaFlow: View {
             // Video has PHI - show redaction UI
             flowState = .videoRedaction(videoURL: videoURL, regions: result.regions)
         } else {
-            // No PHI detected, proceed to labels
-            flowState = .videoLabels(videoURL: videoURL, wasRedacted: false)
+            // No PHI detected - still require confirmation
+            flowState = .videoConfirmNoPHI(videoURL: videoURL)
         }
     }
 
@@ -555,25 +562,34 @@ struct CropOverlay: View {
         .frame(width: bounds.width, height: bounds.height)
     }
 
+    @ViewBuilder
     private func cornerHandle(for handle: CropHandle) -> some View {
-        Circle()
-            .fill(Color.white)
-            .frame(width: 24, height: 24)
-            .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
-            .position(handlePosition(for: handle))
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        if !isDraggingHandle {
-                            initialCropRect = cropRect
-                            isDraggingHandle = true
+        // Only show handles when cropRect has valid dimensions
+        if cropRect.width > 0 && cropRect.height > 0 {
+            Circle()
+                .fill(Color.white)
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Circle()
+                        .stroke(Color.black.opacity(0.2), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
+                .position(handlePosition(for: handle))
+                .contentShape(Rectangle().size(width: 60, height: 60))  // Larger touch target
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if !isDraggingHandle {
+                                initialCropRect = cropRect
+                                isDraggingHandle = true
+                            }
+                            updateCropRect(for: handle, translation: value.translation)
                         }
-                        updateCropRect(for: handle, translation: value.translation)
-                    }
-                    .onEnded { _ in
-                        isDraggingHandle = false
-                    }
-            )
+                        .onEnded { _ in
+                            isDraggingHandle = false
+                        }
+                )
+        }
     }
 
     private var moveGesture: some Gesture {
@@ -654,6 +670,7 @@ struct MediaLabelsView: View {
     let onCancel: () -> Void
 
     @State private var newTerm = ""
+    @State private var phiConfirmed = false
     @Query private var suggestions: [SearchTermSuggestion]
 
     // Common labels organized by procedure category
@@ -833,6 +850,28 @@ struct MediaLabelsView: View {
                     .background(ProcedusTheme.cardBackground)
                     .cornerRadius(12)
 
+                    // PHI Attestation
+                    VStack(spacing: 12) {
+                        Button {
+                            phiConfirmed.toggle()
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: phiConfirmed ? "checkmark.square.fill" : "square")
+                                    .font(.title2)
+                                    .foregroundStyle(phiConfirmed ? ProcedusTheme.primary : ProcedusTheme.textSecondary)
+
+                                Text("I confirm all Protected Health Information (PHI) has been removed or redacted from this image.")
+                                    .font(.caption)
+                                    .foregroundStyle(ProcedusTheme.textPrimary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
                     Spacer()
                 }
                 .padding()
@@ -849,6 +888,7 @@ struct MediaLabelsView: View {
                     Button("Save") {
                         onSave()
                     }
+                    .disabled(!phiConfirmed)
                 }
             }
         }
@@ -875,6 +915,7 @@ struct VideoLabelsView: View {
 
     @State private var newTerm = ""
     @State private var thumbnailImage: UIImage?
+    @State private var phiConfirmed = false
 
     // Common labels (same as MediaLabelsView)
     private static let commonLabels: [String: [String]] = [
@@ -1038,6 +1079,28 @@ struct VideoLabelsView: View {
                     .background(ProcedusTheme.cardBackground)
                     .cornerRadius(12)
 
+                    // PHI Attestation
+                    VStack(spacing: 12) {
+                        Button {
+                            phiConfirmed.toggle()
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: phiConfirmed ? "checkmark.square.fill" : "square")
+                                    .font(.title2)
+                                    .foregroundStyle(phiConfirmed ? ProcedusTheme.primary : ProcedusTheme.textSecondary)
+
+                                Text("I confirm all Protected Health Information (PHI) has been removed or redacted from this video.")
+                                    .font(.caption)
+                                    .foregroundStyle(ProcedusTheme.textPrimary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
                     Spacer()
                 }
                 .padding()
@@ -1054,6 +1117,7 @@ struct VideoLabelsView: View {
                     Button("Save") {
                         onSave()
                     }
+                    .disabled(!phiConfirmed)
                 }
             }
             .task {
@@ -1067,6 +1131,127 @@ struct VideoLabelsView: View {
         guard !trimmed.isEmpty, !searchTerms.contains(trimmed) else { return }
         searchTerms.append(trimmed)
         newTerm = ""
+    }
+
+    @MainActor
+    private func generateThumbnail() async {
+        let asset = AVAsset(url: videoURL)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+
+        do {
+            let cgImage = try await imageGenerator.image(at: CMTime.zero).image
+            thumbnailImage = UIImage(cgImage: cgImage)
+        } catch {
+            print("Failed to generate video thumbnail: \(error)")
+        }
+    }
+}
+
+// MARK: - Video No PHI Confirmation View
+
+struct VideoNoPHIConfirmationView: View {
+    let videoURL: URL
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    @State private var isConfirmed = false
+    @State private var thumbnailImage: UIImage?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Success indicator
+                VStack(spacing: 12) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.green)
+
+                    Text("No Text Detected")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text("Our scan didn't find any text in this video.")
+                        .font(.subheadline)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                // Video thumbnail preview
+                Group {
+                    if let thumbnail = thumbnailImage {
+                        Image(uiImage: thumbnail)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxHeight: 200)
+                            .cornerRadius(12)
+                            .overlay(
+                                Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 40))
+                                    .foregroundStyle(.white.opacity(0.8))
+                            )
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 200)
+                            .cornerRadius(12)
+                            .overlay(
+                                ProgressView()
+                            )
+                    }
+                }
+
+                Spacer()
+
+                // Confirmation checkbox
+                VStack(spacing: 16) {
+                    Button {
+                        isConfirmed.toggle()
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: isConfirmed ? "checkmark.square.fill" : "square")
+                                .font(.title2)
+                                .foregroundStyle(isConfirmed ? ProcedusTheme.primary : ProcedusTheme.textSecondary)
+
+                            Text("I confirm this video does not contain any Protected Health Information (PHI), including patient names, dates of birth, or other identifying information.")
+                                .font(.subheadline)
+                                .foregroundStyle(ProcedusTheme.textPrimary)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onConfirm()
+                    } label: {
+                        Text("Save Video")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(isConfirmed ? ProcedusTheme.primary : Color.gray)
+                            .cornerRadius(12)
+                    }
+                    .disabled(!isConfirmed)
+                }
+                .padding()
+                .background(ProcedusTheme.cardBackground)
+                .cornerRadius(16)
+            }
+            .padding()
+            .navigationTitle("Confirm No PHI")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+            }
+            .task {
+                await generateThumbnail()
+            }
+        }
     }
 
     @MainActor

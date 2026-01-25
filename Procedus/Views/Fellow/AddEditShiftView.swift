@@ -15,6 +15,9 @@ struct AddEditShiftView: View {
     @Environment(AppState.self) private var appState
 
     @Query private var programs: [Program]
+    @Query private var users: [User]
+    @Query(sort: \DutyHoursShift.shiftDate, order: .reverse) private var allShifts: [DutyHoursShift]
+    @Query(sort: \DutyHoursEntry.weekBucket, order: .reverse) private var allEntries: [DutyHoursEntry]
 
     @State private var shiftDate: Date = Date()
     @State private var startTime: Date = Date()
@@ -91,11 +94,17 @@ struct AddEditShiftView: View {
                     DatePicker("Date", selection: $shiftDate, displayedComponents: .date)
 
                     DatePicker("Start Time", selection: $startTime, displayedComponents: .hourAndMinute)
+                        .onChange(of: startTime) { _, _ in
+                            autoDetectOvernightShift()
+                        }
 
                     Toggle("Shift Ended", isOn: $hasEndTime)
 
                     if hasEndTime {
                         DatePicker("End Time", selection: $endTime, displayedComponents: .hourAndMinute)
+                            .onChange(of: endTime) { _, _ in
+                                autoDetectOvernightShift()
+                            }
 
                         Toggle("Overnight Shift", isOn: $isOvernightShift)
                     }
@@ -320,7 +329,37 @@ struct AddEditShiftView: View {
         }
 
         try? modelContext.save()
+
+        // Check compliance and notify if warnings/violations
+        checkComplianceAndNotify()
+
         dismiss()
+    }
+
+    /// Check duty hours compliance and send notifications for warnings/violations
+    private func checkComplianceAndNotify() {
+        guard let userId = userId else { return }
+
+        let fellowName = appState.currentUser?.fullName ?? "Fellow"
+
+        // Get admin IDs from the same program
+        let adminIds = users
+            .filter { $0.role == .admin && $0.programId == programId && !$0.isArchived }
+            .map { $0.id }
+
+        // Get user's shifts and entries
+        let userShifts = allShifts.filter { $0.userId == userId }
+        let userEntries = allEntries.filter { $0.userId == userId }
+
+        // Check and notify
+        DutyHoursComplianceService.shared.checkAndNotify(
+            userId: userId,
+            fellowName: fellowName,
+            programId: programId,
+            shifts: userShifts,
+            simpleEntries: userEntries,
+            adminIds: adminIds
+        )
     }
 
     // MARK: - Delete Shift
@@ -333,6 +372,32 @@ struct AddEditShiftView: View {
     }
 
     // MARK: - Helper
+
+    /// Auto-detect overnight shift based on AM/PM discrepancy
+    /// If end time hour is before start time hour, it must cross midnight
+    private func autoDetectOvernightShift() {
+        guard hasEndTime else { return }
+
+        let calendar = Calendar.current
+        let startHour = calendar.component(.hour, from: startTime)
+        let endHour = calendar.component(.hour, from: endTime)
+        let startMinute = calendar.component(.minute, from: startTime)
+        let endMinute = calendar.component(.minute, from: endTime)
+
+        // Convert to minutes since midnight for comparison
+        let startMinutes = startHour * 60 + startMinute
+        let endMinutes = endHour * 60 + endMinute
+
+        // If end time is earlier than start time, it must be an overnight shift
+        // e.g., Start 8 PM (20:00 = 1200 min), End 6 AM (6:00 = 360 min) -> overnight
+        // e.g., Start 11 PM (23:00 = 1380 min), End 2 AM (2:00 = 120 min) -> overnight
+        if endMinutes < startMinutes {
+            isOvernightShift = true
+        } else {
+            // Don't auto-turn off if user manually set it to overnight
+            // Only auto-turn on, not off
+        }
+    }
 
     private func combineDateAndTime(date: Date, time: Date) -> Date {
         let calendar = Calendar.current

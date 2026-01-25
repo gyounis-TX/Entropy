@@ -393,6 +393,40 @@ final class DutyHoursComplianceService {
         return newViolations
     }
 
+    /// Check compliance and send notifications for warnings/violations
+    func checkAndNotify(
+        userId: UUID,
+        fellowName: String,
+        programId: UUID?,
+        shifts: [DutyHoursShift],
+        simpleEntries: [DutyHoursEntry],
+        adminIds: [UUID]
+    ) {
+        let summary = checkCompliance(userId: userId, shifts: shifts, simpleEntries: simpleEntries)
+
+        // Send notifications for warnings
+        if !summary.warnings.isEmpty {
+            NotificationManager.shared.notifyDutyHoursWarning(
+                toFellowId: userId,
+                fellowName: fellowName,
+                warningTypes: summary.warnings,
+                adminIds: adminIds,
+                programId: programId
+            )
+        }
+
+        // Send notifications for violations
+        if !summary.violations.isEmpty {
+            NotificationManager.shared.notifyDutyHoursViolation(
+                toFellowId: userId,
+                fellowName: fellowName,
+                violationTypes: summary.violations,
+                adminIds: adminIds,
+                programId: programId
+            )
+        }
+    }
+
     /// Get actual and limit values for a violation type
     private func getViolationValues(type: DutyHoursViolationType, summary: ComplianceSummary) -> (Double, Double) {
         switch type {

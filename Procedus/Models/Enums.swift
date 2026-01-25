@@ -533,6 +533,8 @@ enum NotificationType: String, Codable, CaseIterable {
     case reminder = "reminder"
     case info = "info"
     case badgeEarned = "badge_earned"
+    case dutyHoursWarning = "duty_hours_warning"
+    case dutyHoursViolation = "duty_hours_violation"
 
     var icon: String {
         switch self {
@@ -547,6 +549,8 @@ enum NotificationType: String, Codable, CaseIterable {
         case .reminder: return "bell.fill"
         case .info: return "info.circle.fill"
         case .badgeEarned: return "trophy.fill"
+        case .dutyHoursWarning: return "exclamationmark.triangle.fill"
+        case .dutyHoursViolation: return "xmark.shield.fill"
         }
     }
 
@@ -563,6 +567,8 @@ enum NotificationType: String, Codable, CaseIterable {
         case .reminder: return .orange
         case .info: return .gray
         case .badgeEarned: return .yellow
+        case .dutyHoursWarning: return .orange
+        case .dutyHoursViolation: return .red
         }
     }
 }
