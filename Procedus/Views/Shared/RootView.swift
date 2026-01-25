@@ -445,9 +445,9 @@ struct AdminContentWrapper<Content: View>: View {
         colorScheme == .dark ? Color(UIColor.secondaryLabel) : Color(UIColor.darkGray)
     }
 
-    /// Settings gear color - Admin pink
+    /// Settings gear color - Admin purple (matches profile icons)
     private var settingsGearColor: Color {
-        Color.pink
+        Color.purple
     }
 
     var body: some View {

@@ -58,6 +58,8 @@ struct NotificationBellButton: View {
                     .scaledToFit()
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.top, 6)  // Push logo down to make room for badge
+                    .padding(.trailing, 6)  // Push logo left to make room for badge
 
                 // Badge count (top right of logo)
                 if badgeCount > 0 {
@@ -70,10 +72,9 @@ struct NotificationBellButton: View {
                             Capsule()
                                 .fill(Self.badgeColor)
                         )
-                        .offset(x: 10, y: -8)
                 }
             }
-            .frame(width: 40, height: 40)
+            .frame(width: 44, height: 44)  // Larger frame to accommodate badge
         }
     }
 }

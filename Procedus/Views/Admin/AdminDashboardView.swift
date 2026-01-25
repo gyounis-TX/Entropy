@@ -8608,7 +8608,10 @@ struct NotificationsSheet: View {
                     NotificationType.categoryAdded.rawValue,
                     NotificationType.userInvite.rawValue,
                     NotificationType.reminder.rawValue,
-                    NotificationType.info.rawValue
+                    NotificationType.info.rawValue,
+                    NotificationType.badgeEarned.rawValue,
+                    NotificationType.dutyHoursWarning.rawValue,
+                    NotificationType.dutyHoursViolation.rawValue
                 ]
             }
         }
