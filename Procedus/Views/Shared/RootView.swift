@@ -204,6 +204,16 @@ struct FellowContentWrapper<Content: View>: View {
         colorScheme == .dark ? Color(UIColor.separator) : Color(UIColor.separator)
     }
 
+    /// Title text for current tab
+    private var currentTabTitle: String {
+        switch selectedTab {
+        case .log: return "Log"
+        case .images: return "Images"
+        case .analytics: return "Analytics"
+        case .hours: return "Hours"
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             // Main content (TabView) - pushed down to make room for top bar
@@ -266,6 +276,14 @@ struct FellowContentWrapper<Content: View>: View {
 
             Spacer()
 
+            // Center: Tab title
+            Text(currentTabTitle)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(ProcedusTheme.textPrimary)
+
+            Spacer()
+
             // Right: Export and Add buttons (only on Log tab)
             if showCaseLogActions {
                 HStack(spacing: 16) {
@@ -285,6 +303,12 @@ struct FellowContentWrapper<Content: View>: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(activeIconColor)
                     }
+                }
+            } else {
+                // Placeholder to balance the layout when buttons aren't shown
+                HStack(spacing: 16) {
+                    Color.clear.frame(width: 18, height: 18)
+                    Color.clear.frame(width: 18, height: 18)
                 }
             }
         }

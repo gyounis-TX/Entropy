@@ -29,6 +29,13 @@ final class Program {
     var fellowshipSpecialtyRaw: String?
     var allowSimpleDutyHours: Bool  // When false, fellows must use comprehensive shift tracking
     var earliestPGYLevel: Int  // Earliest PGY year for fellows (default 4, range 1-10)
+
+    // Duty Hours Shift Type Settings (all enabled by default)
+    var dutyHoursCallEnabled: Bool        // Enable "Call" shift type
+    var dutyHoursNightFloatEnabled: Bool  // Enable "Night Float" shift type
+    var dutyHoursMoonlightingEnabled: Bool // Enable "Moonlighting" shift type
+    var dutyHoursAtHomeCallEnabled: Bool  // Enable "At-Home Call" shift type
+
     var createdAt: Date
     var updatedAt: Date
 
@@ -63,6 +70,10 @@ final class Program {
         self.fellowshipSpecialtyRaw = nil
         self.allowSimpleDutyHours = true  // Allow simple mode by default
         self.earliestPGYLevel = 4  // Default PGY4 (most fellowships start after 3-year residency)
+        self.dutyHoursCallEnabled = true  // Enable all shift types by default
+        self.dutyHoursNightFloatEnabled = true
+        self.dutyHoursMoonlightingEnabled = true
+        self.dutyHoursAtHomeCallEnabled = true
         self.createdAt = Date()
         self.updatedAt = Date()
     }

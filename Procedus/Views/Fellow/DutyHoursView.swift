@@ -183,43 +183,22 @@ struct SimpleWeeklyHoursView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                // Header
-                VStack(spacing: 8) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(ProcedusTheme.primary)
-
-                    Text("Duty Hours")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-
-                    Text("Track your weekly work hours")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            VStack(spacing: 12) {
+                ForEach(weeks, id: \.self) { weekBucket in
+                    WeekHoursRow(
+                        weekBucket: weekBucket,
+                        hours: binding(for: weekBucket),
+                        existingEntry: userEntries.first { $0.weekBucket == weekBucket },
+                        onSave: { saveEntry(weekBucket: weekBucket) }
+                    )
                 }
-                .padding(.vertical, 24)
-
-                // Weekly entries
-                VStack(spacing: 12) {
-                    ForEach(weeks, id: \.self) { weekBucket in
-                        WeekHoursRow(
-                            weekBucket: weekBucket,
-                            hours: binding(for: weekBucket),
-                            existingEntry: userEntries.first { $0.weekBucket == weekBucket }
-                        )
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 32)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
         }
         .onAppear {
             generateWeeks()
             loadExistingEntries()
-        }
-        .onDisappear {
-            saveAllEntries()
         }
     }
 
@@ -252,25 +231,22 @@ struct SimpleWeeklyHoursView: View {
         }
     }
 
-    private func saveAllEntries() {
+    private func saveEntry(weekBucket: String) {
         guard let userId = userId else { return }
+        guard let hoursStr = hoursInput[weekBucket], !hoursStr.isEmpty else { return }
+        guard let hours = Double(hoursStr) else { return }
 
-        for (weekBucket, hoursStr) in hoursInput {
-            guard !hoursStr.isEmpty else { continue }
-            guard let hours = Double(hoursStr) else { continue }
-
-            if let existing = userEntries.first(where: { $0.weekBucket == weekBucket }) {
-                existing.hours = hours
-                existing.updatedAt = Date()
-            } else {
-                let entry = DutyHoursEntry(
-                    userId: userId,
-                    programId: programId,
-                    weekBucket: weekBucket,
-                    hours: hours
-                )
-                modelContext.insert(entry)
-            }
+        if let existing = userEntries.first(where: { $0.weekBucket == weekBucket }) {
+            existing.hours = hours
+            existing.updatedAt = Date()
+        } else {
+            let entry = DutyHoursEntry(
+                userId: userId,
+                programId: programId,
+                weekBucket: weekBucket,
+                hours: hours
+            )
+            modelContext.insert(entry)
         }
 
         try? modelContext.save()
@@ -283,6 +259,7 @@ struct WeekHoursRow: View {
     let weekBucket: String
     @Binding var hours: String
     let existingEntry: DutyHoursEntry?
+    let onSave: () -> Void
 
     @State private var showingCustomInput = false
     @FocusState private var isInputFocused: Bool
@@ -307,6 +284,7 @@ struct WeekHoursRow: View {
                     Button {
                         hours = "\(value)"
                         showingCustomInput = false
+                        onSave()
                     } label: {
                         Text("\(value)")
                             .font(.headline)
@@ -333,6 +311,7 @@ struct WeekHoursRow: View {
                         Button {
                             showingCustomInput = false
                             isInputFocused = false
+                            onSave()
                         } label: {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.title2)

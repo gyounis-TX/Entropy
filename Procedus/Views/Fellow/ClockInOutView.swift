@@ -11,12 +11,46 @@ struct ClockInOutView: View {
     let activeShift: DutyHoursShift?
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
+
+    @Query private var programs: [Program]
 
     @State private var selectedShiftType: DutyHoursShiftType = .regular
     @State private var selectedLocation: DutyHoursShiftLocation = .inHouse
     @State private var showingAddManualShift = false
     @State private var elapsedTime: TimeInterval = 0
     @State private var timer: Timer?
+
+    private var currentProgram: Program? { programs.first }
+
+    /// Shift types enabled by program admin (excludes Day Off for clock-in)
+    private var enabledShiftTypes: [DutyHoursShiftType] {
+        // Individual mode shows all shift types
+        if appState.isIndividualMode {
+            return DutyHoursShiftType.allCases.filter { $0 != .dayOff }
+        }
+
+        guard let program = currentProgram else {
+            return DutyHoursShiftType.allCases.filter { $0 != .dayOff }
+        }
+
+        var types: [DutyHoursShiftType] = [.regular]  // Always available
+
+        if program.dutyHoursCallEnabled {
+            types.append(.call)
+        }
+        if program.dutyHoursNightFloatEnabled {
+            types.append(.nightFloat)
+        }
+        if program.dutyHoursMoonlightingEnabled {
+            types.append(.moonlighting)
+        }
+        if program.dutyHoursAtHomeCallEnabled {
+            types.append(.atHomeCall)
+        }
+
+        return types
+    }
 
     var body: some View {
         ScrollView {
@@ -68,7 +102,7 @@ struct ClockInOutView: View {
                     GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 12) {
-                    ForEach(DutyHoursShiftType.allCases.filter { $0 != .dayOff }) { type in
+                    ForEach(enabledShiftTypes) { type in
                         ShiftTypeButton(
                             type: type,
                             isSelected: selectedShiftType == type
@@ -368,5 +402,6 @@ struct QuickStatCard: View {
 
 #Preview {
     ClockInOutView(userId: UUID(), programId: nil, activeShift: nil)
-        .modelContainer(for: [DutyHoursShift.self], inMemory: true)
+        .environment(AppState())
+        .modelContainer(for: [DutyHoursShift.self, Program.self], inMemory: true)
 }

@@ -35,6 +35,7 @@ struct SettingsView: View {
     @State private var showingCustomComplications = false
     @State private var showingCustomProcedureDetails = false
     @State private var showingExportOptions = false
+    @State private var showingDutyHoursExport = false
     @State private var showingImportLog = false
     @State private var showingAbout = false
     @State private var showingDevInstitutional = false
@@ -413,6 +414,16 @@ struct SettingsView: View {
                 showingExportOptions = true
             }
 
+            // Export Duty Hours Row
+            SettingsPillRow(
+                icon: "clock.badge.checkmark.fill",
+                iconColor: .orange,
+                title: "Export Duty Hours",
+                showChevron: true
+            ) {
+                showingDutyHoursExport = true
+            }
+
             // ACHIEVEMENTS Section
             SectionHeader(title: "ACHIEVEMENTS")
 
@@ -604,6 +615,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingExportOptions) {
             ExportSheet()
+        }
+        .sheet(isPresented: $showingDutyHoursExport) {
+            DutyHoursExportSheet()
         }
         .sheet(isPresented: $showingImportLog) {
             ImportProcedureLogView()
@@ -1132,6 +1146,16 @@ struct SettingsView: View {
                     showingExportOptions = true
                 }
 
+                // Export Duty Hours Row
+                SettingsPillRow(
+                    icon: "clock.badge.checkmark.fill",
+                    iconColor: .orange,
+                    title: "Export Duty Hours",
+                    showChevron: true
+                ) {
+                    showingDutyHoursExport = true
+                }
+
                 // ACHIEVEMENTS Section
                 SectionHeader(title: "ACHIEVEMENTS")
 
@@ -1472,6 +1496,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingExportOptions) {
             ExportSheet()
+        }
+        .sheet(isPresented: $showingDutyHoursExport) {
+            DutyHoursExportSheet()
         }
         #if DEBUG
         .sheet(isPresented: $showingDevInstitutional) {

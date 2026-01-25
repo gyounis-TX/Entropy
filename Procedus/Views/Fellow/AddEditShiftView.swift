@@ -12,11 +12,15 @@ struct AddEditShiftView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
+
+    @Query private var programs: [Program]
 
     @State private var shiftDate: Date = Date()
     @State private var startTime: Date = Date()
     @State private var endTime: Date = Date()
     @State private var hasEndTime: Bool = false
+    @State private var isOvernightShift: Bool = false  // End time is next day
     @State private var shiftType: DutyHoursShiftType = .regular
     @State private var location: DutyHoursShiftLocation = .inHouse
     @State private var breakMinutes: Int = 0
@@ -28,9 +32,53 @@ struct AddEditShiftView: View {
 
     private var isEditing: Bool { editingShift != nil }
 
+    private var currentProgram: Program? { programs.first }
+
+    /// Shift types enabled by program admin (Regular and Day Off always available)
+    private var enabledShiftTypes: [DutyHoursShiftType] {
+        // Individual mode shows all shift types
+        if appState.isIndividualMode {
+            return DutyHoursShiftType.allCases
+        }
+
+        guard let program = currentProgram else {
+            return DutyHoursShiftType.allCases
+        }
+
+        var types: [DutyHoursShiftType] = [.regular]  // Always available
+
+        if program.dutyHoursCallEnabled {
+            types.append(.call)
+        }
+        if program.dutyHoursNightFloatEnabled {
+            types.append(.nightFloat)
+        }
+        if program.dutyHoursMoonlightingEnabled {
+            types.append(.moonlighting)
+        }
+        if program.dutyHoursAtHomeCallEnabled {
+            types.append(.atHomeCall)
+        }
+
+        types.append(.dayOff)  // Always available
+
+        return types
+    }
+
+    /// Calculate duration accounting for overnight shifts
     private var calculatedDuration: Double {
         guard hasEndTime else { return 0 }
-        let duration = endTime.timeIntervalSince(startTime)
+
+        var duration: TimeInterval
+        if isOvernightShift {
+            // End time is on the next day
+            let calendar = Calendar.current
+            let nextDayEnd = calendar.date(byAdding: .day, value: 1, to: endTime) ?? endTime
+            duration = nextDayEnd.timeIntervalSince(startTime)
+        } else {
+            duration = endTime.timeIntervalSince(startTime)
+        }
+
         let hours = max(0, duration / 3600.0)
         return hours - (Double(breakMinutes) / 60.0)
     }
@@ -48,15 +96,21 @@ struct AddEditShiftView: View {
 
                     if hasEndTime {
                         DatePicker("End Time", selection: $endTime, displayedComponents: .hourAndMinute)
+
+                        Toggle("Overnight Shift", isOn: $isOvernightShift)
                     }
                 } header: {
                     Text("Date & Time")
+                } footer: {
+                    if hasEndTime && isOvernightShift {
+                        Text("End time is on the following day")
+                    }
                 }
 
                 // Shift Type Section
                 Section {
                     Picker("Shift Type", selection: $shiftType) {
-                        ForEach(DutyHoursShiftType.allCases) { type in
+                        ForEach(enabledShiftTypes) { type in
                             Label(type.displayName, systemImage: type.iconName)
                                 .tag(type)
                         }
@@ -189,19 +243,37 @@ struct AddEditShiftView: View {
         if let end = shift.endTime {
             hasEndTime = true
             endTime = end
+
+            // Detect if this is an overnight shift (end time is on a different day than start)
+            let calendar = Calendar.current
+            let startDay = calendar.component(.day, from: shift.startTime)
+            let endDay = calendar.component(.day, from: end)
+            isOvernightShift = endDay != startDay
         } else {
             hasEndTime = false
+            isOvernightShift = false
         }
     }
 
     // MARK: - Save Shift
 
     private func saveShift() {
+        let calendar = Calendar.current
+
+        // Calculate the actual end time, accounting for overnight shifts
+        let actualEndDate: Date? = hasEndTime ? {
+            let baseEnd = combineDateAndTime(date: shiftDate, time: endTime)
+            if isOvernightShift {
+                return calendar.date(byAdding: .day, value: 1, to: baseEnd) ?? baseEnd
+            }
+            return baseEnd
+        }() : nil
+
         if let existing = editingShift {
             // Update existing shift
             existing.shiftDate = shiftDate
             existing.startTime = combineDateAndTime(date: shiftDate, time: startTime)
-            existing.endTime = hasEndTime ? combineDateAndTime(date: shiftDate, time: endTime) : nil
+            existing.endTime = actualEndDate
             existing.shiftType = shiftType
             existing.location = location
             existing.breakMinutes = breakMinutes
@@ -239,7 +311,7 @@ struct AddEditShiftView: View {
             shift.isActiveShift = !hasEndTime
 
             if hasEndTime {
-                shift.endTime = combineDateAndTime(date: shiftDate, time: endTime)
+                shift.endTime = actualEndDate
                 shift.totalHours = calculatedDuration + (Double(breakMinutes) / 60.0)
                 shift.effectiveHours = calculatedDuration
             }
@@ -281,5 +353,6 @@ struct AddEditShiftView: View {
 
 #Preview {
     AddEditShiftView(userId: UUID(), programId: nil, editingShift: nil)
-        .modelContainer(for: [DutyHoursShift.self], inMemory: true)
+        .environment(AppState())
+        .modelContainer(for: [DutyHoursShift.self, Program.self], inMemory: true)
 }

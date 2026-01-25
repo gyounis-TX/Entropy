@@ -300,6 +300,10 @@ struct AdminDashboardView: View {
                 AdminPillRow(icon: "checkmark.seal.fill", iconColor: .green, title: "Evaluations", statusBadge: currentProgram?.evaluationsEnabled == true ? "On" : nil, statusColor: .green)
             }
 
+            NavigationLink { ManageDutyHoursSettingsView() } label: {
+                AdminPillRow(icon: "clock.badge.checkmark.fill", iconColor: .orange, title: "Duty Hours", statusBadge: currentProgram?.allowSimpleDutyHours == true ? "Simple" : "Comprehensive", statusColor: .orange)
+            }
+
             // PROCEDURES Section
             AdminSectionHeader(title: "PROCEDURES")
 
@@ -2028,27 +2032,6 @@ struct ManageProgramView: View {
                             }
                         }
                         .pickerStyle(.menu)
-                        .labelsHidden()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-
-                    Divider().padding(.leading, 16)
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Allow Simple Duty Hours")
-                                .font(.body)
-                                .foregroundColor(Color(UIColor.label))
-                            Text("When disabled, fellows must use comprehensive shift tracking")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { program.allowSimpleDutyHours },
-                            set: { program.allowSimpleDutyHours = $0; program.updatedAt = Date() }
-                        ))
                         .labelsHidden()
                     }
                     .padding(.horizontal, 16)
@@ -5323,6 +5306,144 @@ struct ManageEvaluationsView: View {
             field.displayOrder = index
         }
         try? modelContext.save()
+    }
+}
+
+// MARK: - Manage Duty Hours Settings View
+
+struct ManageDutyHoursSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query private var programs: [Program]
+
+    private var program: Program? { programs.first }
+
+    var body: some View {
+        Group {
+            if program == nil {
+                VStack(spacing: 16) {
+                    Spacer()
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+                    Text("No Program Configured")
+                        .font(.headline)
+                    Text("Create a program in Program Settings to configure duty hours.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    // Logging Mode Section
+                    Section {
+                        if let program = program {
+                            Toggle(isOn: Binding(
+                                get: { program.allowSimpleDutyHours },
+                                set: { program.allowSimpleDutyHours = $0; program.updatedAt = Date(); try? modelContext.save() }
+                            )) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Allow Simple Mode")
+                                        .font(.subheadline)
+                                    Text("Fellows can log weekly hours totals instead of individual shifts")
+                                        .font(.caption)
+                                        .foregroundColor(Color(UIColor.secondaryLabel))
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Logging Mode")
+                    } footer: {
+                        Text("When disabled, fellows must use comprehensive shift-by-shift tracking.")
+                    }
+
+                    // Shift Types Section
+                    Section {
+                        if let program = program {
+                            Toggle(isOn: Binding(
+                                get: { program.dutyHoursCallEnabled },
+                                set: { program.dutyHoursCallEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                            )) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "phone.fill")
+                                        .foregroundColor(.orange)
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Call")
+                                            .font(.subheadline)
+                                        Text("In-hospital call shifts")
+                                            .font(.caption)
+                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                    }
+                                }
+                            }
+
+                            Toggle(isOn: Binding(
+                                get: { program.dutyHoursNightFloatEnabled },
+                                set: { program.dutyHoursNightFloatEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                            )) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "moon.fill")
+                                        .foregroundColor(.purple)
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Night Float")
+                                            .font(.subheadline)
+                                        Text("Overnight coverage rotations")
+                                            .font(.caption)
+                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                    }
+                                }
+                            }
+
+                            Toggle(isOn: Binding(
+                                get: { program.dutyHoursMoonlightingEnabled },
+                                set: { program.dutyHoursMoonlightingEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                            )) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "moon.stars.fill")
+                                        .foregroundColor(.indigo)
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Moonlighting")
+                                            .font(.subheadline)
+                                        Text("External or internal moonlighting shifts")
+                                            .font(.caption)
+                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                    }
+                                }
+                            }
+
+                            Toggle(isOn: Binding(
+                                get: { program.dutyHoursAtHomeCallEnabled },
+                                set: { program.dutyHoursAtHomeCallEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                            )) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "house.fill")
+                                        .foregroundColor(.green)
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("At-Home Call")
+                                            .font(.subheadline)
+                                        Text("Home call with potential callback")
+                                            .font(.caption)
+                                            .foregroundColor(Color(UIColor.secondaryLabel))
+                                    }
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Enabled Shift Types")
+                    } footer: {
+                        Text("Disabled shift types will not appear in fellows' duty hours logging options. Regular shifts and Day Off are always available.")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Duty Hours")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
