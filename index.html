@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumen Innovations | Medical Education Technology</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #C41E3A;
+            --primary-dark: #9B1830;
+            --accent: #FF6B35;
+            --blue: #2563EB;
+            --blue-dark: #1D4ED8;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --gradient-red: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            --gradient-blue: linear-gradient(135deg, var(--blue) 0%, #06B6D4 100%);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: var(--light);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            padding: 1rem 0;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.05);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo img {
+            height: 40px;
+            width: auto;
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .logo-text span {
+            color: var(--primary);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        .cta-button {
+            background: var(--gradient-red);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(196, 30, 58, 0.3);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 8rem 2rem 4rem;
+            background: linear-gradient(180deg, #fff 0%, var(--light) 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 80%;
+            height: 150%;
+            background: radial-gradient(ellipse, rgba(196, 30, 58, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .hero-logo {
+            max-width: 550px;
+            height: auto;
+            margin-bottom: 2rem;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            color: var(--dark);
+        }
+
+        .hero-content h1 span {
+            background: var(--gradient-red);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-content p {
+            font-size: 1.35rem;
+            color: var(--gray);
+            margin-bottom: 3rem;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            margin-top: 4rem;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Apps Section */
+        .apps-section {
+            padding: 6rem 2rem;
+            background: white;
+        }
+
+        .section-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .section-header p {
+            font-size: 1.1rem;
+            color: var(--gray);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3rem;
+        }
+
+        .app-card {
+            background: var(--light);
+            border-radius: 24px;
+            padding: 3rem;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .app-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.12);
+        }
+
+        .app-card.lumenus {
+            border: 2px solid rgba(196, 30, 58, 0.1);
+        }
+
+        .app-card.cathcpt {
+            border: 2px solid rgba(37, 99, 235, 0.1);
+        }
+
+        .app-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 22px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .app-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1.5rem;
+        }
+
+        .app-card.lumenus .app-badge {
+            background: rgba(196, 30, 58, 0.1);
+            color: var(--primary);
+        }
+
+        .app-card.cathcpt .app-badge {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--blue);
+        }
+
+        .app-card h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .app-card .tagline {
+            font-size: 1.1rem;
+            color: var(--gray);
+            margin-bottom: 2rem;
+        }
+
+        .app-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+
+        .app-features li {
+            padding: 0.75rem 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            color: var(--dark);
+        }
+
+        .app-features li .icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .app-card.lumenus .app-features li .icon {
+            background: var(--gradient-red);
+            color: white;
+        }
+
+        .app-card.cathcpt .app-features li .icon {
+            background: var(--gradient-blue);
+            color: white;
+        }
+
+        .app-features li strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .app-features li span {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        .btn-app {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .app-card.lumenus .btn-app {
+            background: var(--gradient-red);
+            color: white;
+        }
+
+        .app-card.lumenus .btn-app:hover {
+            box-shadow: 0 15px 40px rgba(196, 30, 58, 0.35);
+            transform: translateY(-2px);
+        }
+
+        .app-card.cathcpt .btn-app {
+            background: var(--gradient-blue);
+            color: white;
+        }
+
+        .app-card.cathcpt .btn-app:hover {
+            box-shadow: 0 15px 40px rgba(37, 99, 235, 0.35);
+            transform: translateY(-2px);
+        }
+
+        /* Feature Details - Lumenus */
+        .feature-details {
+            padding: 6rem 2rem;
+            background: var(--light);
+        }
+
+        .feature-details.alt {
+            background: white;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+
+        .feature-details.alt .feature-card {
+            background: var(--light);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+        }
+
+        .feature-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.25rem;
+            font-size: 1.5rem;
+        }
+
+        .feature-icon.red {
+            background: var(--gradient-red);
+        }
+
+        .feature-icon.blue {
+            background: var(--gradient-blue);
+        }
+
+        .feature-card h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--dark);
+        }
+
+        .feature-card p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        /* Roles Section */
+        .roles {
+            padding: 6rem 2rem;
+            background: white;
+        }
+
+        .roles-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+
+        .role-card {
+            background: var(--light);
+            padding: 2.5rem;
+            border-radius: 24px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .role-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 60px rgba(0,0,0,0.1);
+        }
+
+        .role-icon {
+            width: 80px;
+            height: 80px;
+            background: var(--gradient-red);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2rem;
+        }
+
+        .role-card h3 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .role-card p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 6rem 2rem;
+            background: var(--gradient-red);
+            text-align: center;
+            color: white;
+        }
+
+        .cta-section h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta-section p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .cta-section .btn-white {
+            background: white;
+            color: var(--primary);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .cta-section .btn-white:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+
+        .cta-section .btn-outline {
+            background: transparent;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            border: 2px solid rgba(255,255,255,0.5);
+            transition: all 0.3s;
+        }
+
+        .cta-section .btn-outline:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: white;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 4rem 2rem 2rem;
+        }
+
+        .footer-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 3rem;
+            margin-bottom: 3rem;
+        }
+
+        .footer-brand p {
+            color: #aaa;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .footer-column h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .footer-column ul {
+            list-style: none;
+        }
+
+        .footer-column li {
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-column a {
+            color: #aaa;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+
+        .footer-column a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid #333;
+            padding-top: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        /* Responsive */
+        @media (max-width: 968px) {
+            .hero-content h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-stats {
+                gap: 2rem;
+            }
+
+            .apps-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .feature-grid,
+            .roles-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .hero-content h1 {
+                font-size: 2rem;
+            }
+
+            .hero-stats {
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <img src="lumenus-logo.png" alt="Lumen Innovations Logo">
+                <span class="logo-text">Lumen <span>Innovations</span></span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#apps">Our Apps</a></li>
+                <li><a href="#lumenus">Lumenus</a></li>
+                <li><a href="#cathcpt">CathCPT</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+            <a href="#contact" class="cta-button">Get Started</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <img src="lumen-logo.jpeg" alt="Lumen Innovations" class="hero-logo">
+                <h1>Tools Built by <span>Physicians</span>, for Physicians</h1>
+                <p>Lumen Innovations creates software that solves real problems in medical education and practice. From procedure logging to billing optimization, we're here to help you focus on patient care.</p>
+            </div>
+            <div class="hero-stats">
+                <div class="stat">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">Apps</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">iOS</div>
+                    <div class="stat-label">Platform</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">HIPAA Compliant</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Apps Section -->
+    <section class="apps-section" id="apps">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Our Applications</h2>
+                <p>Purpose-built tools that integrate seamlessly into your clinical workflow.</p>
+            </div>
+            <div class="apps-grid">
+                <!-- Lumenus -->
+                <div class="app-card lumenus">
+                    <img src="lumenus-app-icon.png" alt="Lumenus App Icon" class="app-icon">
+                    <span class="app-badge">Medical Education</span>
+                    <h3>Lumenus</h3>
+                    <p class="tagline">The complete procedure logging platform for medical trainees and training programs.</p>
+                    <ul class="app-features">
+                        <li>
+                            <div class="icon">📋</div>
+                            <div>
+                                <strong>Quick Case Logging</strong>
+                                <span>Log procedures in seconds with smart procedure packs for cardiology, EP, vascular, and more.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🖼️</div>
+                            <div>
+                                <strong>Shared Image Repository</strong>
+                                <span>Build a teaching library with program-wide case images. PHI detection keeps content safe.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">⏱️</div>
+                            <div>
+                                <strong>Duty Hours Tracking</strong>
+                                <span>Clock in/out, track shifts, and export ACGME-compliant duty hour reports.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">📊</div>
+                            <div>
+                                <strong>Powerful Analytics</strong>
+                                <span>Filter by time, PGY level, facility, attending, procedure type. Charts and exports included.</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#lumenus" class="btn-app">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+                        Learn More
+                    </a>
+                </div>
+
+                <!-- CathCPT -->
+                <div class="app-card cathcpt">
+                    <img src="cathcpt-app-icon.png" alt="CathCPT App Icon" class="app-icon">
+                    <span class="app-badge">Billing & Coding</span>
+                    <h3>CathCPT</h3>
+                    <p class="tagline">Fast, accurate CPT code selection for interventional and diagnostic cardiology procedures.</p>
+                    <ul class="app-features">
+                        <li>
+                            <div class="icon">⚡</div>
+                            <div>
+                                <strong>Quick Code Lookup</strong>
+                                <span>Find the right CPT codes in seconds. Search by procedure name or category.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🎯</div>
+                            <div>
+                                <strong>Accurate Billing</strong>
+                                <span>Reduce coding errors and capture appropriate reimbursement for your procedures.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">📱</div>
+                            <div>
+                                <strong>Mobile-First Design</strong>
+                                <span>Built for the cath lab. Access codes at the point of care, online or offline.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🔄</div>
+                            <div>
+                                <strong>Always Current</strong>
+                                <span>Regular updates ensure you always have the latest CPT code changes.</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#cathcpt" class="btn-app">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+                        Learn More
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Lumenus Features Detail -->
+    <section class="feature-details" id="lumenus">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Lumenus Features</h2>
+                <p>Everything trainees, attendings, and program directors need to manage procedure education.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon red">📋</div>
+                    <h3>Case Logging</h3>
+                    <p>Log procedures in under 30 seconds. Select procedures, access sites, devices used, complications, and operator role. Attach notes and media.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">✅</div>
+                    <h3>Attestation Workflow</h3>
+                    <p>Attendings review and attest cases with one tap. Bulk attestation for efficiency. Optional structured evaluations and feedback.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">🖼️</div>
+                    <h3>Image Repository</h3>
+                    <p>Upload case images and videos. Build your personal portfolio or contribute to your program's shared teaching library. Auto PHI detection protects patient privacy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">⏱️</div>
+                    <h3>Duty Hours</h3>
+                    <p>Clock in and out of shifts. Track daily, weekly, and monthly hours. Export ACGME-compliant reports. Never miss a duty hour violation.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">📊</div>
+                    <h3>Analytics Dashboard</h3>
+                    <p>Filter by time range, PGY level, facility, attending, or procedure category. Bar charts, trend lines, and detailed breakdowns. Export to CSV.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">🏆</div>
+                    <h3>Achievement Badges</h3>
+                    <p>Earn badges as you hit procedure milestones. Gamification that motivates trainees and celebrates progress throughout training.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CathCPT Features Detail -->
+    <section class="feature-details alt" id="cathcpt">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>CathCPT Features</h2>
+                <p>Stop leaving money on the table. Get accurate CPT codes for every cath lab procedure.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon blue">🔍</div>
+                    <h3>Smart Search</h3>
+                    <p>Search by procedure name, code number, or category. Intelligent matching finds what you need even with partial terms.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">🩺</div>
+                    <h3>Comprehensive Coverage</h3>
+                    <p>All interventional and diagnostic cardiology CPT codes. PCI, peripheral, structural, EP, diagnostic caths, and more.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">📝</div>
+                    <h3>Code Details</h3>
+                    <p>See full descriptions, bundling rules, and common modifiers. Understand exactly what each code covers.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">⭐</div>
+                    <h3>Favorites</h3>
+                    <p>Save your most-used codes for instant access. Personalize the app for your practice patterns.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">📴</div>
+                    <h3>Offline Access</h3>
+                    <p>All codes available offline. No internet required in the cath lab. Works anywhere, anytime.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">🔄</div>
+                    <h3>Annual Updates</h3>
+                    <p>CPT codes change every year. We keep CathCPT current so you never submit an outdated code.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Who It's For -->
+    <section class="roles">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Built for Your Role</h2>
+                <p>Whether you're training, teaching, or managing a program, we have you covered.</p>
+            </div>
+            <div class="roles-grid">
+                <div class="role-card">
+                    <div class="role-icon">🎓</div>
+                    <h3>Fellows & Residents</h3>
+                    <p>Focus on learning while Lumenus handles documentation. Log cases fast, track your progress, and build a portfolio that showcases your training.</p>
+                </div>
+                <div class="role-card">
+                    <div class="role-icon">👨‍⚕️</div>
+                    <h3>Attendings</h3>
+                    <p>Attest cases in seconds without disrupting your day. Provide meaningful feedback when it matters. Use CathCPT to optimize your billing.</p>
+                </div>
+                <div class="role-card">
+                    <div class="role-icon">🏥</div>
+                    <h3>Program Directors</h3>
+                    <p>Monitor all trainees from one dashboard. Track duty hours compliance, procedure numbers, and attestation rates. Export reports for ACGME.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section" id="contact">
+        <div class="section-container">
+            <h2>Ready to Get Started?</h2>
+            <p>Join the physicians and training programs already using Lumen Innovations apps to work smarter.</p>
+            <div class="cta-buttons">
+                <a href="mailto:contact@lumeninnovations.com" class="btn-white">Contact Us</a>
+                <a href="#apps" class="btn-outline">View Our Apps</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo">
+                        <span class="logo-text" style="color: white;">Lumen <span>Innovations</span></span>
+                    </div>
+                    <p>Building software that helps physicians focus on what matters most: excellent patient care and medical education.</p>
+                </div>
+                <div class="footer-column">
+                    <h4>Apps</h4>
+                    <ul>
+                        <li><a href="#lumenus">Lumenus</a></li>
+                        <li><a href="#cathcpt">CathCPT</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About Us</a></li>
+                        <li><a href="mailto:contact@lumeninnovations.com">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">HIPAA Compliance</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Lumen Innovations. All rights reserved.</p>
+                <p>Made with ❤️ for physicians everywhere</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

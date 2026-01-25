@@ -460,6 +460,12 @@ struct AdminDashboardView: View {
     }
 
     private func resetDevProgram() {
+        // Clear AppState identity references BEFORE deleting users
+        // This prevents data corruption from orphaned references
+        appState.selectedFellowId = nil
+        appState.selectedAttendingId = nil
+        appState.currentUser = nil
+
         // Delete all cases
         for caseEntry in allCases {
             modelContext.delete(caseEntry)
@@ -722,22 +728,34 @@ struct AdminDashboardView: View {
         ]
 
         for (first, last, email, pgy) in activeFellowData {
-            // Delete existing if present
+            // Update existing fellow OR create new one (preserves UUID for existing)
             if let existing = allUsers.first(where: { $0.email == email }) {
-                modelContext.delete(existing)
+                // Update existing fellow - preserves UUID
+                existing.firstName = first
+                existing.lastName = last
+                existing.displayName = "\(first) \(last)"
+                existing.role = .fellow
+                existing.accountMode = .institutional
+                existing.programId = program.id
+                existing.trainingYear = pgy
+                existing.hasGraduated = false
+                existing.graduatedAt = nil
+                existing.isArchived = false
+                activeFellowIds.append(existing.id)
+            } else {
+                // Create new fellow only if doesn't exist
+                let fellow = User(
+                    email: email,
+                    firstName: first,
+                    lastName: last,
+                    role: .fellow,
+                    accountMode: .institutional,
+                    programId: program.id,
+                    trainingYear: pgy
+                )
+                modelContext.insert(fellow)
+                activeFellowIds.append(fellow.id)
             }
-
-            let fellow = User(
-                email: email,
-                firstName: first,
-                lastName: last,
-                role: .fellow,
-                accountMode: .institutional,
-                programId: program.id,
-                trainingYear: pgy
-            )
-            modelContext.insert(fellow)
-            activeFellowIds.append(fellow.id)
         }
 
         // =========================================
@@ -751,23 +769,36 @@ struct AdminDashboardView: View {
         ]
 
         for (first, last, email, _) in graduatedFellowData {
+            // Update existing fellow OR create new one (preserves UUID for existing)
             if let existing = allUsers.first(where: { $0.email == email }) {
-                modelContext.delete(existing)
+                // Update existing fellow - preserves UUID
+                existing.firstName = first
+                existing.lastName = last
+                existing.displayName = "\(first) \(last)"
+                existing.role = .fellow
+                existing.accountMode = .institutional
+                existing.programId = program.id
+                existing.trainingYear = 6
+                existing.hasGraduated = true
+                existing.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
+                existing.isArchived = false
+                graduatedFellowIds.append(existing.id)
+            } else {
+                // Create new fellow only if doesn't exist
+                let fellow = User(
+                    email: email,
+                    firstName: first,
+                    lastName: last,
+                    role: .fellow,
+                    accountMode: .institutional,
+                    programId: program.id,
+                    trainingYear: 6  // All graduated at PGY6
+                )
+                fellow.hasGraduated = true
+                fellow.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
+                modelContext.insert(fellow)
+                graduatedFellowIds.append(fellow.id)
             }
-
-            let fellow = User(
-                email: email,
-                firstName: first,
-                lastName: last,
-                role: .fellow,
-                accountMode: .institutional,
-                programId: program.id,
-                trainingYear: 6  // All graduated at PGY6
-            )
-            fellow.hasGraduated = true
-            fellow.graduatedAt = calendar.date(byAdding: .month, value: -6, to: Date())
-            modelContext.insert(fellow)
-            graduatedFellowIds.append(fellow.id)
         }
 
         // Create default evaluation fields if not exist, and capture their IDs for rating generation
