@@ -12,8 +12,11 @@ final class MediaStorageService {
 
     // MARK: - Constants
 
-    /// Maximum file size: 10 MB
+    /// Maximum image file size: 10 MB
     static let maxFileSizeBytes = 10 * 1024 * 1024
+
+    /// Maximum video file size: 200 MB
+    static let maxVideoFileSizeBytes = 200 * 1024 * 1024
 
     /// Thumbnail size
     static let thumbnailSize = CGSize(width: 200, height: 200)
@@ -131,13 +134,16 @@ final class MediaStorageService {
         from sourceURL: URL,
         forCaseId caseId: UUID
     ) async -> (localPath: String, thumbnailPath: String?, fileSize: Int, width: Int?, height: Int?, duration: Double?, contentHash: String)? {
-        // Read video data
-        guard let videoData = try? Data(contentsOf: sourceURL) else {
+        // Get file size from attributes (avoid loading entire video into memory)
+        guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: sourceURL.path),
+              let fileSize = fileAttributes[.size] as? Int else {
+            print("MediaStorageService: Failed to read video file attributes at \(sourceURL.path)")
             return nil
         }
 
-        // Check size limit
-        guard isWithinSizeLimit(videoData) else {
+        // Check video size limit (200 MB)
+        guard fileSize <= Self.maxVideoFileSizeBytes else {
+            print("MediaStorageService: Video exceeds size limit (\(formattedFileSize(fileSize)) > \(formattedFileSize(Self.maxVideoFileSizeBytes)))")
             return nil
         }
 
@@ -158,29 +164,48 @@ final class MediaStorageService {
             return nil
         }
 
-        // Compute hash
-        let hash = computeSHA256(data: videoData)
-
-        // Get video metadata
-        let asset = AVAsset(url: filePath)
-        let duration = try? await asset.load(.duration).seconds
-        var width: Int?
-        var height: Int?
-
-        if let track = try? await asset.loadTracks(withMediaType: .video).first {
-            let size = try? await track.load(.naturalSize)
-            width = size.map { Int($0.width) }
-            height = size.map { Int($0.height) }
+        // Compute hash from the copied file
+        let hash: String
+        if let videoData = try? Data(contentsOf: filePath) {
+            hash = computeSHA256(data: videoData)
+        } else {
+            hash = UUID().uuidString // Fallback hash if file read fails
         }
 
+        // Get video metadata off main thread
+        let destURL = filePath
+        let metadata = await Task.detached(priority: .userInitiated) { () async -> (duration: Double?, width: Int?, height: Int?) in
+            let asset = AVAsset(url: destURL)
+
+            // Get duration
+            var duration: Double?
+            if let durationValue = try? await asset.load(.duration) {
+                duration = durationValue.seconds
+            }
+
+            // Get dimensions
+            var width: Int?
+            var height: Int?
+            if let track = try? await asset.loadTracks(withMediaType: .video).first {
+                if let size = try? await track.load(.naturalSize) {
+                    let transform = try? await track.load(.preferredTransform)
+                    let isPortrait = transform.map { $0.a == 0 && abs($0.b) == 1 } ?? false
+                    width = Int(isPortrait ? size.height : size.width)
+                    height = Int(isPortrait ? size.width : size.height)
+                }
+            }
+
+            return (duration, width, height)
+        }.value
+
         // Generate video thumbnail
-        let thumbnailFileName = await generateVideoThumbnail(from: filePath, caseId: caseId, originalFileName: fileName)
+        let thumbnailFileName = generateVideoThumbnail(from: filePath, caseId: caseId, originalFileName: fileName)
 
         // Return relative paths
         let relativePath = "CaseMedia/\(caseId.uuidString)/\(fileName)"
         let relativeThumbnailPath = thumbnailFileName.map { "CaseMedia/Thumbnails/\($0)" }
 
-        return (relativePath, relativeThumbnailPath, videoData.count, width, height, duration, hash)
+        return (relativePath, relativeThumbnailPath, fileSize, metadata.width, metadata.height, metadata.duration, hash)
     }
 
     // MARK: - Thumbnail Generation
@@ -206,28 +231,32 @@ final class MediaStorageService {
     }
 
     /// Generate thumbnail for a video
-    private func generateVideoThumbnail(from videoURL: URL, caseId: UUID, originalFileName: String) async -> String? {
+    private func generateVideoThumbnail(from videoURL: URL, caseId: UUID, originalFileName: String) -> String? {
         let asset = AVAsset(url: videoURL)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         imageGenerator.maximumSize = Self.thumbnailSize
 
+        var actualTime = CMTime.zero
+        guard let cgImage = try? imageGenerator.copyCGImage(at: .zero, actualTime: &actualTime) else {
+            print("MediaStorageService: Failed to generate video thumbnail")
+            return nil
+        }
+
+        let thumbnail = UIImage(cgImage: cgImage)
+        guard let thumbnailData = thumbnail.jpegData(compressionQuality: 0.7) else {
+            return nil
+        }
+
+        let baseName = (originalFileName as NSString).deletingPathExtension
+        let thumbnailFileName = "thumb_\(caseId.uuidString)_\(baseName).jpg"
+        let thumbnailPath = thumbnailsDirectory.appendingPathComponent(thumbnailFileName)
+
         do {
-            let cgImage = try await imageGenerator.image(at: .zero).image
-            let thumbnail = UIImage(cgImage: cgImage)
-
-            guard let thumbnailData = thumbnail.jpegData(compressionQuality: 0.7) else {
-                return nil
-            }
-
-            let baseName = (originalFileName as NSString).deletingPathExtension
-            let thumbnailFileName = "thumb_\(caseId.uuidString)_\(baseName).jpg"
-            let thumbnailPath = thumbnailsDirectory.appendingPathComponent(thumbnailFileName)
-
             try thumbnailData.write(to: thumbnailPath)
             return thumbnailFileName
         } catch {
-            print("MediaStorageService: Failed to generate video thumbnail: \(error)")
+            print("MediaStorageService: Failed to save video thumbnail: \(error)")
             return nil
         }
     }

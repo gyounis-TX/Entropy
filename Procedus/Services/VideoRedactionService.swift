@@ -58,13 +58,11 @@ final class VideoRedactionService {
         imageGenerator.requestedTimeToleranceBefore = .zero
         imageGenerator.requestedTimeToleranceAfter = .zero
 
-        do {
-            let cgImage = try await imageGenerator.image(at: time).image
-            return UIImage(cgImage: cgImage)
-        } catch {
-            print("Failed to generate thumbnail: \(error)")
+        var actualTime = CMTime.zero
+        guard let cgImage = try? imageGenerator.copyCGImage(at: time, actualTime: &actualTime) else {
             return nil
         }
+        return UIImage(cgImage: cgImage)
     }
 
     /// Get video dimensions

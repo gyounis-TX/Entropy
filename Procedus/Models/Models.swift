@@ -1064,8 +1064,11 @@ final class CaseMedia {
         set { mediaTypeRaw = newValue.rawValue }
     }
 
-    /// Maximum file size: 10 MB
+    /// Maximum image file size: 10 MB
     static let maxFileSizeBytes = 10 * 1024 * 1024
+
+    /// Maximum video file size: 200 MB
+    static let maxVideoFileSizeBytes = 200 * 1024 * 1024
 
     init(
         caseEntryId: UUID,

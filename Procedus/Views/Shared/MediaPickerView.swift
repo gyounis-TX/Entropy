@@ -150,7 +150,7 @@ struct MediaPickerView: View {
                         .foregroundStyle(.secondary)
                     Text("Video size: \(MediaStorageService.shared.formattedFileSize(size))")
                         .font(.subheadline)
-                    if size > CaseMedia.maxFileSizeBytes {
+                    if size > CaseMedia.maxVideoFileSizeBytes {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                     } else {
@@ -160,11 +160,11 @@ struct MediaPickerView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(size > CaseMedia.maxFileSizeBytes ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
+                .background(size > CaseMedia.maxVideoFileSizeBytes ? Color.red.opacity(0.1) : Color.green.opacity(0.1))
                 .cornerRadius(8)
             }
 
-            Text("Maximum file size: 10 MB")
+            Text("Images: 10 MB max • Videos: 200 MB max")
                 .font(.caption)
                 .foregroundStyle(ProcedusTheme.textSecondary)
         }
@@ -233,22 +233,20 @@ struct MediaPickerView: View {
         selectedVideoSize = nil
 
         // Try loading as image first
-        if let data = try? await item.loadTransferable(type: Data.self) {
-            // Check file size
+        if let data = try? await item.loadTransferable(type: Data.self),
+           let image = UIImage(data: data) {
+            // It's an image — check image size limit
             if data.count > CaseMedia.maxFileSizeBytes {
                 isProcessing = false
-                errorMessage = "File exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(data.count)))"
+                errorMessage = "Image exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(data.count)))"
                 selectedItem = nil
                 return
             }
 
-            // Check if it's an image
-            if let image = UIImage(data: data) {
-                isProcessing = false
-                let result = MediaPickerResult(image: image, videoURL: nil, mediaType: .image)
-                onMediaSelected(result)
-                return
-            }
+            isProcessing = false
+            let result = MediaPickerResult(image: image, videoURL: nil, mediaType: .image)
+            onMediaSelected(result)
+            return
         }
 
         // Try loading as video
@@ -259,9 +257,9 @@ struct MediaPickerView: View {
 
                 selectedVideoSize = size
 
-                if size > CaseMedia.maxFileSizeBytes {
+                if size > CaseMedia.maxVideoFileSizeBytes {
                     isProcessing = false
-                    errorMessage = "Video exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(size)))"
+                    errorMessage = "Video exceeds 200 MB limit (\(MediaStorageService.shared.formattedFileSize(size)))"
                     selectedItem = nil
                     try? FileManager.default.removeItem(at: movie.url)
                     return
@@ -301,15 +299,19 @@ struct MediaPickerView: View {
                 return
             }
 
-            if size > CaseMedia.maxFileSizeBytes {
-                errorMessage = "File exceeds 10 MB limit (\(MediaStorageService.shared.formattedFileSize(size)))"
-                return
-            }
-
             // Process based on file type
             let pathExtension = url.pathExtension.lowercased()
             let imageExtensions = ["jpg", "jpeg", "png", "heic", "heif", "gif", "bmp", "tiff"]
             let videoExtensions = ["mov", "mp4", "m4v", "avi"]
+
+            // Check appropriate size limit
+            let isVideo = videoExtensions.contains(pathExtension)
+            let maxSize = isVideo ? CaseMedia.maxVideoFileSizeBytes : CaseMedia.maxFileSizeBytes
+            if size > maxSize {
+                let limitStr = isVideo ? "200 MB" : "10 MB"
+                errorMessage = "File exceeds \(limitStr) limit (\(MediaStorageService.shared.formattedFileSize(size)))"
+                return
+            }
 
             if imageExtensions.contains(pathExtension) {
                 if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {

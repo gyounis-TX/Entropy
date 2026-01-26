@@ -1139,13 +1139,12 @@ struct VideoLabelsView: View {
             let asset = AVAsset(url: url)
             let imageGenerator = AVAssetImageGenerator(asset: asset)
             imageGenerator.appliesPreferredTrackTransform = true
-            do {
-                let cgImage = try await imageGenerator.image(at: CMTime.zero).image
-                return UIImage(cgImage: cgImage)
-            } catch {
-                print("Failed to generate video thumbnail: \(error)")
+            imageGenerator.maximumSize = CGSize(width: 400, height: 400)
+            var actualTime = CMTime.zero
+            guard let cgImage = try? imageGenerator.copyCGImage(at: .zero, actualTime: &actualTime) else {
                 return nil
             }
+            return UIImage(cgImage: cgImage)
         }.value
         if let image {
             thumbnailImage = image
@@ -1265,13 +1264,12 @@ struct VideoNoPHIConfirmationView: View {
             let asset = AVAsset(url: url)
             let imageGenerator = AVAssetImageGenerator(asset: asset)
             imageGenerator.appliesPreferredTrackTransform = true
-            do {
-                let cgImage = try await imageGenerator.image(at: CMTime.zero).image
-                return UIImage(cgImage: cgImage)
-            } catch {
-                print("Failed to generate video thumbnail: \(error)")
+            imageGenerator.maximumSize = CGSize(width: 400, height: 400)
+            var actualTime = CMTime.zero
+            guard let cgImage = try? imageGenerator.copyCGImage(at: .zero, actualTime: &actualTime) else {
                 return nil
             }
+            return UIImage(cgImage: cgImage)
         }.value
         if let image {
             thumbnailImage = image
