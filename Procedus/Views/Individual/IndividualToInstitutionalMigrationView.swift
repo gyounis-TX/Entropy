@@ -15,6 +15,7 @@ struct IndividualToInstitutionalMigrationView: View {
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var individualAttendings: [Attending]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var individualFacilities: [TrainingFacility]
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
+    @Query(sort: \CaseMedia.createdAt, order: .reverse) private var allMedia: [CaseMedia]
     @Query(filter: #Predicate<CustomProcedure> { !$0.isArchived }) private var customProcedures: [CustomProcedure]
     @Query private var programs: [Program]
     @Query private var institutionalAttendings: [Attending]
@@ -656,7 +657,19 @@ struct IndividualToInstitutionalMigrationView: View {
                 procedure.programId = currentProgram?.id
             }
 
-            // 4. Save all changes
+            // 4. Migrate case media ownership so "My Gallery" permissions (edit/share) still work
+            let myCaseIds = Set(myCases.map { $0.id })
+            let newOwnerName = users.first(where: { $0.id == fellowId })?.fullName ?? "Fellow"
+            for media in allMedia where myCaseIds.contains(media.caseEntryId) {
+                // Only transfer media that belonged to the individual user identity.
+                if media.ownerId == individualUserId {
+                    media.ownerId = fellowId
+                    media.ownerName = newOwnerName
+                    media.updatedAt = Date()
+                }
+            }
+
+            // 5. Save all changes
             try modelContext.save()
 
             // 5. Update app state - set fellow ID and switch to institutional mode

@@ -4,6 +4,7 @@
 
 import Foundation
 import SwiftUI
+import Security
 
 // MARK: - App State
 
@@ -248,24 +249,87 @@ class AppState {
     // MARK: - Dev Mode (DEBUG only)
     
     #if DEBUG
+    // MARK: - Keychain Keys (Dev Mode Persistence)
+
+    private static let keychainDevModeEnabled = "procedus_dev_mode_enabled"
+    private static let keychainDevModeRole = "procedus_dev_mode_role"
+    private static let keychainHasCompletedOnboarding = "procedus_dev_has_completed_onboarding"
+
     func devSignIn(role: UserRole) {
         isDevMode = true
         devUserRole = role
         devUserEmail = "\(role.rawValue)@dev.procedus.app"
         accountMode = .institutional
-        
-        // Persist dev mode
-        UserDefaults.standard.set(true, forKey: "devModeEnabled")
-        UserDefaults.standard.set(role.rawValue, forKey: "devModeRole")
+
+        // Dev mode implies onboarding is complete
+        hasCompletedOnboarding = true
+        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+
+        // Persist dev mode state to Keychain (survives reinstall)
+        _ = saveToKeychain(key: Self.keychainDevModeEnabled, value: "true")
+        _ = saveToKeychain(key: Self.keychainDevModeRole, value: role.rawValue)
+        _ = saveToKeychain(key: Self.keychainHasCompletedOnboarding, value: "true")
     }
-    
+
     func devSignOut() {
         isDevMode = false
         devUserRole = .fellow
         devUserEmail = nil
-        
-        UserDefaults.standard.set(false, forKey: "devModeEnabled")
-        UserDefaults.standard.removeObject(forKey: "devModeRole")
+        selectedFellowId = nil
+
+        // Clear from Keychain
+        deleteFromKeychain(key: Self.keychainDevModeEnabled)
+        deleteFromKeychain(key: Self.keychainDevModeRole)
+    }
+
+    // MARK: - Keychain Helpers
+
+    private func saveToKeychain(key: String, value: String) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
+
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+        ]
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    private func loadFromKeychain(key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let value = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return value
+    }
+
+    private func deleteFromKeychain(key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key
+        ]
+        SecItemDelete(query as CFDictionary)
     }
     #endif
     
@@ -319,14 +383,30 @@ class AppState {
         
         // Load onboarding state
         hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-        
+
         #if DEBUG
-        // Restore dev mode
-        if UserDefaults.standard.bool(forKey: "devModeEnabled"),
-           let roleString = UserDefaults.standard.string(forKey: "devModeRole"),
+        // Keychain fallback for onboarding state (survives reinstall)
+        if !hasCompletedOnboarding,
+           loadFromKeychain(key: Self.keychainHasCompletedOnboarding) == "true" {
+            hasCompletedOnboarding = true
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        }
+
+        // Restore dev mode from Keychain (survives reinstall)
+        if loadFromKeychain(key: Self.keychainDevModeEnabled) == "true",
+           let roleString = loadFromKeychain(key: Self.keychainDevModeRole),
            let role = UserRole(rawValue: roleString) {
             devSignIn(role: role)
         }
+        // Migration: copy existing UserDefaults dev mode state to Keychain
+        else if UserDefaults.standard.bool(forKey: "devModeEnabled"),
+                let roleString = UserDefaults.standard.string(forKey: "devModeRole"),
+                let role = UserRole(rawValue: roleString) {
+            devSignIn(role: role) // This now persists to Keychain
+        }
+
+        // Clean up stale Keychain key from prior dev builds
+        deleteFromKeychain(key: "procedus_dev_user_id")
 
         // Dev mode defaults to cardiology fellowship if not set
         if individualFellowshipSpecialty == nil {
@@ -358,6 +438,9 @@ class AppState {
     func completeOnboarding() {
         hasCompletedOnboarding = true
         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        #if DEBUG
+        _ = saveToKeychain(key: Self.keychainHasCompletedOnboarding, value: "true")
+        #endif
     }
     
     // Current week bucket helper

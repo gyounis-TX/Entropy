@@ -601,16 +601,11 @@ struct AttendingMediaDetailView: View {
                     // Labels section (attendings can edit)
                     labelsSection
 
-                    // Collapsible Info section
-                    collapsibleInfoSection
-
                     // Comments section
                     commentsSection
 
-                    // Case link
-                    if let caseEntry = linkedCase {
-                        caseLinkSection(caseEntry)
-                    }
+                    // Collapsible Info section (includes linked case)
+                    collapsibleInfoSection
                 }
                 .padding()
             }
@@ -787,6 +782,54 @@ struct AttendingMediaDetailView: View {
                                 .foregroundStyle(.green)
                         }
                     }
+
+                    // Linked Case info (merged into Info section)
+                    if let caseEntry = linkedCase {
+                        Divider()
+                            .padding(.vertical, 4)
+
+                        Text("Linked Case")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                                .font(.caption)
+                            Text(caseDateText)
+                                .font(.subheadline)
+                            Spacer()
+                        }
+
+                        HStack {
+                            Image(systemName: "person.fill")
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                                .font(.caption)
+                            Text(fellowName)
+                                .font(.subheadline)
+                            Spacer()
+                        }
+
+                        if !caseEntry.procedureTagIds.isEmpty {
+                            FlowLayout(spacing: 6) {
+                                ForEach(caseEntry.procedureTagIds.prefix(4), id: \.self) { procId in
+                                    if let procedure = SpecialtyPackCatalog.findProcedure(by: procId) {
+                                        ProcedureBubble(procedure: procedure)
+                                    }
+                                }
+                                if caseEntry.procedureTagIds.count > 4 {
+                                    Text("+\(caseEntry.procedureTagIds.count - 4)")
+                                        .font(.caption2)
+                                        .foregroundStyle(ProcedusTheme.textSecondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color(UIColor.tertiarySystemFill))
+                                        .cornerRadius(8)
+                                }
+                            }
+                        }
+                    }
                 }
                 .padding([.horizontal, .bottom])
             }
@@ -841,59 +884,6 @@ struct AttendingMediaDetailView: View {
         .cornerRadius(12)
     }
 
-    // MARK: - Linked Case Section
-
-    private func caseLinkSection(_ caseEntry: CaseEntry) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Linked Case")
-                .font(.subheadline)
-                .fontWeight(.medium)
-
-            // Date
-            HStack {
-                Image(systemName: "calendar")
-                    .foregroundStyle(ProcedusTheme.textSecondary)
-                    .font(.caption)
-                Text(caseDateText)
-                    .font(.subheadline)
-                Spacer()
-            }
-
-            // Fellow
-            HStack {
-                Image(systemName: "person.fill")
-                    .foregroundStyle(ProcedusTheme.textSecondary)
-                    .font(.caption)
-                Text(fellowName)
-                    .font(.subheadline)
-                Spacer()
-            }
-
-            // Procedure bubbles
-            if !caseEntry.procedureTagIds.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(caseEntry.procedureTagIds.prefix(4), id: \.self) { procId in
-                        if let procedure = SpecialtyPackCatalog.findProcedure(by: procId) {
-                            ProcedureBubble(procedure: procedure)
-                        }
-                    }
-                    if caseEntry.procedureTagIds.count > 4 {
-                        Text("+\(caseEntry.procedureTagIds.count - 4)")
-                            .font(.caption2)
-                            .foregroundStyle(ProcedusTheme.textSecondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color(UIColor.tertiarySystemFill))
-                            .cornerRadius(8)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
-    }
-
     // MARK: - Helper Methods
 
     private func loadImage() {
@@ -921,20 +911,34 @@ struct AttendingMediaDetailView: View {
         modelContext.insert(comment)
         try? modelContext.save()
 
-        // Send notification to uploader if not self
+        // Send notification to media owner if not self
         if media.ownerId != currentUserId {
-            sendCommentNotification()
+            sendCommentNotification(toUserId: media.ownerId, commentText: text, isOwnerNotification: true)
+        }
+
+        // Send notification to all previous unique commenters (excluding self and media owner)
+        let previousCommenters = Set(
+            mediaComments
+                .map { $0.authorId }
+                .filter { $0 != currentUserId && $0 != media.ownerId }
+        )
+        for commenterId in previousCommenters {
+            sendCommentNotification(toUserId: commenterId, commentText: text, isOwnerNotification: false)
         }
 
         newCommentText = ""
     }
 
-    private func sendCommentNotification() {
+    private func sendCommentNotification(toUserId: UUID, commentText: String, isOwnerNotification: Bool) {
+        let title = isOwnerNotification ? "Comment on Your Teaching File" : "New Reply on Teaching File"
+        let message = isOwnerNotification
+            ? "\(currentUserName) commented on your case:\n\(commentText)"
+            : "\(currentUserName) replied to a discussion you joined:\n\(commentText)"
         let notification = Notification(
-            userId: media.ownerId,
-            title: "New Comment",
-            message: "\(currentUserName) commented on your image",
-            notificationType: "teachingFileComment"
+            userId: toUserId,
+            title: title,
+            message: message,
+            notificationType: NotificationType.teachingFileComment.rawValue
         )
         notification.senderId = currentUserId
         notification.senderName = currentUserName

@@ -5,6 +5,9 @@
 import SwiftUI
 import SwiftData
 
+import FirebaseAuth
+import FirebaseCore
+
 @main
 struct ProcedusApp: App {
     @State private var appState = AppState()
@@ -13,6 +16,21 @@ struct ProcedusApp: App {
     let modelContainer: ModelContainer
     
     init() {
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
+
+        // Minimal auth so Storage rules can require request.auth != null.
+        if Auth.auth().currentUser == nil {
+            Auth.auth().signInAnonymously { result, error in
+                if let error {
+                    print("Firebase anonymous auth failed: \(error)")
+                } else {
+                    print("Firebase anonymous auth uid: \(result?.user.uid ?? "unknown")")
+                }
+            }
+        }
+
         let schema = Schema([
             User.self,
             CaseEntry.self,

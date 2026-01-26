@@ -3803,14 +3803,11 @@ struct DevInstitutionalSheet: View {
                 Section("Select Role") {
                     Button {
                         appState.devSignIn(role: .fellow)
-                        appState.hasCompletedOnboarding = true
-                        // Find valid fellow - either currently selected (if still active) or first available
+                        // Set fellow identity from SwiftData users
                         if let selectedId = appState.selectedFellowId,
                            let selectedFellow = availableFellows.first(where: { $0.id == selectedId }) {
-                            // Currently selected fellow is still valid
                             appState.currentUser = selectedFellow
                         } else if let firstFellow = availableFellows.first {
-                            // Selected fellow is invalid/graduated - pick first available
                             appState.selectedFellowId = firstFellow.id
                             appState.currentUser = firstFellow
                         }
@@ -3826,7 +3823,6 @@ struct DevInstitutionalSheet: View {
 
                     Button {
                         appState.devSignIn(role: .attending)
-                        appState.hasCompletedOnboarding = true
                         // Clear currentUser to prevent showing fellow's notifications
                         appState.currentUser = nil
                         // Find valid attending - either currently selected or first available
@@ -3897,13 +3893,11 @@ struct DevRoleSwitcherSheet: View {
                 Section("Switch to Role") {
                     Button {
                         appState.devSignIn(role: .fellow)
-                        // Find valid fellow - either currently selected (if still active) or first available
+                        // Set fellow identity from SwiftData users
                         if let selectedId = appState.selectedFellowId,
                            let selectedFellow = availableFellows.first(where: { $0.id == selectedId }) {
-                            // Currently selected fellow is still valid
                             appState.currentUser = selectedFellow
                         } else if let firstFellow = availableFellows.first {
-                            // Selected fellow is invalid/graduated - pick first available
                             appState.selectedFellowId = firstFellow.id
                             appState.currentUser = firstFellow
                         }

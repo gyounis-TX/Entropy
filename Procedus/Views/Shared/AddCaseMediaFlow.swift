@@ -32,6 +32,7 @@ struct AddCaseMediaFlow: View {
     @State private var flowState: MediaFlowState = .picker
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var mediaTitle: String = ""
     @State private var searchTerms: [String] = []
     @State private var isSharedWithFellowship = false
     @State private var mediaComment: String = ""
@@ -116,6 +117,7 @@ struct AddCaseMediaFlow: View {
             case .labels(let image, let wasRedacted):
                 MediaLabelsView(
                     image: image,
+                    title: $mediaTitle,
                     searchTerms: $searchTerms,
                     isSharedWithFellowship: $isSharedWithFellowship,
                     comment: $mediaComment,
@@ -157,6 +159,7 @@ struct AddCaseMediaFlow: View {
             case .videoLabels(let videoURL, let wasRedacted):
                 VideoLabelsView(
                     videoURL: videoURL,
+                    title: $mediaTitle,
                     searchTerms: $searchTerms,
                     isSharedWithFellowship: $isSharedWithFellowship,
                     comment: $mediaComment,
@@ -274,6 +277,7 @@ struct AddCaseMediaFlow: View {
         caseMedia.width = saveResult.width
         caseMedia.height = saveResult.height
         caseMedia.contentHash = saveResult.contentHash
+        caseMedia.title = mediaTitle
         caseMedia.searchTerms = searchTerms
         caseMedia.isSharedWithFellowship = isSharedWithFellowship
         caseMedia.comment = mediaComment.isEmpty ? nil : mediaComment
@@ -283,10 +287,91 @@ struct AddCaseMediaFlow: View {
         caseMedia.userConfirmedAt = Date()
         caseMedia.redactionApplied = wasRedacted
 
+        caseMedia.uploadStatus = .pending
         modelContext.insert(caseMedia)
+
+        // Create MediaComment record if comment was provided during upload
+        if !mediaComment.isEmpty {
+            let comment = MediaComment(
+                mediaId: caseMedia.id,
+                authorId: ownerId,
+                authorName: ownerName,
+                authorRole: .fellow,
+                text: mediaComment
+            )
+            modelContext.insert(comment)
+        }
 
         do {
             try modelContext.save()
+
+            // Capture properties for background Task (avoid SwiftData access off MainActor)
+            let mediaId = caseMedia.id
+            let mediaLocalPath = caseMedia.localPath
+            let mediaThumbnailPath = caseMedia.thumbnailPath
+            let caseIdValue = caseId
+            let shared = isSharedWithFellowship
+            let uploaderName = ownerName
+            let uploaderUserId = ownerId
+            let programId = allCases.first(where: { $0.id == caseIdValue })?.programId
+
+            Task {
+                // Mark uploading
+                await MainActor.run {
+                    caseMedia.uploadStatus = .uploading
+                    try? modelContext.save()
+                }
+
+                do {
+                    let uid = try await CloudMediaUploadService.shared.authUid()
+                    let cloudPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/original.jpg"
+                    let cloudThumbPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/thumb.jpg"
+
+                    try await CloudMediaUploadService.shared.uploadWithRetry(
+                        relativeLocalPath: mediaLocalPath,
+                        to: cloudPath,
+                        contentType: "image/jpeg"
+                    )
+
+                    if let thumbPath = mediaThumbnailPath {
+                        try await CloudMediaUploadService.shared.uploadWithRetry(
+                            relativeLocalPath: thumbPath,
+                            to: cloudThumbPath,
+                            contentType: "image/jpeg"
+                        )
+                    }
+
+                    await MainActor.run {
+                        caseMedia.cloudPath = cloudPath
+                        caseMedia.uploadedToCloudAt = Date()
+                        caseMedia.uploadStatus = .uploaded
+                        caseMedia.uploadRetryCount = 0
+                        caseMedia.lastUploadError = nil
+                        try? modelContext.save()
+                    }
+                    print("[MediaUpload] Image upload succeeded for \(mediaId)")
+
+                    // Send Teaching Files notification
+                    if shared, let pid = programId {
+                        await MainActor.run {
+                            NotificationManager.shared.notifyTeachingFileUploaded(
+                                uploaderName: uploaderName,
+                                uploaderUserId: uploaderUserId,
+                                mediaId: mediaId,
+                                programId: pid
+                            )
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        caseMedia.uploadStatus = .failed
+                        caseMedia.lastUploadError = error.localizedDescription
+                        try? modelContext.save()
+                    }
+                    print("[MediaUpload] Image upload failed: \(error.localizedDescription)")
+                }
+            }
+
             onMediaAdded(caseMedia)
             dismiss()
         } catch {
@@ -324,6 +409,7 @@ struct AddCaseMediaFlow: View {
         caseMedia.height = saveResult.height
         caseMedia.durationSeconds = saveResult.duration
         caseMedia.contentHash = saveResult.contentHash
+        caseMedia.title = mediaTitle
         caseMedia.searchTerms = searchTerms
         caseMedia.isSharedWithFellowship = isSharedWithFellowship
         caseMedia.comment = mediaComment.isEmpty ? nil : mediaComment
@@ -333,10 +419,91 @@ struct AddCaseMediaFlow: View {
         caseMedia.userConfirmedAt = Date()
         caseMedia.redactionApplied = wasRedacted
 
+        caseMedia.uploadStatus = .pending
         modelContext.insert(caseMedia)
+
+        // Create MediaComment record if comment was provided during upload
+        if !mediaComment.isEmpty {
+            let comment = MediaComment(
+                mediaId: caseMedia.id,
+                authorId: ownerId,
+                authorName: ownerName,
+                authorRole: .fellow,
+                text: mediaComment
+            )
+            modelContext.insert(comment)
+        }
 
         do {
             try modelContext.save()
+
+            // Capture properties for background Task
+            let mediaId = caseMedia.id
+            let mediaLocalPath = caseMedia.localPath
+            let mediaThumbnailPath = caseMedia.thumbnailPath
+            let caseIdValue = caseId
+            let ext = (mediaLocalPath as NSString).pathExtension
+            let safeExt = ext.isEmpty ? "mp4" : ext
+            let shared = isSharedWithFellowship
+            let uploaderName = ownerName
+            let uploaderUserId = ownerId
+            let programId = allCases.first(where: { $0.id == caseIdValue })?.programId
+
+            Task {
+                await MainActor.run {
+                    caseMedia.uploadStatus = .uploading
+                    try? modelContext.save()
+                }
+
+                do {
+                    let uid = try await CloudMediaUploadService.shared.authUid()
+                    let cloudPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/original.\(safeExt)"
+                    let cloudThumbPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/thumb.jpg"
+
+                    try await CloudMediaUploadService.shared.uploadWithRetry(
+                        relativeLocalPath: mediaLocalPath,
+                        to: cloudPath,
+                        contentType: "video/mp4"
+                    )
+
+                    if let thumbPath = mediaThumbnailPath {
+                        try await CloudMediaUploadService.shared.uploadWithRetry(
+                            relativeLocalPath: thumbPath,
+                            to: cloudThumbPath,
+                            contentType: "image/jpeg"
+                        )
+                    }
+
+                    await MainActor.run {
+                        caseMedia.cloudPath = cloudPath
+                        caseMedia.uploadedToCloudAt = Date()
+                        caseMedia.uploadStatus = .uploaded
+                        caseMedia.uploadRetryCount = 0
+                        caseMedia.lastUploadError = nil
+                        try? modelContext.save()
+                    }
+                    print("[MediaUpload] Video upload succeeded for \(mediaId)")
+
+                    if shared, let pid = programId {
+                        await MainActor.run {
+                            NotificationManager.shared.notifyTeachingFileUploaded(
+                                uploaderName: uploaderName,
+                                uploaderUserId: uploaderUserId,
+                                mediaId: mediaId,
+                                programId: pid
+                            )
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        caseMedia.uploadStatus = .failed
+                        caseMedia.lastUploadError = error.localizedDescription
+                        try? modelContext.save()
+                    }
+                    print("[MediaUpload] Video upload failed: \(error.localizedDescription)")
+                }
+            }
+
             onMediaAdded(caseMedia)
             dismiss()
         } catch {
@@ -399,18 +566,7 @@ struct ImageCropView: View {
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .onAppear {
-                        if !isInitialized {
-                            imageSize = displaySize
-                            // Start with full image selected, with small inset
-                            let inset: CGFloat = 20
-                            cropRect = CGRect(
-                                x: inset,
-                                y: inset,
-                                width: displaySize.width - inset * 2,
-                                height: displaySize.height - inset * 2
-                            )
-                            isInitialized = true
-                        }
+                        initializeCropIfNeeded(displaySize)
                     }
                     .onChange(of: geometry.size) { _, newSize in
                         // Recalculate on rotation
@@ -430,16 +586,21 @@ struct ImageCropView: View {
                             )
                         }
 
-                        // Scale crop rect proportionally
-                        let scaleX = newDisplaySize.width / imageSize.width
-                        let scaleY = newDisplaySize.height / imageSize.height
-                        cropRect = CGRect(
-                            x: cropRect.origin.x * scaleX,
-                            y: cropRect.origin.y * scaleY,
-                            width: cropRect.width * scaleX,
-                            height: cropRect.height * scaleY
-                        )
-                        imageSize = newDisplaySize
+                        if !isInitialized {
+                            // First valid size after initial zero-size layout
+                            initializeCropIfNeeded(newDisplaySize)
+                        } else if imageSize.width > 0 && imageSize.height > 0 {
+                            // Scale crop rect proportionally
+                            let scaleX = newDisplaySize.width / imageSize.width
+                            let scaleY = newDisplaySize.height / imageSize.height
+                            cropRect = CGRect(
+                                x: cropRect.origin.x * scaleX,
+                                y: cropRect.origin.y * scaleY,
+                                width: cropRect.width * scaleX,
+                                height: cropRect.height * scaleY
+                            )
+                            imageSize = newDisplaySize
+                        }
                     }
                 }
                 .padding()
@@ -460,6 +621,21 @@ struct ImageCropView: View {
                 }
             }
         }
+    }
+
+    private func initializeCropIfNeeded(_ displaySize: CGSize) {
+        guard !isInitialized,
+              displaySize.width > 0,
+              displaySize.height > 0 else { return }
+        imageSize = displaySize
+        let inset: CGFloat = 20
+        cropRect = CGRect(
+            x: inset,
+            y: inset,
+            width: displaySize.width - inset * 2,
+            height: displaySize.height - inset * 2
+        )
+        isInitialized = true
     }
 
     private func performCrop() {
@@ -499,13 +675,15 @@ struct CropOverlay: View {
     @Binding var cropRect: CGRect
     let bounds: CGSize
 
-    // Track the initial rect when drag starts
     @State private var initialCropRect: CGRect = .zero
-    @State private var isDraggingHandle = false
+    @State private var activeHandle: CropHandle?
+    @State private var isDragging = false
 
     enum CropHandle: CaseIterable {
         case topLeft, topRight, bottomLeft, bottomRight
     }
+
+    private let handleHitRadius: CGFloat = 40
 
     var body: some View {
         ZStack {
@@ -547,67 +725,71 @@ struct CropOverlay: View {
             }
             .stroke(Color.white.opacity(0.5), lineWidth: 1)
 
-            // Corner handles
-            ForEach(CropHandle.allCases, id: \.self) { handle in
-                cornerHandle(for: handle)
-            }
-
-            // Move gesture on crop area (center)
-            Rectangle()
-                .fill(Color.clear)
-                .frame(width: max(0, cropRect.width - 60), height: max(0, cropRect.height - 60))
-                .position(x: cropRect.midX, y: cropRect.midY)
-                .gesture(moveGesture)
-        }
-        .frame(width: bounds.width, height: bounds.height)
-    }
-
-    @ViewBuilder
-    private func cornerHandle(for handle: CropHandle) -> some View {
-        // Only show handles when cropRect has valid dimensions
-        if cropRect.width > 0 && cropRect.height > 0 {
-            Circle()
-                .fill(Color.white)
-                .frame(width: 32, height: 32)
-                .overlay(
+            // Corner handle visuals (rendered only, not interactive)
+            if cropRect.width > 0 && cropRect.height > 0 {
+                ForEach(CropHandle.allCases, id: \.self) { handle in
                     Circle()
-                        .stroke(Color.black.opacity(0.2), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
-                .position(handlePosition(for: handle))
-                .contentShape(Rectangle().size(width: 60, height: 60))  // Larger touch target
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            if !isDraggingHandle {
-                                initialCropRect = cropRect
-                                isDraggingHandle = true
-                            }
-                            updateCropRect(for: handle, translation: value.translation)
-                        }
-                        .onEnded { _ in
-                            isDraggingHandle = false
-                        }
-                )
-        }
-    }
-
-    private var moveGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                if !isDraggingHandle {
-                    if initialCropRect == .zero {
-                        initialCropRect = cropRect
-                    }
-                    let newX = max(0, min(bounds.width - initialCropRect.width, initialCropRect.origin.x + value.translation.width))
-                    let newY = max(0, min(bounds.height - initialCropRect.height, initialCropRect.origin.y + value.translation.height))
-                    cropRect = CGRect(x: newX, y: newY, width: initialCropRect.width, height: initialCropRect.height)
+                        .fill(Color.white)
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.black.opacity(0.2), lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
+                        .position(handlePosition(for: handle))
+                        .allowsHitTesting(false)
                 }
             }
-            .onEnded { _ in
-                initialCropRect = cropRect
-            }
+        }
+        .frame(width: bounds.width, height: bounds.height)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if !isDragging {
+                        isDragging = true
+                        initialCropRect = cropRect
+                        activeHandle = closestHandle(to: value.startLocation)
+                    }
+                    if let handle = activeHandle {
+                        updateCropRect(for: handle, translation: value.translation)
+                    } else {
+                        moveCropRect(translation: value.translation)
+                    }
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    activeHandle = nil
+                    initialCropRect = cropRect
+                }
+        )
     }
+
+    // MARK: - Hit Testing
+
+    private func closestHandle(to point: CGPoint) -> CropHandle? {
+        var best: CropHandle?
+        var bestDist: CGFloat = .greatestFiniteMagnitude
+        for handle in CropHandle.allCases {
+            let pos = handlePosition(for: handle)
+            let dist = hypot(point.x - pos.x, point.y - pos.y)
+            if dist < bestDist {
+                bestDist = dist
+                best = handle
+            }
+        }
+        return bestDist <= handleHitRadius ? best : nil
+    }
+
+    // MARK: - Move Crop Rect
+
+    private func moveCropRect(translation: CGSize) {
+        let newX = max(0, min(bounds.width - initialCropRect.width, initialCropRect.origin.x + translation.width))
+        let newY = max(0, min(bounds.height - initialCropRect.height, initialCropRect.origin.y + translation.height))
+        cropRect = CGRect(x: newX, y: newY, width: initialCropRect.width, height: initialCropRect.height)
+    }
+
+    // MARK: - Handle Positions
 
     private func handlePosition(for handle: CropHandle) -> CGPoint {
         switch handle {
@@ -621,6 +803,8 @@ struct CropOverlay: View {
             return CGPoint(x: cropRect.maxX, y: cropRect.maxY)
         }
     }
+
+    // MARK: - Update Crop Rect
 
     private func updateCropRect(for handle: CropHandle, translation: CGSize) {
         let minSize: CGFloat = 50
@@ -662,6 +846,7 @@ struct CropOverlay: View {
 
 struct MediaLabelsView: View {
     let image: UIImage
+    @Binding var title: String
     @Binding var searchTerms: [String]
     @Binding var isSharedWithFellowship: Bool
     @Binding var comment: String
@@ -672,6 +857,8 @@ struct MediaLabelsView: View {
     @State private var newTerm = ""
     @State private var phiConfirmed = false
     @Query private var suggestions: [SearchTermSuggestion]
+
+    private static let titleMaxLength = 12
 
     // Common labels organized by procedure category
     private static let commonLabels: [String: [String]] = [
@@ -718,10 +905,48 @@ struct MediaLabelsView: View {
                         .frame(maxHeight: 200)
                         .cornerRadius(12)
 
+                    // Title section
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Title")
+                                .font(.headline)
+                            Text("(Required)")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+
+                        TextField("e.g. RCA Stent", text: $title)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: title) { _, newValue in
+                                if newValue.count > Self.titleMaxLength {
+                                    title = String(newValue.prefix(Self.titleMaxLength))
+                                }
+                            }
+
+                        HStack {
+                            Text("\(title.count)/\(Self.titleMaxLength) characters")
+                                .font(.caption)
+                                .foregroundStyle(title.count == Self.titleMaxLength ? .orange : ProcedusTheme.textTertiary)
+                            Spacer()
+                            Text("No PHI — Do not include patient info")
+                                .font(.caption)
+                                .foregroundStyle(.red.opacity(0.8))
+                        }
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
                     // Labels section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Labels")
-                            .font(.headline)
+                        HStack {
+                            Text("Labels")
+                                .font(.headline)
+                            Spacer()
+                            Label("Searchable", systemImage: "magnifyingglass")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textTertiary)
+                        }
 
                         // Quick label buttons
                         Text("Quick Labels")
@@ -888,7 +1113,7 @@ struct MediaLabelsView: View {
                     Button("Save") {
                         onSave()
                     }
-                    .disabled(!phiConfirmed)
+                    .disabled(!phiConfirmed || title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -906,6 +1131,7 @@ struct MediaLabelsView: View {
 
 struct VideoLabelsView: View {
     let videoURL: URL
+    @Binding var title: String
     @Binding var searchTerms: [String]
     @Binding var isSharedWithFellowship: Bool
     @Binding var comment: String
@@ -916,6 +1142,8 @@ struct VideoLabelsView: View {
     @State private var newTerm = ""
     @State private var thumbnailImage: UIImage?
     @State private var phiConfirmed = false
+
+    private static let titleMaxLength = 12
 
     // Common labels (same as MediaLabelsView)
     private static let commonLabels: [String: [String]] = [
@@ -971,10 +1199,48 @@ struct VideoLabelsView: View {
                         }
                     }
 
+                    // Title section
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Title")
+                                .font(.headline)
+                            Text("(Required)")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+
+                        TextField("e.g. RCA Stent", text: $title)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: title) { _, newValue in
+                                if newValue.count > Self.titleMaxLength {
+                                    title = String(newValue.prefix(Self.titleMaxLength))
+                                }
+                            }
+
+                        HStack {
+                            Text("\(title.count)/\(Self.titleMaxLength) characters")
+                                .font(.caption)
+                                .foregroundStyle(title.count == Self.titleMaxLength ? .orange : ProcedusTheme.textTertiary)
+                            Spacer()
+                            Text("No PHI — Do not include patient info")
+                                .font(.caption)
+                                .foregroundStyle(.red.opacity(0.8))
+                        }
+                    }
+                    .padding()
+                    .background(ProcedusTheme.cardBackground)
+                    .cornerRadius(12)
+
                     // Labels section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Labels")
-                            .font(.headline)
+                        HStack {
+                            Text("Labels")
+                                .font(.headline)
+                            Spacer()
+                            Label("Searchable", systemImage: "magnifyingglass")
+                                .font(.caption)
+                                .foregroundStyle(ProcedusTheme.textTertiary)
+                        }
 
                         // Quick label buttons
                         Text("Quick Labels")
@@ -1117,7 +1383,7 @@ struct VideoLabelsView: View {
                     Button("Save") {
                         onSave()
                     }
-                    .disabled(!phiConfirmed)
+                    .disabled(!phiConfirmed || title.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .task {

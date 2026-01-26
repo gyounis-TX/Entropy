@@ -29,8 +29,6 @@ struct ImportedCase: Identifiable {
     var mappedOutcome: CaseOutcome = .success
     
     var isFullyMapped: Bool {
-        mappedAttendingId != nil &&
-        mappedFacilityId != nil &&
         !mappedProcedures.isEmpty &&
         mappedProcedures.allSatisfy { $0.status != MappingStatus.unmapped }
     }
@@ -90,7 +88,10 @@ struct ColumnMapping {
     var complicationsColumn: Int?
     var outcomeColumn: Int?
     var notesColumn: Int?
-    
+    var categoryColumn: Int?
+    var diagnosisColumn: Int?
+    var roleColumn: Int?
+
     var procedureDelimiter: String = ";"
 }
 
@@ -142,35 +143,78 @@ class ProcedureLogImporter {
     ]
     
     // MARK: - File Parsing
-    
+
+    /// Detect whether the file is a summary/counts export (not individual cases)
+    func isSummaryExport(_ content: String) -> Bool {
+        let lower = content.lowercased()
+        return lower.contains("procedure counts") && lower.contains("category,procedure,count")
+    }
+
     func parseFile(at url: URL) -> (headers: [String], rows: [[String]])? {
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
             return nil
         }
-        
-        let ext = url.pathExtension.lowercased()
-        
-        switch ext {
-        case "csv":
-            return parseCSV(content)
-        case "xlsx", "xls":
-            // For Excel, treat as CSV for now
-            return parseCSV(content)
-        default:
-            return parseCSV(content)
+
+        // Detect delimiter (tab vs comma)
+        let delimiter = detectDelimiter(content)
+
+        // Parse all rows using the detected delimiter
+        let allRows = parseDelimited(content, delimiter: delimiter)
+
+        guard !allRows.isEmpty else {
+            return ([], [])
         }
+
+        // Find the actual header row (skip metadata lines)
+        let headerIndex = findHeaderRow(in: allRows)
+        let headers = allRows[headerIndex]
+        let dataRows = Array(allRows.dropFirst(headerIndex + 1))
+
+        return (headers, dataRows)
     }
-    
-    private func parseCSV(_ content: String) -> (headers: [String], rows: [[String]]) {
+
+    /// Detect whether the file uses tabs or commas as delimiter
+    private func detectDelimiter(_ content: String) -> Character {
+        let sampleLines = content.components(separatedBy: .newlines).prefix(10)
+        var tabCount = 0
+        var commaCount = 0
+        for line in sampleLines {
+            tabCount += line.filter { $0 == "\t" }.count
+            commaCount += line.filter { $0 == "," }.count
+        }
+        return tabCount > commaCount ? "\t" : ","
+    }
+
+    /// Find the row index that contains the actual column headers (skipping metadata)
+    private func findHeaderRow(in rows: [[String]]) -> Int {
+        let headerKeywords = [
+            "date", "procedure", "attending", "supervisor",
+            "facility", "hospital", "outcome", "timeframe",
+            "specialty", "diagnosis", "location", "access",
+            "complication", "notes", "participation", "role"
+        ]
+
+        for (index, row) in rows.enumerated() {
+            guard row.count >= 3 else { continue }
+            let matchCount = row.filter { field in
+                let lower = field.lowercased()
+                return headerKeywords.contains { lower.contains($0) }
+            }.count
+            if matchCount >= 2 { return index }
+        }
+        return 0 // fallback: first row
+    }
+
+    private func parseDelimited(_ content: String, delimiter: Character) -> [[String]] {
         var rows: [[String]] = []
         var currentRow: [String] = []
         var currentField = ""
         var inQuotes = false
-        
+
         for char in content {
             if char == "\"" {
                 inQuotes.toggle()
-            } else if char == "," && !inQuotes {
+            } else if char == delimiter && !inQuotes {
                 currentRow.append(currentField.trimmingCharacters(in: .whitespaces))
                 currentField = ""
             } else if (char == "\n" || char == "\r") && !inQuotes {
@@ -186,7 +230,7 @@ class ProcedureLogImporter {
                 currentField.append(char)
             }
         }
-        
+
         // Handle last field/row
         if !currentField.isEmpty || !currentRow.isEmpty {
             currentRow.append(currentField.trimmingCharacters(in: .whitespaces))
@@ -194,44 +238,82 @@ class ProcedureLogImporter {
                 rows.append(currentRow)
             }
         }
-        
-        guard !rows.isEmpty else {
-            return ([], [])
-        }
-        
-        let headers = rows[0]
-        let dataRows = Array(rows.dropFirst())
-        
-        return (headers, dataRows)
+
+        return rows
     }
     
     // MARK: - Column Detection
     
     func autoDetectColumns(headers: [String]) -> ColumnMapping {
         var mapping = ColumnMapping()
-        
+
         for (index, header) in headers.enumerated() {
-            let lower = header.lowercased()
-            
-            if lower.contains("date") || lower.contains("week") || lower.contains("time") {
+            let lower = header.lowercased().trimmingCharacters(in: .whitespaces)
+
+            // Date/Timeframe
+            if mapping.dateColumn == nil &&
+               (lower.contains("date") || lower.contains("timeframe") || lower == "week" || lower == "period") {
                 mapping.dateColumn = index
-            } else if lower.contains("attending") || lower.contains("supervisor") || lower.contains("faculty") {
+            }
+            // Attending/Supervisor
+            else if mapping.attendingColumn == nil &&
+                    (lower.contains("attending") || lower.contains("supervisor") || lower.contains("faculty") || lower.contains("preceptor")) {
                 mapping.attendingColumn = index
-            } else if lower.contains("facility") || lower.contains("hospital") || lower.contains("location") || lower.contains("site") {
-                mapping.facilityColumn = index
-            } else if lower.contains("procedure") || lower.contains("case") || lower.contains("operation") {
+            }
+            // Facility/Hospital
+            else if mapping.facilityColumn == nil &&
+                    (lower.contains("facility") || lower.contains("hospital") || lower.contains("institution") || lower.contains("center") || lower.contains("site")) {
+                // Avoid matching "access site"
+                if !lower.contains("access") {
+                    mapping.facilityColumn = index
+                }
+            }
+            // Procedures
+            else if mapping.proceduresColumn == nil &&
+                    (lower.contains("procedure") || lower.contains("operation")) {
                 mapping.proceduresColumn = index
-            } else if lower.contains("access") || lower.contains("approach") {
+            }
+            // Access Sites
+            else if mapping.accessSitesColumn == nil &&
+                    (lower.contains("access") || lower.contains("approach")) {
                 mapping.accessSitesColumn = index
-            } else if lower.contains("complication") || lower.contains("adverse") {
+            }
+            // Complications
+            else if mapping.complicationsColumn == nil &&
+                    (lower.contains("complication") || lower.contains("adverse")) {
                 mapping.complicationsColumn = index
-            } else if lower.contains("outcome") || lower.contains("result") || lower.contains("status") {
+            }
+            // Outcome
+            else if mapping.outcomeColumn == nil &&
+                    (lower.contains("outcome") || lower.contains("result") || lower.contains("status")) {
                 mapping.outcomeColumn = index
-            } else if lower.contains("note") || lower.contains("comment") {
+            }
+            // Category/Specialty
+            else if mapping.categoryColumn == nil &&
+                    (lower.contains("specialty") || lower.contains("category") || lower.contains("service")) {
+                mapping.categoryColumn = index
+            }
+            // Diagnosis
+            else if mapping.diagnosisColumn == nil &&
+                    (lower.contains("diagnosis") || lower.contains("indication") || lower == "dx") {
+                mapping.diagnosisColumn = index
+            }
+            // Operator Role/Participation
+            else if mapping.roleColumn == nil &&
+                    (lower.contains("participation") || lower.contains("role") || lower.contains("operator")) {
+                mapping.roleColumn = index
+            }
+            // Notes
+            else if mapping.notesColumn == nil &&
+                    (lower.contains("note") || lower.contains("comment")) {
                 mapping.notesColumn = index
             }
+            // Location (fallback to facility if no facility matched yet)
+            else if mapping.facilityColumn == nil && lower.contains("location") {
+                mapping.facilityColumn = index
+            }
         }
-        
+
         return mapping
     }
     
@@ -267,7 +349,18 @@ class ProcedureLogImporter {
             let accessStr = mapping.accessSitesColumn.flatMap { $0 < row.count ? row[$0] : nil } ?? ""
             let compsStr = mapping.complicationsColumn.flatMap { $0 < row.count ? row[$0] : nil } ?? ""
             let outcomeStr = mapping.outcomeColumn.flatMap { $0 < row.count ? row[$0] : nil }
-            let notes = mapping.notesColumn.flatMap { $0 < row.count ? row[$0] : nil }
+            let baseNotes = mapping.notesColumn.flatMap { $0 < row.count ? row[$0] : nil }
+            let category = mapping.categoryColumn.flatMap { $0 < row.count ? row[$0] : nil }
+            let diagnosis = mapping.diagnosisColumn.flatMap { $0 < row.count ? row[$0] : nil }
+            let role = mapping.roleColumn.flatMap { $0 < row.count ? row[$0] : nil }
+
+            // Build notes from base notes + diagnosis + role
+            var noteParts: [String] = []
+            if let baseNotes, !baseNotes.isEmpty { noteParts.append(baseNotes) }
+            if let diagnosis, !diagnosis.isEmpty { noteParts.append("Diagnosis: \(diagnosis)") }
+            if let role, !role.isEmpty { noteParts.append("Role: \(role)") }
+            if let category, !category.isEmpty { noteParts.append("Specialty: \(category)") }
+            let notes: String? = noteParts.isEmpty ? nil : noteParts.joined(separator: "\n")
             
             // Split procedures
             let procedures = proceduresStr
@@ -333,21 +426,62 @@ class ProcedureLogImporter {
     
     // MARK: - Date Parsing
     
-    private func parseDate(_ str: String) -> Date? {
-        let formatters: [DateFormatter] = [
-            { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f }(),
-            { let f = DateFormatter(); f.dateFormat = "MM/dd/yyyy"; return f }(),
-            { let f = DateFormatter(); f.dateFormat = "M/d/yyyy"; return f }(),
-            { let f = DateFormatter(); f.dateFormat = "MM-dd-yyyy"; return f }(),
-            { let f = DateFormatter(); f.dateFormat = "dd/MM/yyyy"; return f }(),
+    private static let dateFormatters: [DateFormatter] = {
+        let formats = [
+            "yyyy-MM-dd",
+            "MM/dd/yyyy",
+            "M/d/yyyy",
+            "MM-dd-yyyy",
+            "dd/MM/yyyy",
+            "MMM d, yyyy",
+            "MMM dd, yyyy",
+            "MMMM d, yyyy",
+            "MMMM dd, yyyy",
+            "M/d/yy",
+            "MM/dd/yy",
         ]
-        
-        for formatter in formatters {
-            if let date = formatter.date(from: str) {
+        return formats.map { fmt in
+            let f = DateFormatter()
+            f.dateFormat = fmt
+            f.locale = Locale(identifier: "en_US_POSIX")
+            return f
+        }
+    }()
+
+    private func parseDate(_ str: String) -> Date? {
+        let trimmed = str.trimmingCharacters(in: .whitespaces)
+
+        for formatter in Self.dateFormatters {
+            if let date = formatter.date(from: trimmed) {
                 return date
             }
         }
-        
+
+        // Try week range format: "Jan 19–25, 2026" or "Jan 19-25, 2026"
+        return parseDateRange(trimmed)
+    }
+
+    /// Parse week range format like "Jan 19–25, 2026" by extracting the start date
+    private func parseDateRange(_ str: String) -> Date? {
+        // Replace en-dash/em-dash with hyphen
+        let cleaned = str.replacingOccurrences(of: "\u{2013}", with: "-")
+                         .replacingOccurrences(of: "\u{2014}", with: "-")
+
+        // Pattern: "Mon DD-DD, YYYY" → extract "Mon DD, YYYY"
+        guard let dashRange = cleaned.range(of: "-"),
+              let commaRange = cleaned.range(of: ",") else {
+            return nil
+        }
+
+        let monthDay = cleaned[cleaned.startIndex..<dashRange.lowerBound] // "Jan 19"
+        let year = cleaned[commaRange.lowerBound...]                      // ", 2026"
+        let startDateStr = String(monthDay) + String(year)               // "Jan 19, 2026"
+
+        for formatter in Self.dateFormatters {
+            if let date = formatter.date(from: startDateStr) {
+                return date
+            }
+        }
         return nil
     }
     
@@ -554,18 +688,16 @@ class ProcedureLogImporter {
         var createdCount = 0
         
         for imported in importedCases {
-            guard imported.isFullyMapped,
-                  let attendingId = imported.mappedAttendingId,
-                  let facilityId = imported.mappedFacilityId else {
+            guard imported.isFullyMapped else {
                 continue
             }
-            
+
             // Use individual mode initializer
             let caseEntry = CaseEntry(
                 ownerId: fellowId,
-                attendingId: attendingId,
+                attendingId: imported.mappedAttendingId,
                 weekBucket: imported.weekBucket,
-                facilityId: facilityId
+                facilityId: imported.mappedFacilityId
             )
             
             // Set procedures
@@ -579,7 +711,12 @@ class ProcedureLogImporter {
             
             // Set outcome
             caseEntry.outcome = imported.mappedOutcome
-            
+
+            // Set notes
+            if let notes = imported.notes, !notes.isEmpty {
+                caseEntry.notes = notes
+            }
+
             // Set program if provided
             if let programId = programId {
                 caseEntry.programId = programId

@@ -65,10 +65,11 @@ struct MyImageLibraryView: View {
             result = result.filter { $0.isSharedWithFellowship }
         }
 
-        // Apply search filter
+        // Apply search filter (title and labels are searchable)
         if !searchText.isEmpty {
             let lowercasedSearch = searchText.lowercased()
             result = result.filter { media in
+                media.title.lowercased().contains(lowercasedSearch) ||
                 media.searchTerms.contains { $0.lowercased().contains(lowercasedSearch) } ||
                 media.fileName.lowercased().contains(lowercasedSearch)
             }
@@ -190,7 +191,7 @@ struct MyImageLibraryView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(ProcedusTheme.textTertiary)
-                TextField("Search by label...", text: $searchText)
+                TextField("Search by title or label...", text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button {
@@ -414,6 +415,10 @@ struct CaseMediaGroupView: View {
 
     private var caseDate: String {
         guard let entry = caseEntry else { return "" }
+        let weekLabel = entry.weekBucket.toWeekTimeframeLabel()
+        if weekLabel != entry.weekBucket {
+            return weekLabel
+        }
         return entry.createdAt.formatted(date: .abbreviated, time: .omitted)
     }
 
@@ -481,55 +486,66 @@ struct MediaGridThumbnail: View {
     @State private var thumbnail: UIImage?
 
     var body: some View {
-        ZStack {
-            if let thumb = thumbnail {
-                Image(uiImage: thumb)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 80, height: 80)
-                    .clipped()
-                    .cornerRadius(8)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 80, height: 80)
-                    .cornerRadius(8)
-                    .overlay(
-                        Image(systemName: media.mediaType.systemImage)
-                            .foregroundStyle(ProcedusTheme.textSecondary)
-                    )
-            }
+        VStack(spacing: 4) {
+            ZStack {
+                if let thumb = thumbnail {
+                    Image(uiImage: thumb)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(8)
+                        .overlay(
+                            Image(systemName: media.mediaType.systemImage)
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                        )
+                }
 
-            // Video indicator
-            if media.mediaType == .video {
-                VStack {
-                    Spacer()
-                    HStack {
+                // Video indicator
+                if media.mediaType == .video {
+                    VStack {
                         Spacer()
-                        Image(systemName: "play.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .shadow(radius: 2)
-                            .padding(4)
+                        HStack {
+                            Spacer()
+                            Image(systemName: "play.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .shadow(radius: 2)
+                                .padding(4)
+                        }
+                    }
+                }
+
+                // Shared indicator
+                if media.isSharedWithFellowship {
+                    VStack {
+                        HStack {
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.white)
+                                .padding(3)
+                                .background(ProcedusTheme.primary)
+                                .cornerRadius(4)
+                                .padding(4)
+                            Spacer()
+                        }
+                        Spacer()
                     }
                 }
             }
 
-            // Shared indicator
-            if media.isSharedWithFellowship {
-                VStack {
-                    HStack {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.white)
-                            .padding(3)
-                            .background(ProcedusTheme.primary)
-                            .cornerRadius(4)
-                            .padding(4)
-                        Spacer()
-                    }
-                    Spacer()
-                }
+            // Title under thumbnail
+            if !media.title.isEmpty {
+                Text(media.title)
+                    .font(.system(size: 10))
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                    .lineLimit(1)
+                    .frame(width: 80)
             }
         }
         .onAppear {
@@ -560,6 +576,7 @@ struct MediaFullDetailView: View {
     @Query private var allCases: [CaseEntry]
     @Query private var allComments: [MediaComment]
     @Query private var allAttendings: [Attending]
+    @Query private var allUsers: [User]
 
     @State private var fullImage: UIImage?
     @State private var player: AVPlayer?
@@ -609,13 +626,14 @@ struct MediaFullDetailView: View {
         media.ownerId == currentUserId
     }
 
-    /// Get case date display
+    /// Get case date display — show the week range the fellow input, not the exact date
     private var caseDateText: String {
-        // First try caseDate from media (which comes from weekBucket), then fall back to case createdAt
-        if let caseDate = media.caseDate {
-            return caseDate.formatted(date: .abbreviated, time: .omitted)
-        }
         guard let caseEntry = linkedCase else { return "Unknown" }
+        let weekLabel = caseEntry.weekBucket.toWeekTimeframeLabel()
+        // If weekBucket conversion succeeds (contains "–"), use it; otherwise fall back
+        if weekLabel != caseEntry.weekBucket {
+            return weekLabel
+        }
         return caseEntry.createdAt.formatted(date: .abbreviated, time: .omitted)
     }
 
@@ -624,6 +642,13 @@ struct MediaFullDetailView: View {
         guard let caseEntry = linkedCase,
               let attendingId = caseEntry.attendingId else { return nil }
         return allAttendings.first { $0.id == attendingId }?.fullName
+    }
+
+    /// Get fellow name for the case
+    private var fellowName: String? {
+        guard let caseEntry = linkedCase,
+              let fellowId = caseEntry.fellowId else { return nil }
+        return allUsers.first { $0.id == fellowId }?.fullName
     }
 
     /// Suggested labels based on procedure category (determined by procedure ID prefix)
@@ -698,6 +723,15 @@ struct MediaFullDetailView: View {
                             .frame(height: 200)
                     }
 
+                    // Title
+                    if !media.title.isEmpty {
+                        Text(media.title)
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     // Labels section (only for fellows)
                     if canEditLabels {
                         labelsSection
@@ -705,18 +739,13 @@ struct MediaFullDetailView: View {
                         viewOnlyLabelsSection
                     }
 
-                    // Collapsible Info section
-                    collapsibleInfoSection
-
                     // Comments section (visible in Teaching Files or when there are comments)
                     if isTeachingFiles || !mediaComments.isEmpty {
                         commentsSection
                     }
 
-                    // Case link
-                    if showCaseLink, let caseEntry = linkedCase {
-                        caseLinkSection(caseEntry)
-                    }
+                    // Collapsible Info section (includes linked case)
+                    collapsibleInfoSection
                 }
                 .padding()
             }
@@ -942,6 +971,95 @@ struct MediaFullDetailView: View {
                                 .foregroundStyle(.green)
                         }
                     }
+
+                    // Cloud Upload Status
+                    HStack {
+                        Text("Cloud Status")
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                        Spacer()
+                        Label(media.uploadStatus.displayName, systemImage: media.uploadStatus.iconName)
+                            .font(.subheadline)
+                            .foregroundStyle(media.uploadStatus.color)
+                    }
+
+                    if media.uploadStatus == .failed, let errorMsg = media.lastUploadError {
+                        HStack(alignment: .top) {
+                            Text("Error")
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                            Spacer()
+                            Text(errorMsg)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    // Linked Case info (merged into Info section)
+                    if showCaseLink, let caseEntry = linkedCase {
+                        Divider()
+                            .padding(.vertical, 4)
+
+                        Text("Linked Case")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                                .font(.caption)
+                            Text(caseDateText)
+                                .font(.subheadline)
+                            Spacer()
+                        }
+
+                        if let fellow = fellowName {
+                            HStack {
+                                Image(systemName: "person.fill")
+                                    .foregroundStyle(ProcedusTheme.textSecondary)
+                                    .font(.caption)
+                                Text(fellow)
+                                    .font(.subheadline)
+                                Text("(Fellow)")
+                                    .font(.caption)
+                                    .foregroundStyle(ProcedusTheme.textTertiary)
+                                Spacer()
+                            }
+                        }
+
+                        if let attending = attendingName {
+                            HStack {
+                                Image(systemName: "person.fill")
+                                    .foregroundStyle(ProcedusTheme.textSecondary)
+                                    .font(.caption)
+                                Text(attending)
+                                    .font(.subheadline)
+                                Text("(Attending)")
+                                    .font(.caption)
+                                    .foregroundStyle(ProcedusTheme.textTertiary)
+                                Spacer()
+                            }
+                        }
+
+                        if !caseEntry.procedureTagIds.isEmpty {
+                            FlowLayout(spacing: 6) {
+                                ForEach(caseEntry.procedureTagIds.prefix(4), id: \.self) { procId in
+                                    if let procedure = SpecialtyPackCatalog.findProcedure(by: procId) {
+                                        ProcedureBubble(procedure: procedure)
+                                    }
+                                }
+                                if caseEntry.procedureTagIds.count > 4 {
+                                    Text("+\(caseEntry.procedureTagIds.count - 4)")
+                                        .font(.caption2)
+                                        .foregroundStyle(ProcedusTheme.textSecondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color(UIColor.tertiarySystemFill))
+                                        .cornerRadius(8)
+                                }
+                            }
+                        }
+                    }
                 }
                 .padding([.horizontal, .bottom])
             }
@@ -996,61 +1114,6 @@ struct MediaFullDetailView: View {
         .cornerRadius(12)
     }
 
-    // MARK: - Linked Case Section
-
-    private func caseLinkSection(_ caseEntry: CaseEntry) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Linked Case")
-                .font(.subheadline)
-                .fontWeight(.medium)
-
-            // Date range
-            HStack {
-                Image(systemName: "calendar")
-                    .foregroundStyle(ProcedusTheme.textSecondary)
-                    .font(.caption)
-                Text(caseDateText)
-                    .font(.subheadline)
-                Spacer()
-            }
-
-            // Attending
-            if let attending = attendingName {
-                HStack {
-                    Image(systemName: "person.fill")
-                        .foregroundStyle(ProcedusTheme.textSecondary)
-                        .font(.caption)
-                    Text(attending)
-                        .font(.subheadline)
-                    Spacer()
-                }
-            }
-
-            // Procedure bubbles
-            if !caseEntry.procedureTagIds.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(caseEntry.procedureTagIds.prefix(4), id: \.self) { procId in
-                        if let procedure = SpecialtyPackCatalog.findProcedure(by: procId) {
-                            ProcedureBubble(procedure: procedure)
-                        }
-                    }
-                    if caseEntry.procedureTagIds.count > 4 {
-                        Text("+\(caseEntry.procedureTagIds.count - 4)")
-                            .font(.caption2)
-                            .foregroundStyle(ProcedusTheme.textSecondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Color(UIColor.tertiarySystemFill))
-                            .cornerRadius(8)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
-    }
-
     // MARK: - Helper Methods
 
     private func loadImage() {
@@ -1078,20 +1141,34 @@ struct MediaFullDetailView: View {
         modelContext.insert(comment)
         try? modelContext.save()
 
-        // Send notification to uploader if not self
+        // Send notification to media owner if not self
         if media.ownerId != currentUserId {
-            sendCommentNotification()
+            sendCommentNotification(toUserId: media.ownerId, commentText: text, isOwnerNotification: true)
+        }
+
+        // Send notification to all previous unique commenters (excluding self and media owner)
+        let previousCommenters = Set(
+            mediaComments
+                .map { $0.authorId }
+                .filter { $0 != currentUserId && $0 != media.ownerId }
+        )
+        for commenterId in previousCommenters {
+            sendCommentNotification(toUserId: commenterId, commentText: text, isOwnerNotification: false)
         }
 
         newCommentText = ""
     }
 
-    private func sendCommentNotification() {
+    private func sendCommentNotification(toUserId: UUID, commentText: String, isOwnerNotification: Bool) {
+        let title = isOwnerNotification ? "Comment on Your Teaching File" : "New Reply on Teaching File"
+        let message = isOwnerNotification
+            ? "\(currentUserName) commented on your case:\n\(commentText)"
+            : "\(currentUserName) replied to a discussion you joined:\n\(commentText)"
         let notification = Notification(
-            userId: media.ownerId,
-            title: "New Comment",
-            message: "\(currentUserName) commented on your Teaching File image",
-            notificationType: "teachingFileComment"
+            userId: toUserId,
+            title: title,
+            message: message,
+            notificationType: NotificationType.teachingFileComment.rawValue
         )
         notification.senderId = currentUserId
         notification.senderName = currentUserName
@@ -1126,26 +1203,24 @@ struct CommentBubble: View {
 
     var body: some View {
         VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-            if !isOwn {
-                HStack(spacing: 4) {
-                    Text(comment.authorName)
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                    if comment.authorRole == .attending {
-                        Text("• Attending")
-                            .font(.caption2)
-                            .foregroundStyle(ProcedusTheme.textTertiary)
-                    }
-                }
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            }
-
             Text(comment.text)
                 .font(.subheadline)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(isOwn ? ProcedusTheme.primary.opacity(0.15) : Color(UIColor.secondarySystemFill))
                 .cornerRadius(12)
+
+            HStack(spacing: 4) {
+                Text(comment.authorName)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                if comment.authorRole == .attending {
+                    Text("• Attending")
+                        .font(.caption2)
+                        .foregroundStyle(ProcedusTheme.textTertiary)
+                }
+            }
+            .foregroundStyle(ProcedusTheme.textSecondary)
 
             Text(comment.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption2)

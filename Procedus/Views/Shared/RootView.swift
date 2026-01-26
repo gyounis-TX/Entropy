@@ -164,6 +164,7 @@ struct FellowContentWrapper<Content: View>: View {
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
+    @Query private var users: [User]
 
     @State private var showingSettings = false
     @State private var showingNotifications = false
@@ -269,6 +270,26 @@ struct FellowContentWrapper<Content: View>: View {
         #if DEBUG
         .sheet(isPresented: $showingDevRoleSwitcher) {
             DevRoleSwitcherSheet()
+        }
+        .onAppear {
+            // Auto-select first fellow if dev mode is active but no valid fellow selected
+            if appState.isDevMode && appState.userRole == .fellow {
+                let availableFellows = users.filter { $0.role == .fellow && !$0.isArchived && !$0.hasGraduated }
+                if let selectedId = appState.selectedFellowId {
+                    // Validate selected fellow still exists in SwiftData
+                    if !availableFellows.contains(where: { $0.id == selectedId }),
+                       let firstFellow = availableFellows.first {
+                        appState.selectedFellowId = firstFellow.id
+                        appState.currentUser = firstFellow
+                    } else if appState.currentUser == nil,
+                              let fellow = availableFellows.first(where: { $0.id == selectedId }) {
+                        appState.currentUser = fellow
+                    }
+                } else if let firstFellow = availableFellows.first {
+                    appState.selectedFellowId = firstFellow.id
+                    appState.currentUser = firstFellow
+                }
+            }
         }
         #endif
     }
@@ -879,17 +900,19 @@ struct InstitutionalSetupView: View {
                 Section("Dev Mode") {
                     Button("Sign in as Fellow") {
                         appState.devSignIn(role: .fellow)
-                        appState.hasCompletedOnboarding = true
+                        // Set fellow identity from available SwiftData users
+                        if let firstFellow = users.first(where: { $0.role == .fellow && !$0.isArchived && !$0.hasGraduated }) {
+                            appState.selectedFellowId = firstFellow.id
+                            appState.currentUser = firstFellow
+                        }
                         dismiss()
                     }
                     Button("Sign in as Attending") {
                         appState.devSignIn(role: .attending)
-                        appState.hasCompletedOnboarding = true
                         dismiss()
                     }
                     Button("Sign in as Admin") {
                         appState.devSignIn(role: .admin)
-                        appState.hasCompletedOnboarding = true
                         dismiss()
                     }
                 }

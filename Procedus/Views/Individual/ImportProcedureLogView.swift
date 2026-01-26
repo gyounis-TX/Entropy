@@ -220,21 +220,68 @@ struct ImportProcedureLogView: View {
     private var mapColumnsView: some View {
         Form {
             Section {
-                Text("We found \(dataRows.count) rows of data. Please confirm which columns contain which information.")
-                    .font(.subheadline)
-                    .foregroundStyle(ProcedusTheme.textSecondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Found \(dataRows.count) rows across \(headers.count) columns")
+                        .font(.subheadline)
+                        .foregroundStyle(ProcedusTheme.textSecondary)
+                    if let url = selectedFileURL {
+                        Text(url.lastPathComponent)
+                            .font(.caption)
+                            .foregroundStyle(ProcedusTheme.textTertiary)
+                    }
+                }
             }
-            
-            Section("Column Mapping") {
-                columnPicker(title: "Date/Week", selection: $columnMapping.dateColumn, required: false)
-                columnPicker(title: "Attending", selection: $columnMapping.attendingColumn, required: true)
-                columnPicker(title: "Facility/Hospital", selection: $columnMapping.facilityColumn, required: true)
+
+            // Data preview
+            Section("Data Preview") {
+                ScrollView(.horizontal, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Headers row
+                        HStack(spacing: 12) {
+                            ForEach(0..<headers.count, id: \.self) { i in
+                                Text(headers[i])
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .frame(minWidth: 80, alignment: .leading)
+                            }
+                        }
+                        Divider()
+                        // First 3 data rows
+                        ForEach(0..<min(3, dataRows.count), id: \.self) { rowIdx in
+                            HStack(spacing: 12) {
+                                ForEach(0..<headers.count, id: \.self) { colIdx in
+                                    Text(colIdx < dataRows[rowIdx].count ? dataRows[rowIdx][colIdx] : "")
+                                        .font(.caption2)
+                                        .frame(minWidth: 80, alignment: .leading)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Section("Required") {
                 columnPicker(title: "Procedures", selection: $columnMapping.proceduresColumn, required: true)
+            }
+
+            Section("Recommended") {
+                columnPicker(title: "Date/Week", selection: $columnMapping.dateColumn, required: false)
+                columnPicker(title: "Attending/Supervisor", selection: $columnMapping.attendingColumn, required: false)
+                columnPicker(title: "Facility/Hospital", selection: $columnMapping.facilityColumn, required: false)
+            }
+
+            Section("Optional") {
                 columnPicker(title: "Access Sites", selection: $columnMapping.accessSitesColumn, required: false)
                 columnPicker(title: "Complications", selection: $columnMapping.complicationsColumn, required: false)
                 columnPicker(title: "Outcome", selection: $columnMapping.outcomeColumn, required: false)
+                columnPicker(title: "Category/Specialty", selection: $columnMapping.categoryColumn, required: false)
+                columnPicker(title: "Diagnosis", selection: $columnMapping.diagnosisColumn, required: false)
+                columnPicker(title: "Operator Role", selection: $columnMapping.roleColumn, required: false)
+                columnPicker(title: "Notes", selection: $columnMapping.notesColumn, required: false)
             }
-            
+
             Section("Procedure Delimiter") {
                 Picker("Procedures separated by", selection: $columnMapping.procedureDelimiter) {
                     Text("Semicolon (;)").tag(";")
@@ -243,7 +290,7 @@ struct ImportProcedureLogView: View {
                     Text("Newline").tag("\n")
                 }
             }
-            
+
             Section {
                 Button {
                     processImport()
@@ -279,8 +326,6 @@ struct ImportProcedureLogView: View {
     }
     
     private var isColumnMappingValid: Bool {
-        columnMapping.attendingColumn != nil &&
-        columnMapping.facilityColumn != nil &&
         columnMapping.proceduresColumn != nil
     }
     
@@ -493,18 +538,26 @@ struct ImportProcedureLogView: View {
     
     private func parseSelectedFile() {
         guard let url = selectedFileURL else { return }
-        
+
         isProcessing = true
-        
+
         // Need to start accessing security-scoped resource
         guard url.startAccessingSecurityScopedResource() else {
             errorMessage = "Cannot access the selected file"
             isProcessing = false
             return
         }
-        
+
         defer { url.stopAccessingSecurityScopedResource() }
-        
+
+        // Check for summary export before parsing
+        if let content = try? String(contentsOf: url, encoding: .utf8),
+           ProcedureLogImporter.shared.isSummaryExport(content) {
+            errorMessage = "This file contains procedure counts/summary data, not individual case entries. Please export the full Procedure Log instead."
+            isProcessing = false
+            return
+        }
+
         guard let parseResult = ProcedureLogImporter.shared.parseFile(at: url) else {
             errorMessage = "Failed to parse file"
             isProcessing = false

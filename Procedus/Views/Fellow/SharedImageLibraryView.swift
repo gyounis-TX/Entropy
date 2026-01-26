@@ -5,6 +5,13 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Sort Mode
+
+enum TeachingFilesSortMode: String, CaseIterable {
+    case byDateUploaded = "Date Uploaded"
+    case byFellow = "Fellow"
+}
+
 // MARK: - Shared Image Library Content (Embeddable)
 // This view can be embedded in other views (like MyImageLibraryView toggle)
 
@@ -14,13 +21,28 @@ struct SharedImageLibraryContent: View {
 
     @Query(sort: \CaseMedia.createdAt, order: .reverse) private var allMedia: [CaseMedia]
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
+    @Query private var allComments: [MediaComment]
 
     @State private var searchText = ""
     @State private var selectedMedia: CaseMedia?
     @State private var filterOption: SharedMediaFilterOption = .all
+    @State private var sortMode: TeachingFilesSortMode = .byDateUploaded
 
     private var sharedMedia: [CaseMedia] {
         allMedia.filter { $0.isSharedWithFellowship }
+    }
+
+    /// Count of discussion comments (excludes submitter's initial comment)
+    private func discussionCommentCount(for media: CaseMedia) -> Int {
+        let comments = allComments
+            .filter { $0.mediaId == media.id && !$0.isDeleted }
+            .sorted { $0.createdAt < $1.createdAt }
+        guard !comments.isEmpty else { return 0 }
+        var count = comments.count
+        if let first = comments.first, first.authorId == media.ownerId {
+            count -= 1
+        }
+        return count
     }
 
     private var filteredMedia: [CaseMedia] {
@@ -34,6 +56,7 @@ struct SharedImageLibraryContent: View {
         if !searchText.isEmpty {
             let lowercasedSearch = searchText.lowercased()
             result = result.filter { media in
+                media.title.lowercased().contains(lowercasedSearch) ||
                 media.searchTerms.contains { $0.lowercased().contains(lowercasedSearch) } ||
                 media.ownerName.lowercased().contains(lowercasedSearch) ||
                 media.fileName.lowercased().contains(lowercasedSearch)
@@ -51,7 +74,9 @@ struct SharedImageLibraryContent: View {
             let myId = currentUserId
             if lhs.ownerId == myId { return true }
             if rhs.ownerId == myId { return false }
-            return lhs.ownerName < rhs.ownerName
+            let lhsLatest = lhs.media.first?.createdAt ?? .distantPast
+            let rhsLatest = rhs.media.first?.createdAt ?? .distantPast
+            return lhsLatest > rhsLatest
         }
     }
 
@@ -94,7 +119,7 @@ struct SharedImageLibraryContent: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(ProcedusTheme.textTertiary)
-                TextField("Search by label or contributor...", text: $searchText)
+                TextField("Search by title, label, or contributor...", text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
@@ -140,6 +165,13 @@ struct SharedImageLibraryContent: View {
                     }
                 }
             }
+
+            Picker("Sort", selection: $sortMode) {
+                ForEach(TeachingFilesSortMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
         }
         .padding()
     }
@@ -184,17 +216,32 @@ struct SharedImageLibraryContent: View {
         .padding()
     }
 
+    private let gridColumns = [GridItem(.adaptive(minimum: 80), spacing: 8)]
+
     private var mediaList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 statsHeader
-                ForEach(groupedByOwner, id: \.ownerId) { group in
-                    ContributorMediaGroupView(
-                        ownerName: group.ownerName,
-                        isCurrentUser: group.ownerId == currentUserId,
-                        media: group.media,
-                        onMediaTap: { selectedMedia = $0 }
-                    )
+
+                switch sortMode {
+                case .byDateUploaded:
+                    LazyVGrid(columns: gridColumns, spacing: 8) {
+                        ForEach(filteredMedia) { media in
+                            SharedMediaThumbnail(media: media, commentCount: discussionCommentCount(for: media))
+                                .onTapGesture { selectedMedia = media }
+                        }
+                    }
+
+                case .byFellow:
+                    ForEach(groupedByOwner, id: \.ownerId) { group in
+                        ContributorMediaGroupView(
+                            ownerName: group.ownerName,
+                            isCurrentUser: group.ownerId == currentUserId,
+                            media: group.media,
+                            onMediaTap: { selectedMedia = $0 },
+                            commentCountFor: discussionCommentCount
+                        )
+                    }
                 }
             }
             .padding()
@@ -256,17 +303,32 @@ struct SharedImageLibraryView: View {
     @Query(sort: \CaseMedia.createdAt, order: .reverse) private var allMedia: [CaseMedia]
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(sort: \Notification.createdAt, order: .reverse) private var allNotifications: [Notification]
+    @Query private var allComments: [MediaComment]
 
     @State private var searchText = ""
     @State private var selectedMedia: CaseMedia?
     @State private var filterOption: SharedMediaFilterOption = .all
     @State private var showingNotifications = false
+    @State private var sortMode: TeachingFilesSortMode = .byDateUploaded
 
     // MARK: - Computed Properties
 
     /// All media shared with the fellowship (Teaching Files)
     private var sharedMedia: [CaseMedia] {
         allMedia.filter { $0.isSharedWithFellowship }
+    }
+
+    /// Count of discussion comments (excludes submitter's initial comment)
+    private func discussionCommentCount(for media: CaseMedia) -> Int {
+        let comments = allComments
+            .filter { $0.mediaId == media.id && !$0.isDeleted }
+            .sorted { $0.createdAt < $1.createdAt }
+        guard !comments.isEmpty else { return 0 }
+        var count = comments.count
+        if let first = comments.first, first.authorId == media.ownerId {
+            count -= 1
+        }
+        return count
     }
 
     private var filteredMedia: [CaseMedia] {
@@ -289,6 +351,7 @@ struct SharedImageLibraryView: View {
         if !searchText.isEmpty {
             let lowercasedSearch = searchText.lowercased()
             result = result.filter { media in
+                media.title.lowercased().contains(lowercasedSearch) ||
                 media.searchTerms.contains { $0.lowercased().contains(lowercasedSearch) } ||
                 media.ownerName.lowercased().contains(lowercasedSearch) ||
                 media.fileName.lowercased().contains(lowercasedSearch)
@@ -305,11 +368,12 @@ struct SharedImageLibraryView: View {
             let ownerName = mediaItems.first?.ownerName ?? "Unknown"
             return (ownerName, ownerId, mediaItems.sorted { $0.createdAt > $1.createdAt })
         }.sorted { lhs, rhs in
-            // Put current user first, then alphabetical
             let myId = currentUserId
             if lhs.ownerId == myId { return true }
             if rhs.ownerId == myId { return false }
-            return lhs.ownerName < rhs.ownerName
+            let lhsLatest = lhs.media.first?.createdAt ?? .distantPast
+            let rhsLatest = rhs.media.first?.createdAt ?? .distantPast
+            return lhsLatest > rhsLatest
         }
     }
 
@@ -389,7 +453,7 @@ struct SharedImageLibraryView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(ProcedusTheme.textTertiary)
-                TextField("Search by label or contributor...", text: $searchText)
+                TextField("Search by title, label, or contributor...", text: $searchText)
                     .textFieldStyle(.plain)
                 if !searchText.isEmpty {
                     Button {
@@ -443,6 +507,13 @@ struct SharedImageLibraryView: View {
                     }
                 }
             }
+
+            Picker("Sort", selection: $sortMode) {
+                ForEach(TeachingFilesSortMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
         }
         .padding()
     }
@@ -512,22 +583,34 @@ struct SharedImageLibraryView: View {
 
     // MARK: - Media List
 
+    private let gridColumns = [GridItem(.adaptive(minimum: 80), spacing: 8)]
+
     private var mediaList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                // Stats header
                 statsHeader
 
-                // Grouped by contributor
-                ForEach(groupedByOwner, id: \.ownerId) { group in
-                    ContributorMediaGroupView(
-                        ownerName: group.ownerName,
-                        isCurrentUser: group.ownerId == currentUserId,
-                        media: group.media,
-                        onMediaTap: { media in
-                            selectedMedia = media
+                switch sortMode {
+                case .byDateUploaded:
+                    LazyVGrid(columns: gridColumns, spacing: 8) {
+                        ForEach(filteredMedia) { media in
+                            SharedMediaThumbnail(media: media, commentCount: discussionCommentCount(for: media))
+                                .onTapGesture { selectedMedia = media }
                         }
-                    )
+                    }
+
+                case .byFellow:
+                    ForEach(groupedByOwner, id: \.ownerId) { group in
+                        ContributorMediaGroupView(
+                            ownerName: group.ownerName,
+                            isCurrentUser: group.ownerId == currentUserId,
+                            media: group.media,
+                            onMediaTap: { media in
+                                selectedMedia = media
+                            },
+                            commentCountFor: discussionCommentCount
+                        )
+                    }
                 }
             }
             .padding()
@@ -613,6 +696,7 @@ struct ContributorMediaGroupView: View {
     let isCurrentUser: Bool
     let media: [CaseMedia]
     let onMediaTap: (CaseMedia) -> Void
+    var commentCountFor: (CaseMedia) -> Int = { _ in 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -645,7 +729,7 @@ struct ContributorMediaGroupView: View {
             // Media grid
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 8) {
                 ForEach(media) { item in
-                    SharedMediaThumbnail(media: item)
+                    SharedMediaThumbnail(media: item, commentCount: commentCountFor(item))
                         .onTapGesture {
                             onMediaTap(item)
                         }
@@ -662,59 +746,71 @@ struct ContributorMediaGroupView: View {
 
 struct SharedMediaThumbnail: View {
     let media: CaseMedia
+    var commentCount: Int = 0
 
     @State private var thumbnail: UIImage?
 
     var body: some View {
-        ZStack {
-            if let thumb = thumbnail {
-                Image(uiImage: thumb)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 80, height: 80)
-                    .clipped()
-                    .cornerRadius(8)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 80, height: 80)
-                    .cornerRadius(8)
-                    .overlay(
-                        Image(systemName: media.mediaType.systemImage)
-                            .foregroundStyle(ProcedusTheme.textSecondary)
-                    )
-            }
+        VStack(spacing: 4) {
+            ZStack {
+                if let thumb = thumbnail {
+                    Image(uiImage: thumb)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(8)
+                        .overlay(
+                            Image(systemName: media.mediaType.systemImage)
+                                .foregroundStyle(ProcedusTheme.textSecondary)
+                        )
+                }
 
-            // Video indicator
-            if media.mediaType == .video {
-                VStack {
-                    Spacer()
-                    HStack {
+                // Video indicator
+                if media.mediaType == .video {
+                    VStack {
                         Spacer()
-                        Image(systemName: "play.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .shadow(radius: 2)
-                            .padding(4)
+                        HStack {
+                            Spacer()
+                            Image(systemName: "play.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .shadow(radius: 2)
+                                .padding(4)
+                        }
+                    }
+                }
+
+                // Comment count indicator (top-left)
+                if commentCount > 0 {
+                    VStack {
+                        HStack {
+                            Text("\(commentCount)")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(3)
+                                .background(ProcedusTheme.primary)
+                                .cornerRadius(4)
+                                .padding(4)
+                            Spacer()
+                        }
+                        Spacer()
                     }
                 }
             }
 
-            // Labels indicator
-            if !media.searchTerms.isEmpty {
-                VStack {
-                    HStack {
-                        Text("\(media.searchTerms.count)")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(3)
-                            .background(ProcedusTheme.primary)
-                            .cornerRadius(4)
-                            .padding(4)
-                        Spacer()
-                    }
-                    Spacer()
-                }
+            // Title under thumbnail
+            if !media.title.isEmpty {
+                Text(media.title)
+                    .font(.system(size: 10))
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+                    .lineLimit(1)
+                    .frame(width: 80)
             }
         }
         .onAppear {
@@ -826,6 +922,7 @@ struct TeachingFilesNotificationsSheet: View {
 
 private struct TeachingFileNotificationRow: View {
     let notification: Notification
+    @State private var isExpanded = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -843,7 +940,15 @@ private struct TeachingFileNotificationRow: View {
                 Text(notification.message)
                     .font(.caption)
                     .foregroundStyle(ProcedusTheme.textSecondary)
-                    .lineLimit(2)
+                    .lineLimit(isExpanded ? nil : 2)
+                    .onTapGesture { withAnimation { isExpanded.toggle() } }
+
+                if !isExpanded && notification.message.count > 80 {
+                    Text("Tap to read more")
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                        .onTapGesture { withAnimation { isExpanded.toggle() } }
+                }
 
                 Text(notification.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption2)

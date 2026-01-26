@@ -15,6 +15,8 @@ struct PHIDetectionReviewView: View {
     @State private var manualRedactionRects: [CGRect] = []
     @State private var showingSkipAttestation = false
     @State private var skipAttestationConfirmed = false
+    @State private var showingAutoRedactionPreview = false
+    @State private var autoRedactedImage: UIImage?
 
     init(
         originalImage: UIImage,
@@ -47,7 +49,7 @@ struct PHIDetectionReviewView: View {
                                 .font(.subheadline)
                                 .fontWeight(.medium)
 
-                            Text("Please crop or manually redact any areas containing patient information before saving.")
+                            Text("You can accept automatic redaction, crop, draw manual redaction boxes, or proceed without editing.")
                                 .font(.caption)
                                 .foregroundStyle(ProcedusTheme.textSecondary)
                                 .multilineTextAlignment(.center)
@@ -91,6 +93,9 @@ struct PHIDetectionReviewView: View {
             .sheet(isPresented: $showingSkipAttestation) {
                 skipAttestationSheet
             }
+            .sheet(isPresented: $showingAutoRedactionPreview) {
+                autoRedactionPreviewSheet
+            }
         }
     }
 
@@ -106,7 +111,7 @@ struct PHIDetectionReviewView: View {
                 Text("Text Detected")
                     .font(.headline)
                     .foregroundStyle(.white)
-                Text("This image may contain PHI. Please crop or manually redact any sensitive information.")
+                Text("This image may contain PHI. Choose how to handle detected text below.")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.9))
             }
@@ -119,8 +124,15 @@ struct PHIDetectionReviewView: View {
 
     // MARK: - Image Preview
 
+    private var highlightedImage: UIImage {
+        RedactionService.shared.drawPreviewHighlights(
+            on: originalImage,
+            regions: detectedRegions
+        ) ?? originalImage
+    }
+
     private var imagePreview: some View {
-        Image(uiImage: originalImage)
+        Image(uiImage: highlightedImage)
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(maxHeight: 300)
@@ -132,7 +144,26 @@ struct PHIDetectionReviewView: View {
 
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            // Crop button (primary action)
+            // Accept AI Redaction (primary action)
+            Button {
+                if let redacted = RedactionService.shared.applyRedaction(to: originalImage, regions: detectedRegions) {
+                    autoRedactedImage = redacted
+                    showingAutoRedactionPreview = true
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "wand.and.stars")
+                    Text("Accept AI Redaction")
+                }
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.green)
+                .cornerRadius(12)
+            }
+
+            // Crop button (secondary)
             Button {
                 onCropInstead()
             } label: {
@@ -140,11 +171,11 @@ struct PHIDetectionReviewView: View {
                     Image(systemName: "crop")
                     Text("Crop Image")
                 }
-                .font(.headline)
-                .foregroundStyle(.white)
+                .font(.subheadline)
+                .foregroundStyle(ProcedusTheme.primary)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(ProcedusTheme.primary)
+                .background(ProcedusTheme.primary.opacity(0.1))
                 .cornerRadius(12)
             }
 
@@ -241,6 +272,73 @@ struct PHIDetectionReviewView: View {
                     Button("Back") {
                         showingSkipAttestation = false
                         skipAttestationConfirmed = false
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Auto Redaction Preview Sheet
+
+    private var autoRedactionPreviewSheet: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 50))
+                    .foregroundStyle(.green)
+
+                Text("AI Redaction Preview")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("\(detectedRegions.count) region(s) automatically redacted")
+                    .font(.subheadline)
+                    .foregroundStyle(ProcedusTheme.textSecondary)
+
+                if let redacted = autoRedactedImage {
+                    Image(uiImage: redacted)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: 300)
+                        .cornerRadius(12)
+                        .shadow(radius: 4)
+                }
+
+                Spacer()
+
+                VStack(spacing: 12) {
+                    Button {
+                        showingAutoRedactionPreview = false
+                        if let redacted = autoRedactedImage {
+                            onRedactAndSave(redacted)
+                        }
+                    } label: {
+                        Text("Use This Image")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .cornerRadius(12)
+                    }
+
+                    Button {
+                        showingAutoRedactionPreview = false
+                        autoRedactedImage = nil
+                    } label: {
+                        Text("Go Back")
+                            .font(.subheadline)
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                    }
+                }
+            }
+            .padding()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Back") {
+                        showingAutoRedactionPreview = false
+                        autoRedactedImage = nil
                     }
                 }
             }

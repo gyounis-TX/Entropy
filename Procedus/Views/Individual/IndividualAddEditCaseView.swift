@@ -67,6 +67,23 @@ struct IndividualAddEditCaseView: View {
     // PHI detection state
     @State private var notesPHIWarning: String?
 
+    // Owner identity for media uploads - must match save function logic
+    private var mediaOwnerId: UUID {
+        if !appState.isIndividualMode {
+            return appState.selectedFellowId ?? appState.currentUser?.id ?? getOrCreateIndividualUserId()
+        }
+        return getOrCreateIndividualUserId()
+    }
+
+    private var mediaOwnerName: String {
+        if !appState.isIndividualMode,
+           let id = appState.selectedFellowId ?? appState.currentUser?.id,
+           let user = allUsers.first(where: { $0.id == id }) {
+            return user.displayName
+        }
+        return appState.individualDisplayName
+    }
+
     // Collapsible state - default ALL to COLLAPSED (closed)
     // We track what's EXPANDED (empty = all closed by default)
     @State private var expandedPackIds: Set<String> = []
@@ -351,8 +368,8 @@ struct IndividualAddEditCaseView: View {
                     Section {
                         CaseMediaSection(
                             caseId: existing.id,
-                            ownerId: getOrCreateIndividualUserId(),
-                            ownerName: appState.individualDisplayName
+                            ownerId: mediaOwnerId,
+                            ownerName: mediaOwnerName
                         )
                     } header: {
                         Text("Attachments")

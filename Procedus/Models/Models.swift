@@ -68,7 +68,7 @@ final class Program {
         self.requireAttestationForMigratedCases = false
         self.trainingProgramLength = 3  // Default 3-year fellowship
         self.fellowshipSpecialtyRaw = nil
-        self.allowSimpleDutyHours = true  // Allow simple mode by default
+        self.allowSimpleDutyHours = false  // Off by default
         self.earliestPGYLevel = 4  // Default PGY4 (most fellowships start after 3-year residency)
         self.dutyHoursCallEnabled = true  // Enable all shift types by default
         self.dutyHoursNightFloatEnabled = true
@@ -1038,6 +1038,7 @@ final class CaseMedia {
     var durationSeconds: Double?             // Videos only
 
     // Search & Sharing
+    var title: String = ""                   // Required short title (max 12 chars), no PHI
     var searchTerms: [String]                // User-defined labels
     var isSharedWithFellowship: Bool         // If true, visible in Teaching Files
     var caseDate: Date?
@@ -1058,6 +1059,22 @@ final class CaseMedia {
     var createdAt: Date
     var updatedAt: Date
     var uploadedToCloudAt: Date?
+
+    // Upload Tracking
+    var uploadStatusRaw: String = "pending"
+    var uploadRetryCount: Int = 0
+    var lastUploadError: String?
+
+    @Transient var uploadStatus: MediaUploadStatus {
+        get {
+            // Backwards-compat: existing rows with cloudPath + uploadedToCloudAt are uploaded
+            if cloudPath != nil && uploadedToCloudAt != nil {
+                return .uploaded
+            }
+            return MediaUploadStatus(rawValue: uploadStatusRaw) ?? .pending
+        }
+        set { uploadStatusRaw = newValue.rawValue }
+    }
 
     @Transient var mediaType: MediaType {
         get { MediaType(rawValue: mediaTypeRaw) ?? .image }
@@ -1092,6 +1109,7 @@ final class CaseMedia {
         self.width = nil
         self.height = nil
         self.durationSeconds = nil
+        self.title = ""
         self.searchTerms = []
         self.isSharedWithFellowship = false
         self.caseDate = nil
@@ -1108,6 +1126,9 @@ final class CaseMedia {
         self.createdAt = Date()
         self.updatedAt = Date()
         self.uploadedToCloudAt = nil
+        self.uploadStatusRaw = MediaUploadStatus.pending.rawValue
+        self.uploadRetryCount = 0
+        self.lastUploadError = nil
     }
 }
 

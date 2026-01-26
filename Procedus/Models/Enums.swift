@@ -536,6 +536,8 @@ enum NotificationType: String, Codable, CaseIterable {
     case dutyHoursWarning = "duty_hours_warning"
     case dutyHoursViolation = "duty_hours_violation"
     case directMessage = "direct_message"
+    case teachingFileUploaded = "teaching_file_uploaded"
+    case teachingFileComment = "teachingFileComment"
 
     var icon: String {
         switch self {
@@ -553,6 +555,8 @@ enum NotificationType: String, Codable, CaseIterable {
         case .dutyHoursWarning: return "exclamationmark.triangle.fill"
         case .dutyHoursViolation: return "xmark.shield.fill"
         case .directMessage: return "message.fill"
+        case .teachingFileUploaded: return "photo.badge.plus"
+        case .teachingFileComment: return "text.bubble.fill"
         }
     }
 
@@ -572,6 +576,8 @@ enum NotificationType: String, Codable, CaseIterable {
         case .dutyHoursWarning: return .orange
         case .dutyHoursViolation: return .red
         case .directMessage: return .blue
+        case .teachingFileUploaded: return .teal
+        case .teachingFileComment: return .teal
         }
     }
 }
@@ -1030,6 +1036,42 @@ enum MediaType: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .image: return ["jpg", "jpeg", "png", "heic", "heif"]
         case .video: return ["mp4", "mov", "m4v"]
+        }
+    }
+}
+
+// MARK: - Media Upload Status
+
+enum MediaUploadStatus: String, Codable, CaseIterable {
+    case pending
+    case uploading
+    case uploaded
+    case failed
+
+    var displayName: String {
+        switch self {
+        case .pending: return "Pending Upload"
+        case .uploading: return "Uploading…"
+        case .uploaded: return "Uploaded to Cloud"
+        case .failed: return "Upload Failed"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .pending: return "clock"
+        case .uploading: return "arrow.up.circle"
+        case .uploaded: return "checkmark.cloud.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .pending: return .gray
+        case .uploading: return .blue
+        case .uploaded: return .green
+        case .failed: return .red
         }
     }
 }

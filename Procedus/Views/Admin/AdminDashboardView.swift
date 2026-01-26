@@ -499,10 +499,11 @@ struct AdminDashboardView: View {
             }
         }
 
-        // Delete case media
+        // Delete case media (local files first, then SwiftData records)
         let mediaDescriptor = FetchDescriptor<CaseMedia>()
         if let mediaItems = try? modelContext.fetch(mediaDescriptor) {
             for media in mediaItems {
+                MediaStorageService.shared.deleteMedia(localPath: media.localPath, thumbnailPath: media.thumbnailPath)
                 modelContext.delete(media)
             }
         }
@@ -698,6 +699,20 @@ struct AdminDashboardView: View {
 
         // Delete existing evaluation responses
         // (Note: EvaluationResponse would need to be fetched and deleted if the model exists)
+
+        // Delete CaseMedia from prior dev mode test fellows (@springfield.com)
+        let priorDevUserIds = allUsers
+            .filter { $0.email.hasSuffix("@springfield.com") }
+            .map { $0.id }
+        if !priorDevUserIds.isEmpty {
+            let allMediaDescriptor = FetchDescriptor<CaseMedia>()
+            if let allMedia = try? modelContext.fetch(allMediaDescriptor) {
+                for media in allMedia where priorDevUserIds.contains(media.ownerId) {
+                    MediaStorageService.shared.deleteMedia(localPath: media.localPath, thumbnailPath: media.thumbnailPath)
+                    modelContext.delete(media)
+                }
+            }
+        }
 
         // Delete ALL existing fellows to prevent mixing with dev data
         // This ensures a clean slate even without calling resetDevProgram first
@@ -1357,12 +1372,12 @@ struct AdminDashboardView: View {
 
         try? modelContext.save()
 
-        // Add sample images to ~5% of cases for the 3 active fellows
+        // Add sample images (10 per fellow) with titles, labels, and comments
         addSampleImagesToDevCases(activeFellowIds: activeFellowIds, fellows: [
             (id: activeFellowIds[0], name: "Lisa Simpson"),
             (id: activeFellowIds[1], name: "Maggie Simpson"),
             (id: activeFellowIds[2], name: "Bart Simpson")
-        ])
+        ], attendingIds: createdAttendingIds, attendingNames: attendingData.map { "\($0.0) \($0.1)" })
 
         // Check and award badges for all fellows
         let allFellowIds = activeFellowIds + graduatedFellowIds
@@ -1373,14 +1388,49 @@ struct AdminDashboardView: View {
         devDataPopulated = true
     }
 
-    private func addSampleImagesToDevCases(activeFellowIds: [UUID], fellows: [(id: UUID, name: String)]) {
+    private func addSampleImagesToDevCases(activeFellowIds: [UUID], fellows: [(id: UUID, name: String)], attendingIds: [UUID], attendingNames: [String]) {
         // Fetch all cases for active fellows
         let casesDescriptor = FetchDescriptor<CaseEntry>()
         guard let allCases = try? modelContext.fetch(casesDescriptor) else { return }
 
-        // Sample search terms for Teaching Files
-        let teachingLabels = ["Teaching Example", "Interesting Case", "Classic Finding", "Rare Finding", "Good Outcome"]
+        // Sample titles (≤12 chars)
+        let sampleTitles = [
+            "RCA Lesion", "LAD Stent", "Echo View", "EP Map",
+            "Stress ECG", "CXR Finding", "Holter Data", "LV Function",
+            "Valve Study", "Cath Result", "ASD Closure", "PCI Result"
+        ]
+
+        // Sample labels for Teaching Files
+        let teachingLabels = [
+            "Teaching Example", "Interesting Case", "Classic Finding",
+            "Rare Finding", "Good Outcome", "Complex Anatomy",
+            "Board Review", "Unusual Approach", "Complications",
+            "Technical Challenge"
+        ]
         let privateLabels = ["Personal Reference", "Follow-up", "To Review"]
+
+        // Sample comments from various perspectives
+        let fellowComments = [
+            "Great teaching example!",
+            "Similar to a case I had last month",
+            "This anatomy is really well demonstrated",
+            "Perfect example for board prep",
+            "Can you clarify the wire position?",
+            "Interesting approach, thanks for sharing",
+            "I've seen this finding before on rotation",
+            "What was the final outcome?",
+            "Very helpful for my upcoming exam"
+        ]
+        let attendingComments = [
+            "Well documented case",
+            "The approach looks excellent",
+            "Would have considered alternative access",
+            "Classic textbook finding, well captured",
+            "Nice work on this one",
+            "Consider reviewing the ACC guidelines for this",
+            "This is a great discussion point for conference",
+            "Rare finding, well identified"
+        ]
 
         // Medical image types for simulation
         let medicalImageTypes: [(icon: String, title: String, color: UIColor)] = [
@@ -1394,16 +1444,20 @@ struct AdminDashboardView: View {
             ("arrowtriangle.up.heart.fill", "Cath Lab Image", UIColor(red: 0.8, green: 0.4, blue: 0.5, alpha: 1.0))
         ]
 
+        // All people who can comment (fellows + attendings)
+        let allCommenters: [(id: UUID, name: String, role: UserRole)] =
+            fellows.map { (id: $0.id, name: $0.name, role: .fellow) } +
+            zip(attendingIds, attendingNames).map { (id: $0.0, name: $0.1, role: .attending) }
+
         for fellowInfo in fellows {
             let fellowCases = allCases.filter { $0.ownerId == fellowInfo.id || $0.fellowId == fellowInfo.id }
-            let caseCount = fellowCases.count
+            guard !fellowCases.isEmpty else { continue }
 
-            // Select ~5% of cases to add images (minimum 1 if there are cases)
-            let imageCaseCount = max(1, Int(Double(caseCount) * 0.05))
-            let selectedCases = fellowCases.shuffled().prefix(imageCaseCount)
+            // Select exactly 10 cases (or fewer if not enough cases)
+            let selectedCases = fellowCases.shuffled().prefix(10)
 
             for (index, caseEntry) in selectedCases.enumerated() {
-                // Pick a random medical image type
+                // Pick a medical image type
                 let imageType = medicalImageTypes[index % medicalImageTypes.count]
 
                 // Generate actual medical simulation image
@@ -1427,6 +1481,9 @@ struct AdminDashboardView: View {
                     localPath: savedResult.localPath
                 )
 
+                // Set title
+                media.title = sampleTitles[index % sampleTitles.count]
+
                 // Set metadata from actual saved image
                 media.fileSizeBytes = savedResult.fileSize
                 media.contentHash = savedResult.contentHash
@@ -1441,19 +1498,61 @@ struct AdminDashboardView: View {
                 media.createdAt = caseEntry.createdAt
                 media.updatedAt = caseEntry.createdAt
 
-                // Randomly share some to Teaching Files (~40% shared)
-                let isShared = index % 3 != 0  // Share 2 out of every 3
+                // Share 7 out of 10 to Teaching Files
+                let isShared = index < 7
                 media.isSharedWithFellowship = isShared
 
-                // Add appropriate labels
+                // Add labels
                 if isShared {
-                    media.searchTerms = [teachingLabels.randomElement()!, imageType.title]
-                    media.comment = "Great teaching case example - \(imageType.title)"
+                    let labelCount = Int.random(in: 2...4)
+                    var labels = [imageType.title]
+                    labels += teachingLabels.shuffled().prefix(labelCount - 1)
+                    media.searchTerms = labels
+                    media.comment = "Teaching case - \(imageType.title)"
                 } else {
                     media.searchTerms = [privateLabels.randomElement()!]
                 }
 
                 modelContext.insert(media)
+
+                // Add sample comments to shared images (1-5 comments each)
+                if isShared {
+                    let commentCount = Int.random(in: 1...5)
+
+                    // First comment is always from the owner (initial submission comment)
+                    let ownerComment = MediaComment(
+                        mediaId: media.id,
+                        authorId: fellowInfo.id,
+                        authorName: fellowInfo.name,
+                        authorRole: .fellow,
+                        text: media.comment ?? "Sharing this for the group"
+                    )
+                    ownerComment.createdAt = caseEntry.createdAt
+                    modelContext.insert(ownerComment)
+
+                    // Additional discussion comments from other users
+                    let otherCommenters = allCommenters.filter { $0.id != fellowInfo.id }.shuffled()
+                    for commentIndex in 0..<min(commentCount, otherCommenters.count) {
+                        let commenter = otherCommenters[commentIndex]
+                        let commentText: String
+                        if commenter.role == .attending {
+                            commentText = attendingComments.randomElement()!
+                        } else {
+                            commentText = fellowComments.randomElement()!
+                        }
+
+                        let comment = MediaComment(
+                            mediaId: media.id,
+                            authorId: commenter.id,
+                            authorName: commenter.name,
+                            authorRole: commenter.role,
+                            text: commentText
+                        )
+                        // Stagger comment timestamps
+                        comment.createdAt = caseEntry.createdAt.addingTimeInterval(Double((commentIndex + 1) * 3600 * Int.random(in: 1...24)))
+                        modelContext.insert(comment)
+                    }
+                }
             }
         }
 
@@ -9036,7 +9135,7 @@ struct NotificationsSheet: View {
                     NotificationType.caseRejected.rawValue
                 ]
             case .messages:
-                // Program messages from admin/others + direct messages
+                // Program messages from admin/others + direct messages + teaching files
                 return [
                     NotificationType.programUpdate.rawValue,
                     NotificationType.programChange.rawValue,
@@ -9047,7 +9146,9 @@ struct NotificationsSheet: View {
                     NotificationType.info.rawValue,
                     NotificationType.dutyHoursWarning.rawValue,
                     NotificationType.dutyHoursViolation.rawValue,
-                    NotificationType.directMessage.rawValue
+                    NotificationType.directMessage.rawValue,
+                    NotificationType.teachingFileUploaded.rawValue,
+                    NotificationType.teachingFileComment.rawValue
                 ]
             case .achievements:
                 // Badge/achievement notifications for fellows
@@ -9234,6 +9335,7 @@ struct NotificationsSheet: View {
 struct NotificationRow: View {
     let notification: Procedus.Notification
     var onReply: (() -> Void)? = nil
+    @State private var isExpanded = false
 
     private var isMessageType: Bool {
         let messageTypes = [
@@ -9281,7 +9383,15 @@ struct NotificationRow: View {
             Text(notification.message)
                 .font(.caption)
                 .foregroundColor(Color(UIColor.secondaryLabel))
-                .lineLimit(2)
+                .lineLimit(isExpanded ? nil : 2)
+                .onTapGesture { withAnimation { isExpanded.toggle() } }
+
+            if !isExpanded && notification.message.count > 80 {
+                Text("Tap to read more")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                    .onTapGesture { withAnimation { isExpanded.toggle() } }
+            }
 
             // Reply button for messages with sender
             if canReply, let replyAction = onReply {

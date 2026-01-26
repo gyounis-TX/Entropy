@@ -183,8 +183,70 @@ class NotificationManager: ObservableObject {
         }
     }
 
+    // MARK: - Teaching Files Notifications
+
+    /// Notify all fellows and attendings in a program that a new teaching file was uploaded.
+    func notifyTeachingFileUploaded(
+        uploaderName: String,
+        uploaderUserId: UUID,
+        mediaId: UUID,
+        programId: UUID
+    ) {
+        guard let context = modelContext else { return }
+
+        // Fetch active fellows in the same program
+        let fellowDescriptor = FetchDescriptor<User>(
+            predicate: #Predicate { user in
+                user.programId == programId &&
+                user.isActive &&
+                !user.isArchived &&
+                !user.hasGraduated
+            }
+        )
+
+        // Fetch active attendings in the same program
+        let attendingDescriptor = FetchDescriptor<Attending>(
+            predicate: #Predicate { attending in
+                attending.programId == programId &&
+                !attending.isArchived
+            }
+        )
+
+        do {
+            let fellows = try context.fetch(fellowDescriptor)
+            let attendings = try context.fetch(attendingDescriptor)
+
+            let message = "\(uploaderName) has uploaded a new case to Teaching Files. Navigate to Teaching Files to view and comment."
+
+            // Notify fellows (skip the uploader)
+            for fellow in fellows where fellow.id != uploaderUserId {
+                createNotification(
+                    userId: fellow.id,
+                    title: "New Teaching File",
+                    message: message,
+                    type: .teachingFileUploaded,
+                    caseId: nil
+                )
+            }
+
+            // Notify attendings (skip if the uploader is also an attending by userId match)
+            for attending in attendings {
+                if attending.userId == uploaderUserId { continue }
+                createNotification(
+                    userId: attending.id,
+                    title: "New Teaching File",
+                    message: message,
+                    type: .teachingFileUploaded,
+                    caseId: nil
+                )
+            }
+        } catch {
+            print("[NotificationManager] Failed to send teaching file notifications: \(error)")
+        }
+    }
+
     // MARK: - Private Helpers
-    
+
     private func createNotification(
         userId: UUID,
         attendingId: UUID? = nil,

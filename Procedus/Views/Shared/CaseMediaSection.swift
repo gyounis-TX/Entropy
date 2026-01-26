@@ -17,6 +17,8 @@ struct CaseMediaSection: View {
 
     @State private var showingAddMedia = false
     @State private var selectedMedia: CaseMedia?
+    @State private var mediaToDelete: CaseMedia?
+    @State private var showingDeleteConfirmation = false
 
     private var caseMedia: [CaseMedia] {
         allMedia.filter { $0.caseEntryId == caseId }
@@ -91,19 +93,43 @@ struct CaseMediaSection: View {
     // MARK: - Media Grid
 
     private var mediaGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], spacing: 12) {
             ForEach(caseMedia) { media in
-                MediaThumbnailView(media: media)
-                    .onTapGesture {
-                        selectedMedia = media
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            deleteMedia(media)
+                VStack(spacing: 4) {
+                    ZStack(alignment: .topTrailing) {
+                        Button {
+                            selectedMedia = media
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            MediaThumbnailView(media: media)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Delete button (visible for owner)
+                        if media.ownerId == ownerId {
+                            Button {
+                                mediaToDelete = media
+                                showingDeleteConfirmation = true
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, .red)
+                                    .shadow(radius: 2)
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: 6, y: -6)
                         }
                     }
+
+                    // Title under thumbnail
+                    if !media.title.isEmpty {
+                        Text(media.title)
+                            .font(.system(size: 10))
+                            .foregroundStyle(ProcedusTheme.textSecondary)
+                            .lineLimit(1)
+                            .frame(width: 80)
+                    }
+                }
             }
 
             // Add more button
@@ -120,6 +146,19 @@ struct CaseMediaSection: View {
                 .cornerRadius(8)
             }
             .buttonStyle(.plain)
+        }
+        .alert("Delete Media", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                mediaToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let media = mediaToDelete {
+                    deleteMedia(media)
+                    mediaToDelete = nil
+                }
+            }
+        } message: {
+            Text("This will permanently delete this image and remove it from Teaching Files if shared. This cannot be undone.")
         }
     }
 
@@ -246,6 +285,12 @@ struct MediaDetailView: View {
 
                 // Media info
                 VStack(alignment: .leading, spacing: 8) {
+                    if !media.title.isEmpty {
+                        Text(media.title)
+                            .font(.headline)
+                            .foregroundStyle(ProcedusTheme.textPrimary)
+                    }
+
                     if !media.searchTerms.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
