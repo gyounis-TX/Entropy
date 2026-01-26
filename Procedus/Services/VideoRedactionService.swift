@@ -143,9 +143,8 @@ final class VideoRedactionService {
         }
 
         // Add audio track if present
-        var compositionAudioTrack: AVMutableCompositionTrack?
         if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first {
-            compositionAudioTrack = composition.addMutableTrack(
+            let compositionAudioTrack = composition.addMutableTrack(
                 withMediaType: .audio,
                 preferredTrackID: kCMPersistentTrackID_Invalid
             )
@@ -170,42 +169,33 @@ final class VideoRedactionService {
         // Apply original transform
         compositionVideoTrack.preferredTransform = transform
 
-        // Create video composition with redaction overlay
-        let videoComposition = AVMutableVideoComposition()
-        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
-        videoComposition.renderSize = videoSize
+        // Capture regions for the closure (normalized 0-1 coordinates)
+        let capturedRegions = regions
 
-        // Create redaction layer
-        let redactionLayer = createRedactionLayer(regions: regions, videoSize: videoSize)
-        let videoLayer = CALayer()
-        videoLayer.frame = CGRect(origin: .zero, size: videoSize)
+        // Create video composition using CIImage compositing (thread-safe, no CALayer needed)
+        let videoComposition = AVMutableVideoComposition(asset: composition) { request in
+            let sourceImage = request.sourceImage
+            let extent = sourceImage.extent
+            var output = sourceImage.clampedToExtent()
 
-        let parentLayer = CALayer()
-        parentLayer.frame = CGRect(origin: .zero, size: videoSize)
-        parentLayer.addSublayer(videoLayer)
-        parentLayer.addSublayer(redactionLayer)
+            for region in capturedRegions {
+                // Convert normalized rect to CIImage pixel coordinates
+                // CIImage uses bottom-left origin; regions use top-left origin (UIKit)
+                let ciRect = CGRect(
+                    x: extent.origin.x + region.rect.origin.x * extent.width,
+                    y: extent.origin.y + (1.0 - region.rect.origin.y - region.rect.height) * extent.height,
+                    width: region.rect.width * extent.width,
+                    height: region.rect.height * extent.height
+                )
+                let blackRect = CIImage(color: .black).cropped(to: ciRect)
+                output = blackRect.composited(over: output)
+            }
 
-        // Apply animation tool
-        videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
-            postProcessingAsVideoLayer: videoLayer,
-            in: parentLayer
-        )
-
-        // Create instruction
-        let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
-
-        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
-
-        // Apply transform correction for portrait videos
-        if isPortrait {
-            let translateTransform = CGAffineTransform(translationX: videoSize.width, y: 0)
-            let rotateTransform = translateTransform.rotated(by: .pi / 2)
-            layerInstruction.setTransform(rotateTransform, at: .zero)
+            request.finish(with: output.cropped(to: extent), context: nil)
         }
 
-        instruction.layerInstructions = [layerInstruction]
-        videoComposition.instructions = [instruction]
+        videoComposition.renderSize = videoSize
+        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
 
         // Create output URL
         let outputURL = FileManager.default.temporaryDirectory
@@ -248,24 +238,6 @@ final class VideoRedactionService {
         default:
             return .failure("Unknown export status")
         }
-    }
-
-    // MARK: - Helpers
-
-    /// Create a CALayer with black rectangles for redaction regions
-    private func createRedactionLayer(regions: [VideoRedactionRegion], videoSize: CGSize) -> CALayer {
-        let layer = CALayer()
-        layer.frame = CGRect(origin: .zero, size: videoSize)
-        layer.isGeometryFlipped = true  // Match UIKit coordinate system
-
-        for region in regions {
-            let redactLayer = CALayer()
-            redactLayer.backgroundColor = UIColor.black.cgColor
-            redactLayer.frame = region.pixelRect(for: videoSize)
-            layer.addSublayer(redactLayer)
-        }
-
-        return layer
     }
 
     // MARK: - Preview
