@@ -1056,8 +1056,6 @@ struct MediaFullDetailView: View {
     private func loadImage() {
         if media.mediaType == .image {
             fullImage = MediaStorageService.shared.loadImage(from: media.localPath)
-        } else if let thumbPath = media.thumbnailPath {
-            fullImage = MediaStorageService.shared.loadThumbnail(from: thumbPath)
         }
     }
 

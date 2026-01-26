@@ -35,55 +35,53 @@ struct DutyHoursDashboardView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Summary Cards
-                    summarySection
+        ScrollView {
+            VStack(spacing: 20) {
+                // Summary Cards
+                summarySection
 
-                    // Filter
-                    filterBar
+                // Filter
+                filterBar
 
-                    // Fellows List
-                    fellowsListSection
-                }
-                .padding(16)
+                // Fellows List
+                fellowsListSection
             }
-            .navigationTitle("Duty Hours")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
+            .padding(16)
+        }
+        .navigationTitle("Duty Hours")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") {
+                    dismiss()
                 }
+            }
 
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button {
-                            // Export report
-                        } label: {
-                            Label("Export Report", systemImage: "square.and.arrow.up")
-                        }
-
-                        Button {
-                            // Run compliance check
-                        } label: {
-                            Label("Run Compliance Check", systemImage: "checkmark.shield")
-                        }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        // Export report
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Label("Export Report", systemImage: "square.and.arrow.up")
                     }
+
+                    Button {
+                        // Run compliance check
+                    } label: {
+                        Label("Run Compliance Check", systemImage: "checkmark.shield")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
-            .sheet(item: $selectedFellow) { fellow in
-                FellowDutyHoursDetailView(
-                    fellow: fellow,
-                    shifts: shiftsForUser(fellow.id),
-                    entries: entriesForUser(fellow.id),
-                    violations: violationsForUser(fellow.id)
-                )
-            }
+        }
+        .sheet(item: $selectedFellow) { fellow in
+            FellowDutyHoursDetailView(
+                fellow: fellow,
+                shifts: shiftsForUser(fellow.id),
+                entries: entriesForUser(fellow.id),
+                violations: violationsForUser(fellow.id)
+            )
         }
     }
 

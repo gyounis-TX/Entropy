@@ -450,7 +450,7 @@ struct IndividualAddEditCaseView: View {
                         if attendings.isEmpty {
                             Text("Add in Settings")
                                 .font(.caption)
-                                .foregroundColor(.tertiary)
+                                .foregroundStyle(.tertiary)
                             Spacer()
                         } else {
                             Menu {
@@ -493,7 +493,7 @@ struct IndividualAddEditCaseView: View {
                     if facilities.isEmpty {
                         Text("Add in Settings")
                             .font(.caption)
-                            .foregroundColor(.tertiary)
+                            .foregroundStyle(.tertiary)
                         Spacer()
                     } else {
                         Menu {

@@ -531,9 +531,7 @@ struct AdminDashboardView: View {
     #endif
 
     private func clearAllCaseData() {
-        for caseEntry in allCases {
-            modelContext.delete(caseEntry)
-        }
+        try? modelContext.delete(model: CaseEntry.self)
         try? modelContext.save()
     }
 
