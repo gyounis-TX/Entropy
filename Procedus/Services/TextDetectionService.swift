@@ -60,7 +60,6 @@ struct TextDetectionResult {
     static let noTextDetected = TextDetectionResult(textWasDetected: false, regions: [], averageConfidence: 0, isHandDrawnDiagram: false)
 }
 
-@MainActor
 final class TextDetectionService {
     static let shared = TextDetectionService()
 

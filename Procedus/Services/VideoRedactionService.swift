@@ -43,7 +43,6 @@ struct VideoRedactionResult {
     }
 }
 
-@MainActor
 final class VideoRedactionService {
     static let shared = VideoRedactionService()
 

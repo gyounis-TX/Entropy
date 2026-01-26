@@ -158,6 +158,7 @@ struct AddEditCaseView: View {
     @State private var complicationsExpanded = false
     @State private var showingDeleteConfirmation = false
     @State private var isSaving = false
+    @State private var showingAddPlaceholderAttending = false
     @State private var showingSubOptionSheet = false
     @State private var pendingProcedure: ProcedureTag? = nil
     @State private var customSubOption: String = ""
@@ -374,21 +375,13 @@ struct AddEditCaseView: View {
                         caseTypeToggleSection
                     }
 
-                    // Procedure Timeframe Section
-                    timeframeSection
+                    // Attending / Facility / Timeframe dropdowns (side-by-side)
+                    combinedDropdownSection
 
                     // Entry mode toggle for noninvasive (Case Entry vs Bulk Entry)
                     if isSimplifiedNoninvasiveForm && !isEditing {
                         noninvasiveEntryModeSection
                     }
-
-                    // Attending Section (hidden for simplified noninvasive form)
-                    if !isSimplifiedNoninvasiveForm {
-                        attendingSection
-                    }
-
-                    // Facility Section (always shown)
-                    facilitySection
 
                     // Access Sites Section - only for specific specialties AND not simplified noninvasive
                     if showsAccessSites && !isSimplifiedNoninvasiveForm {
@@ -529,6 +522,7 @@ struct AddEditCaseView: View {
                     #endif
                 }
             }
+            .listSectionSpacing(.compact)
             .navigationTitle(isEditing ? "Edit Case" : "New Case")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -613,6 +607,151 @@ struct AddEditCaseView: View {
     }
     
     // MARK: - Timeframe Section
+
+    // MARK: - Combined Dropdown Section (Attending / Facility / Timeframe)
+
+    private var combinedDropdownSection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 8) {
+                // Attending dropdown (hidden for simplified noninvasive form)
+                if !isSimplifiedNoninvasiveForm {
+                    VStack(spacing: 4) {
+                        Text("Attending")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Menu {
+                            Button("Select") { selectedAttendingId = nil }
+                            ForEach(sortedAttendingsActive) { attending in
+                                Button {
+                                    selectedAttendingId = attending.id
+                                } label: {
+                                    HStack {
+                                        Text(attending.name)
+                                        if attending.isPlaceholder {
+                                            Text("(Pending)")
+                                        }
+                                    }
+                                }
+                            }
+                            Divider()
+                            Button {
+                                showingAddPlaceholderAttending = true
+                            } label: {
+                                Label("Add New Attending...", systemImage: "person.badge.plus")
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                if let id = selectedAttendingId,
+                                   let att = sortedAttendingsActive.first(where: { $0.id == id }) {
+                                    Text(att.initials)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                    if att.isPlaceholder {
+                                        Circle()
+                                            .fill(Color.orange)
+                                            .frame(width: 6, height: 6)
+                                    }
+                                } else {
+                                    Text("--")
+                                        .font(.subheadline)
+                                }
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(UIColor.tertiarySystemFill))
+                            .cornerRadius(8)
+                        }
+                        .foregroundColor(selectedAttendingId != nil ? .primary : .secondary)
+                    }
+                }
+
+                // Facility dropdown
+                VStack(spacing: 4) {
+                    Text("Facility")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if sortedFacilitiesActive.isEmpty {
+                        Text("None")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(UIColor.tertiarySystemFill))
+                            .cornerRadius(8)
+                    } else {
+                        Menu {
+                            Button("Select") { selectedFacilityId = nil }
+                            ForEach(sortedFacilitiesActive) { facility in
+                                Button(facility.shortName ?? facility.name) {
+                                    selectedFacilityId = facility.id
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(selectedFacilityId.flatMap { id in
+                                    sortedFacilitiesActive.first { $0.id == id }
+                                        .map { $0.shortName ?? $0.name }
+                                } ?? "--")
+                                    .font(.subheadline)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(UIColor.tertiarySystemFill))
+                            .cornerRadius(8)
+                        }
+                        .foregroundColor(selectedFacilityId != nil ? .primary : .secondary)
+                    }
+                }
+
+                // Timeframe dropdown
+                VStack(spacing: 4) {
+                    Text("Timeframe")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Menu {
+                        ForEach(weeks) { week in
+                            Button(week.label) {
+                                selectedWeek = week.bucket
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(weeks.first { $0.bucket == selectedWeek }?.labelShort ?? "--")
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                    }
+                    .foregroundColor(.primary)
+                }
+            }
+            .listRowBackground(Color.clear)
+        }
+        .sheet(isPresented: $showingAddPlaceholderAttending) {
+            AddPlaceholderAttendingSheet(
+                programId: currentProgram?.id,
+                createdByFellowId: currentFellowId,
+                existingAttendings: sortedAttendingsActive,
+                onSave: { newAttendingId in
+                    selectedAttendingId = newAttendingId
+                },
+                onSelectExisting: { existingId in
+                    selectedAttendingId = existingId
+                }
+            )
+        }
+    }
 
     private var timeframeSection: some View {
         Section {
@@ -910,47 +1049,71 @@ struct AddEditCaseView: View {
 
     private var attendingSection: some View {
         Section {
-            if sortedAttendingsActive.isEmpty {
-                Text("No attendings added yet. Contact your program administrator.")
-                    .font(.subheadline)
-                    .foregroundColor(Color(UIColor.secondaryLabel))
-                    .italic()
-            } else {
-                HStack {
-                    Spacer()
-                    Menu {
-                        Button("Select Attending") {
-                            selectedAttendingId = nil
-                        }
-                        ForEach(sortedAttendingsActive) { attending in
-                            Button(attending.name) {
-                                selectedAttendingId = attending.id
+            HStack {
+                Spacer()
+                Menu {
+                    Button("Select Attending") {
+                        selectedAttendingId = nil
+                    }
+                    ForEach(sortedAttendingsActive) { attending in
+                        Button {
+                            selectedAttendingId = attending.id
+                        } label: {
+                            HStack {
+                                Text(attending.name)
+                                if attending.isPlaceholder {
+                                    Text("(Pending)")
+                                }
                             }
                         }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text(selectedAttendingId.flatMap { id in sortedAttendingsActive.first { $0.id == id }?.name } ?? "Select Attending")
-                                .font(.subheadline)
-                            Image(systemName: "chevron.down")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color(UIColor.tertiarySystemFill))
-                        .cornerRadius(10)
                     }
-                    .foregroundColor(selectedAttendingId != nil ? .primary : .secondary)
-                    Spacer()
+
+                    Divider()
+
+                    // Add new placeholder attending option
+                    Button {
+                        showingAddPlaceholderAttending = true
+                    } label: {
+                        Label("Add New Attending...", systemImage: "person.badge.plus")
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if let id = selectedAttendingId, let attending = sortedAttendingsActive.first(where: { $0.id == id }) {
+                            Text(attending.name)
+                                .font(.subheadline)
+                            if attending.isPlaceholder {
+                                Text("Pending")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.15))
+                                    .foregroundColor(.orange)
+                                    .cornerRadius(4)
+                            }
+                        } else {
+                            Text("Select Attending")
+                                .font(.subheadline)
+                        }
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(10)
                 }
-                .listRowBackground(Color.clear)
+                .foregroundColor(selectedAttendingId != nil ? .primary : .secondary)
+                Spacer()
             }
+            .listRowBackground(Color.clear)
         } header: {
             Text("Supervising Attending")
                 .font(.caption)
         }
     }
-    
+
     // MARK: - Facility Section
 
     private var facilitySection: some View {
@@ -2067,6 +2230,140 @@ struct SubOptionSelectionSheet: View {
             }
         }
         .presentationDetents([.medium])
+    }
+}
+
+// MARK: - Add Placeholder Attending Sheet
+
+struct AddPlaceholderAttendingSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let programId: UUID?
+    let createdByFellowId: UUID?
+    let existingAttendings: [Attending]
+    let onSave: (UUID) -> Void
+    let onSelectExisting: (UUID) -> Void
+
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var showingSimilarWarning = false
+    @State private var similarAttending: Attending?
+
+    private var canSave: Bool {
+        !firstName.trimmingCharacters(in: .whitespaces).isEmpty ||
+        !lastName.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Find existing attending with similar name (case-insensitive fuzzy match)
+    private func findSimilarAttending() -> Attending? {
+        let enteredName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces).lowercased()
+        guard !enteredName.isEmpty else { return nil }
+
+        for attending in existingAttendings {
+            let existingName = attending.name.lowercased()
+            // Check for exact match or if names are very similar
+            if existingName == enteredName {
+                return attending
+            }
+            // Check if last names match and first names are similar
+            let enteredLast = lastName.trimmingCharacters(in: .whitespaces).lowercased()
+            let existingLast = attending.lastName.lowercased()
+            if !enteredLast.isEmpty && enteredLast == existingLast {
+                return attending
+            }
+        }
+        return nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("First Name", text: $firstName)
+                        .textInputAutocapitalization(.words)
+                    TextField("Last Name", text: $lastName)
+                        .textInputAutocapitalization(.words)
+                } header: {
+                    Text("Attending Name")
+                } footer: {
+                    Text("Enter the attending's name. Your program administrator will link this to their official account.")
+                }
+
+                Section {
+                    HStack(spacing: 12) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                        Text("This attending will be marked as 'Pending Setup' until your admin creates their official account. They cannot attest cases until then.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Add Attending")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        attemptSave()
+                    }
+                    .disabled(!canSave)
+                }
+            }
+            .alert("Similar Attending Found", isPresented: $showingSimilarWarning) {
+                Button("Use Existing") {
+                    if let existing = similarAttending {
+                        onSelectExisting(existing.id)
+                        dismiss()
+                    }
+                }
+                Button("Create New", role: .destructive) {
+                    saveNewPlaceholder()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if let existing = similarAttending {
+                    Text("An attending named '\(existing.name)' already exists. Did you mean them?")
+                }
+            }
+        }
+    }
+
+    private func attemptSave() {
+        // Check for similar existing attending
+        if let similar = findSimilarAttending() {
+            similarAttending = similar
+            showingSimilarWarning = true
+        } else {
+            saveNewPlaceholder()
+        }
+    }
+
+    private func saveNewPlaceholder() {
+        let trimmedFirst = firstName.trimmingCharacters(in: .whitespaces)
+        let trimmedLast = lastName.trimmingCharacters(in: .whitespaces)
+
+        let newAttending = Attending(
+            firstName: trimmedFirst,
+            lastName: trimmedLast,
+            programId: programId,
+            isPlaceholder: true,
+            createdByFellowId: createdByFellowId
+        )
+        modelContext.insert(newAttending)
+
+        do {
+            try modelContext.save()
+            onSave(newAttending.id)
+            dismiss()
+        } catch {
+            print("Failed to save placeholder attending: \(error)")
+        }
     }
 }
 

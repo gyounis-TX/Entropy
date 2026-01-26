@@ -22,10 +22,10 @@ class BadgeService {
 
     // MARK: - Main Badge Check
 
-    /// Check and award badges after case attestation
+    /// Check and award badges after case is saved
     /// - Parameters:
     ///   - fellowId: The fellow's user ID
-    ///   - attestedCase: The case that was just attested
+    ///   - savedCase: The case that was just saved
     ///   - allCases: All cases for this fellow
     ///   - existingBadges: Badges the fellow has already earned
     ///   - modelContext: SwiftData context for saving
@@ -39,10 +39,9 @@ class BadgeService {
     ) -> [BadgeEarned] {
         var newlyEarned: [BadgeEarned] = []
 
-        // Filter to eligible cases (attested, not rejected, not archived)
+        // Filter to eligible cases (all non-archived cases - badges awarded on save, not attestation)
         let eligibleCases = allCases.filter { caseEntry in
             (caseEntry.ownerId == fellowId || caseEntry.fellowId == fellowId) &&
-            caseEntry.attestationStatus == .attested &&
             !caseEntry.isArchived
         }
 
@@ -160,7 +159,6 @@ class BadgeService {
     ) -> (current: Int, next: Int, percentage: Double)? {
         let eligibleCases = cases.filter {
             ($0.ownerId == fellowId || $0.fellowId == fellowId) &&
-            $0.attestationStatus == .attested &&
             !$0.isArchived
         }
 
@@ -184,7 +182,6 @@ class BadgeService {
     ) -> (current: Int, next: Int, percentage: Double)? {
         let eligibleCases = cases.filter {
             ($0.ownerId == fellowId || $0.fellowId == fellowId) &&
-            $0.attestationStatus == .attested &&
             !$0.isArchived
         }
 

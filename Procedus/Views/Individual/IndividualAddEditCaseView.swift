@@ -307,13 +307,8 @@ struct IndividualAddEditCaseView: View {
                     caseTypeToggleSection
                 }
 
-                // Attending section (hidden for simplified noninvasive form)
-                if !isSimplifiedNoninvasiveForm {
-                    attendingSection
-                }
-
-                facilitySection      // REQUIRED - always shown
-                timeframeSection     // Always shown
+                // Attending / Facility / Timeframe dropdowns (side-by-side)
+                combinedDropdownSection
 
                 // Access sites section (hidden for simplified noninvasive form)
                 if !isSimplifiedNoninvasiveForm {
@@ -357,7 +352,7 @@ struct IndividualAddEditCaseView: View {
                         CaseMediaSection(
                             caseId: existing.id,
                             ownerId: getOrCreateIndividualUserId(),
-                            ownerName: "Individual User"
+                            ownerName: appState.individualDisplayName
                         )
                     } header: {
                         Text("Attachments")
@@ -436,6 +431,130 @@ struct IndividualAddEditCaseView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Combined Dropdown Section (Attending / Facility / Timeframe side-by-side)
+
+    private var combinedDropdownSection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 8) {
+                // Attending dropdown (hidden for simplified noninvasive form)
+                if !isSimplifiedNoninvasiveForm {
+                    VStack(spacing: 4) {
+                        Text("Attending")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        if attendings.isEmpty {
+                            Text("None")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color(UIColor.tertiarySystemFill))
+                                .cornerRadius(8)
+                        } else {
+                            Menu {
+                                Button("Select") { selectedAttendingId = nil }
+                                ForEach(attendings) { attending in
+                                    Button(attending.name) {
+                                        selectedAttendingId = attending.id
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if let id = selectedAttendingId,
+                                       let att = attendings.first(where: { $0.id == id }) {
+                                        Text(att.initials)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    } else {
+                                        Text("--")
+                                            .font(.subheadline)
+                                    }
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color(UIColor.tertiarySystemFill))
+                                .cornerRadius(8)
+                            }
+                            .foregroundColor(selectedAttendingId != nil ? .primary : .secondary)
+                        }
+                    }
+                }
+
+                // Facility dropdown
+                VStack(spacing: 4) {
+                    Text("Facility")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if facilities.isEmpty {
+                        Text("None")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(UIColor.tertiarySystemFill))
+                            .cornerRadius(8)
+                    } else {
+                        Menu {
+                            Button("Select") { selectedFacilityId = nil }
+                            ForEach(facilities) { facility in
+                                Button(facility.shortName ?? facility.name) {
+                                    selectedFacilityId = facility.id
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(selectedFacilityId.flatMap { id in
+                                    facilities.first { $0.id == id }
+                                        .map { $0.shortName ?? $0.name }
+                                } ?? "--")
+                                    .font(.subheadline)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(UIColor.tertiarySystemFill))
+                            .cornerRadius(8)
+                        }
+                        .foregroundColor(selectedFacilityId != nil ? .primary : .secondary)
+                    }
+                }
+
+                // Timeframe dropdown
+                VStack(spacing: 4) {
+                    Text("Timeframe")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Menu {
+                        ForEach(availableWeekBuckets, id: \.self) { bucket in
+                            Button(bucket.toWeekTimeframeLabel()) {
+                                selectedWeekBucket = bucket
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(selectedWeekBucket.toWeekTimeframeLabelShort())
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                    }
+                    .foregroundColor(.primary)
+                }
+            }
+            .listRowBackground(Color.clear)
         }
     }
 

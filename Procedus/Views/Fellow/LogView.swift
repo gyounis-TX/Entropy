@@ -7,11 +7,13 @@ struct WeekOption: Identifiable {
     let id: String
     let bucket: String
     let label: String
+    let labelShort: String
 
     init(bucket: String) {
         self.id = bucket
         self.bucket = bucket
         self.label = bucket.toWeekTimeframeLabel()
+        self.labelShort = bucket.toWeekTimeframeLabelShort()
     }
 }
 

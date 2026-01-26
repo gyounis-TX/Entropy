@@ -5,7 +5,6 @@
 import Foundation
 import UIKit
 
-@MainActor
 final class RedactionService {
     static let shared = RedactionService()
 

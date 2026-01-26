@@ -182,12 +182,29 @@ final class Attending {
     var phoneNumber: String?
     var isArchived: Bool
     var createdAt: Date
-    
+
+    // Placeholder attending support (created by fellows before admin setup)
+    /// True if this attending was created by a fellow and needs admin to set up official account
+    var isPlaceholder: Bool
+    /// Fellow who created this placeholder attending
+    var createdByFellowId: UUID?
+    /// After merge: points to the official Attending.id this placeholder was merged into
+    var mergedIntoId: UUID?
+    /// When the placeholder was merged into an official account
+    var mergedAt: Date?
+
     @Transient var fullName: String {
         "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces)
     }
-    
-    init(firstName: String, lastName: String, programId: UUID? = nil, ownerId: UUID? = nil, userId: UUID? = nil, phoneNumber: String? = nil) {
+
+    @Transient var initials: String {
+        let cleanName = name.replacingOccurrences(of: "Dr. ", with: "")
+                            .replacingOccurrences(of: "Dr.", with: "")
+        let parts = cleanName.split(separator: " ")
+        return parts.compactMap { $0.first.map { String($0).uppercased() } }.joined()
+    }
+
+    init(firstName: String, lastName: String, programId: UUID? = nil, ownerId: UUID? = nil, userId: UUID? = nil, phoneNumber: String? = nil, isPlaceholder: Bool = false, createdByFellowId: UUID? = nil) {
         self.id = UUID()
         self.firstName = firstName
         self.lastName = lastName
@@ -198,13 +215,17 @@ final class Attending {
         self.phoneNumber = phoneNumber
         self.isArchived = false
         self.createdAt = Date()
+        self.isPlaceholder = isPlaceholder
+        self.createdByFellowId = createdByFellowId
+        self.mergedIntoId = nil
+        self.mergedAt = nil
     }
-    
-    convenience init(name: String, programId: UUID? = nil, ownerId: UUID? = nil, userId: UUID? = nil, phoneNumber: String? = nil) {
+
+    convenience init(name: String, programId: UUID? = nil, ownerId: UUID? = nil, userId: UUID? = nil, phoneNumber: String? = nil, isPlaceholder: Bool = false, createdByFellowId: UUID? = nil) {
         let parts = name.split(separator: " ", maxSplits: 1)
         let first = parts.first.map(String.init) ?? name
         let last = parts.count > 1 ? String(parts[1]) : ""
-        self.init(firstName: first, lastName: last, programId: programId, ownerId: ownerId, userId: userId, phoneNumber: phoneNumber)
+        self.init(firstName: first, lastName: last, programId: programId, ownerId: ownerId, userId: userId, phoneNumber: phoneNumber, isPlaceholder: isPlaceholder, createdByFellowId: createdByFellowId)
     }
 }
 
@@ -485,6 +506,9 @@ final class CaseEntry {
     var updatedAt: Date
     var attestorId: UUID?
     var proxyAttestorId: UUID?
+    var evaluationDeferred: Bool
+    var evaluationDeferredById: UUID?
+    var evaluationDeferredAt: Date?
     var isArchived: Bool
     var isMigrated: Bool
     var isBulkEntry: Bool  // True if entered via bulk entry mode
@@ -574,6 +598,9 @@ final class CaseEntry {
         self.updatedAt = Date()
         self.attestorId = nil
         self.proxyAttestorId = nil
+        self.evaluationDeferred = false
+        self.evaluationDeferredById = nil
+        self.evaluationDeferredAt = nil
         self.isArchived = false
         self.isMigrated = false
         self.isBulkEntry = false
@@ -728,7 +755,42 @@ extension String {
             return "\(startMonth) \(startDay)–\(endDay), \(startYear)"
         }
     }
-    
+
+    /// Same as toWeekTimeframeLabel() but without the year
+    func toWeekTimeframeLabelShort() -> String {
+        guard self.contains("-W") else { return self }
+
+        let components = self.split(separator: "-W")
+        guard components.count == 2,
+              let year = Int(components[0]),
+              let week = Int(components[1]) else { return self }
+
+        let calendar = Calendar(identifier: .iso8601)
+        var dateComponents = DateComponents()
+        dateComponents.yearForWeekOfYear = year
+        dateComponents.weekOfYear = week
+        dateComponents.weekday = 2
+
+        guard let startDate = calendar.date(from: dateComponents) else { return self }
+        let endDate = calendar.date(byAdding: .day, value: 6, to: startDate) ?? startDate
+
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "MMM"
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "d"
+
+        let startMonth = monthFormatter.string(from: startDate)
+        let endMonth = monthFormatter.string(from: endDate)
+        let startDay = dayFormatter.string(from: startDate)
+        let endDay = dayFormatter.string(from: endDate)
+
+        if startMonth != endMonth {
+            return "\(startMonth) \(startDay) – \(endMonth) \(endDay)"
+        } else {
+            return "\(startMonth) \(startDay)–\(endDay)"
+        }
+    }
+
     static func weekBucket(from date: Date) -> String {
         CaseEntry.makeWeekBucket(for: date)
     }

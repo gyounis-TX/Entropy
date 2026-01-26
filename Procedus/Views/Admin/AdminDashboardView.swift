@@ -86,6 +86,10 @@ struct AdminDashboardView: View {
         currentProgram?.specialtyPackIds.count ?? 0
     }
 
+    private var placeholderAttendingCount: Int {
+        attendings.filter { $0.isPlaceholder && !$0.isArchived && $0.mergedIntoId == nil }.count
+    }
+
     /// IDs of active (non-graduated) fellows
     private var activeFellowIds: Set<UUID> {
         Set(allUsers.filter { $0.role == .fellow && !$0.hasGraduated }.map { $0.id })
@@ -122,15 +126,54 @@ struct AdminDashboardView: View {
         totalCases > 0 ? Double(attestedCases) / Double(totalCases) * 100 : 0
     }
 
+    private var pendingAttendingsAlert: some View {
+        NavigationLink(destination: AttendingManagementView()) {
+            HStack(spacing: 12) {
+                Image(systemName: "person.badge.clock.fill")
+                    .font(.title3)
+                    .foregroundColor(.orange)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(placeholderAttendingCount) Pending Attending\(placeholderAttendingCount == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color(UIColor.label))
+                    Text("Fellows added new attendings that need official accounts")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Text("Review")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.orange)
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.1))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
+                    // Pending Attendings Alert
+                    if placeholderAttendingCount > 0 {
+                        pendingAttendingsAlert
+                    }
+
                     // Statistics Section
                     statisticsSection
 
                     // Management Section
                     managementSection
+
+                    // Dashboards Section
+                    dashboardsSection
 
                     // Communications Section
                     communicationsSection
@@ -440,6 +483,14 @@ struct AdminDashboardView: View {
             }
         }
 
+        // Delete duty hours shifts
+        let dutyShiftsDescriptor = FetchDescriptor<DutyHoursShift>()
+        if let dutyShifts = try? modelContext.fetch(dutyShiftsDescriptor) {
+            for shift in dutyShifts {
+                modelContext.delete(shift)
+            }
+        }
+
         // Delete badges
         let badgesDescriptor = FetchDescriptor<BadgeEarned>()
         if let badges = try? modelContext.fetch(badgesDescriptor) {
@@ -642,6 +693,11 @@ struct AdminDashboardView: View {
             for entry in existingHours where entry.programId == program.id { modelContext.delete(entry) }
         }
 
+        let dutyShiftsDescriptor = FetchDescriptor<DutyHoursShift>()
+        if let existingShifts = try? modelContext.fetch(dutyShiftsDescriptor) {
+            for shift in existingShifts where shift.programId == program.id { modelContext.delete(shift) }
+        }
+
         // Delete existing evaluation responses
         // (Note: EvaluationResponse would need to be fetched and deleted if the model exists)
 
@@ -669,7 +725,7 @@ struct AdminDashboardView: View {
         let activeFellowData: [(first: String, last: String, email: String, pgy: Int)] = [
             ("Lisa", "Simpson", "lisa@springfield.com", 4),     // PGY4 - Beginner
             ("Maggie", "Simpson", "maggie@springfield.com", 5), // PGY5 - 249 PCI
-            ("Bart", "Simpson", "bart@springfield.com", 6)      // PGY6 - 299 PCI
+            ("Bart", "Simpson", "bart@springfield.com", 6)      // PGY6 - 249 PCI
         ]
 
         for (first, last, email, pgy) in activeFellowData {
@@ -828,6 +884,7 @@ struct AdminDashboardView: View {
 
         func createPendingCase(
             fellowId: UUID,
+            fellowLastName: String,
             procedureIds: [String],
             caseDate: Date,
             caseType: CaseType,
@@ -858,6 +915,19 @@ struct AdminDashboardView: View {
             newCase.attestationStatusRaw = AttestationStatus.pending.rawValue
 
             modelContext.insert(newCase)
+
+            // Create attestation notification for attending
+            let procedureCount = procedureIds.count
+            let message = "\(fellowLastName) submitted a case of \(procedureCount) procedure(s) for your attestation."
+            let notification = Notification(
+                userId: attendingId,
+                title: "New Case for Attestation",
+                message: message,
+                notificationType: NotificationType.attestationRequested.rawValue,
+                caseId: newCase.id,
+                attendingId: attendingId
+            )
+            modelContext.insert(notification)
         }
 
         // =========================================
@@ -923,7 +993,7 @@ struct AdminDashboardView: View {
             let accessSites = randomICAccessSites()
             let complications = maybeAddComplications(from: cathComplications)
             if isPending {
-                createPendingCase(fellowId: lisaId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
+                createPendingCase(fellowId: lisaId, fellowLastName: "Simpson", procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
             } else {
                 createAttestedCase(fellowId: lisaId, procedureIds: ["ic-dx-lhc", "ic-dx-coro"], caseDate: caseDate, caseType: .invasive, notes: cathNotes.randomElement()!, accessSites: accessSites, complications: complications)
             }
@@ -945,7 +1015,7 @@ struct AdminDashboardView: View {
             let isPending = i < 1
             let procId = i % 2 == 0 ? "ci-echo-tte" : "ci-echo-stress"
             if isPending {
-                createPendingCase(fellowId: lisaId, procedureIds: [procId], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
+                createPendingCase(fellowId: lisaId, fellowLastName: "Simpson", procedureIds: [procId], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
             } else {
                 createAttestedCase(fellowId: lisaId, procedureIds: [procId], caseDate: caseDate, caseType: .noninvasive, notes: echoNotes.randomElement()!)
             }
@@ -966,7 +1036,7 @@ struct AdminDashboardView: View {
             let accessSites = randomICAccessSites()
             let complications = maybeAddComplications(from: pciComplications)
             if isPending {
-                createPendingCase(fellowId: maggieId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
+                createPendingCase(fellowId: maggieId, fellowLastName: "Simpson", procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
             } else {
                 createAttestedCase(fellowId: maggieId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
             }
@@ -1005,21 +1075,21 @@ struct AdminDashboardView: View {
         }
 
         // =========================================
-        // PGY6 - Bart Simpson (299 PCI)
+        // PGY6 - Bart Simpson (249 PCI)
         // Fellowship years 1-3 (about to graduate)
         // =========================================
         let bartId = activeFellowIds[2]
 
-        // 299 PCI cases spread over ~27 months
-        for i in 0..<299 {
+        // 249 PCI cases spread over ~27 months
+        for i in 0..<249 {
             let weeksAgo = i / 3
             let caseDate = calendar.date(byAdding: .weekOfYear, value: -min(weeksAgo, 117), to: Date()) ?? Date()
-            let isPending = i < 15  // Last 5% pending
+            let isPending = i < 12  // Last ~5% pending
             let procId = ["ic-pci-stent", "ic-pci-dcb", "ic-pci-rotablator", "ic-pci-ivl"].randomElement()!
             let accessSites = randomICAccessSites()
             let complications = maybeAddComplications(from: pciComplications)
             if isPending {
-                createPendingCase(fellowId: bartId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
+                createPendingCase(fellowId: bartId, fellowLastName: "Simpson", procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
             } else {
                 createAttestedCase(fellowId: bartId, procedureIds: [procId], caseDate: caseDate, caseType: .invasive, notes: pciNotes.randomElement()!, accessSites: accessSites, complications: complications)
             }
@@ -1196,17 +1266,68 @@ struct AdminDashboardView: View {
 
             for weekOffset in 0..<weeksInFellowship {
                 let weekDate = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: Date()) ?? Date()
-                let weekBucket = weekDate.toWeekBucket()
-                let hours = Double.random(in: 55...75)  // Realistic work hours
+                let weekBucket = CaseEntry.makeWeekBucket(for: weekDate)
+
+                // Vary hours realistically: most weeks 55-75, occasional light weeks (vacation/conference)
+                let isVacationWeek = Int.random(in: 0..<20) == 0  // ~5% chance
+                let isConferenceWeek = Int.random(in: 0..<25) == 0  // ~4% chance
+                let hours: Double
+                if isVacationWeek {
+                    hours = 0  // Vacation
+                } else if isConferenceWeek {
+                    hours = Double.random(in: 20...35)  // Conference/light week
+                } else {
+                    hours = Double.random(in: 55...75)  // Normal work week
+                }
 
                 let dutyEntry = DutyHoursEntry(
                     userId: fellowId,
                     programId: program.id,
                     weekBucket: weekBucket,
                     hours: hours,
-                    notes: nil
+                    notes: isVacationWeek ? "Vacation" : (isConferenceWeek ? "Conference" : nil)
                 )
                 modelContext.insert(dutyEntry)
+
+                // Create comprehensive shift records for recent 12 weeks
+                if weekOffset < 12 && !isVacationWeek {
+                    let shiftsPerWeek = isConferenceWeek ? 3 : 5
+                    for dayIndex in 0..<shiftsPerWeek {
+                        guard let shiftDate = calendar.date(byAdding: .day, value: dayIndex, to: calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: weekDate))!) else { continue }
+
+                        // Start time: 6-7 AM
+                        let startHour = Int.random(in: 6...7)
+                        guard let startTime = calendar.date(bySettingHour: startHour, minute: 0, second: 0, of: shiftDate) else { continue }
+
+                        // Shift type: mostly regular, occasional call
+                        let shiftType: DutyHoursShiftType
+                        if dayIndex == 4 && Int.random(in: 0..<3) == 0 {
+                            shiftType = .call  // ~33% Friday call
+                        } else if dayIndex == 3 && Int.random(in: 0..<5) == 0 {
+                            shiftType = .nightFloat
+                        } else {
+                            shiftType = .regular
+                        }
+
+                        let shift = DutyHoursShift(
+                            userId: fellowId,
+                            programId: program.id,
+                            shiftDate: shiftDate,
+                            startTime: startTime,
+                            shiftType: shiftType,
+                            location: .inHouse
+                        )
+
+                        // Clock out: 10-14 hours later
+                        let shiftHours = shiftType == .call ? Double.random(in: 20...24) : Double.random(in: 10...14)
+                        let endTime = startTime.addingTimeInterval(shiftHours * 3600)
+                        shift.clockOut(at: endTime)
+                        shift.breakMinutes = Int.random(in: 15...45)
+                        shift.effectiveHours = shiftHours - Double(shift.breakMinutes) / 60.0
+
+                        modelContext.insert(shift)
+                    }
+                }
             }
         }
 
@@ -1219,15 +1340,18 @@ struct AdminDashboardView: View {
 
             for weekOffset in graduationOffset..<(graduationOffset + graduatedFellowshipWeeks) {
                 let weekDate = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: Date()) ?? Date()
-                let weekBucket = weekDate.toWeekBucket()
-                let hours = Double.random(in: 55...75)  // Realistic work hours
+                let weekBucket = CaseEntry.makeWeekBucket(for: weekDate)
+
+                // Vary hours realistically
+                let isVacationWeek = Int.random(in: 0..<20) == 0
+                let hours: Double = isVacationWeek ? 0 : Double.random(in: 55...75)
 
                 let dutyEntry = DutyHoursEntry(
                     userId: fellowId,
                     programId: program.id,
                     weekBucket: weekBucket,
                     hours: hours,
-                    notes: nil
+                    notes: isVacationWeek ? "Vacation" : nil
                 )
                 modelContext.insert(dutyEntry)
             }
@@ -3552,13 +3676,20 @@ struct AttendingManagementView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var attendings: [Attending]
     @Query private var allCases: [CaseEntry]
+    @Query private var allUsers: [User]
 
     @State private var showingAddAttending = false
     @State private var selectedAttending: Attending?
-    @State private var selectedTab = 0  // 0 = Active, 1 = Archived
+    @State private var selectedPlaceholder: Attending?
+    @State private var selectedTab = 0  // 0 = Active, 1 = Pending, 2 = Archived
 
     private var activeAttendings: [Attending] {
-        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
+        attendings.filter { !$0.isArchived && !$0.isPlaceholder }.sorted { $0.name < $1.name }
+    }
+
+    private var placeholderAttendings: [Attending] {
+        attendings.filter { $0.isPlaceholder && !$0.isArchived && $0.mergedIntoId == nil }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     private var archivedAttendings: [Attending] {
@@ -3573,13 +3704,24 @@ struct AttendingManagementView: View {
         caseCount(for: attending) == 0
     }
 
+    private func creatorName(for attending: Attending) -> String {
+        guard let fellowId = attending.createdByFellowId,
+              let fellow = allUsers.first(where: { $0.id == fellowId }) else {
+            return "Unknown"
+        }
+        return fellow.displayName
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 // Segmented Control
                 Picker("View", selection: $selectedTab) {
                     Text("Active (\(activeAttendings.count))").tag(0)
-                    Text("Archived (\(archivedAttendings.count))").tag(1)
+                    if !placeholderAttendings.isEmpty {
+                        Text("Pending (\(placeholderAttendings.count))").tag(1)
+                    }
+                    Text("Archived (\(archivedAttendings.count))").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
@@ -3619,6 +3761,53 @@ struct AttendingManagementView: View {
                                 }
 
                                 if index < activeAttendings.count - 1 {
+                                    Divider().padding(.leading, 16)
+                                }
+                            }
+                        }
+                    } else if selectedTab == 1 {
+                        // Pending (Placeholder) Attendings
+                        if placeholderAttendings.isEmpty {
+                            emptyStateView(message: "No pending attendings")
+                        } else {
+                            ForEach(Array(placeholderAttendings.enumerated()), id: \.element.id) { index, attending in
+                                Button {
+                                    selectedPlaceholder = attending
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack(spacing: 6) {
+                                                Text(attending.name)
+                                                    .font(.body)
+                                                    .foregroundColor(Color(UIColor.label))
+
+                                                Text("Pending")
+                                                    .font(.caption2)
+                                                    .fontWeight(.medium)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.orange.opacity(0.15))
+                                                    .foregroundColor(.orange)
+                                                    .cornerRadius(4)
+                                            }
+
+                                            Text("Added by \(creatorName(for: attending)) · \(caseCount(for: attending)) cases")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+
+                                        Spacer()
+
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(Color(UIColor.tertiaryLabel))
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .contentShape(Rectangle())
+                                }
+
+                                if index < placeholderAttendings.count - 1 {
                                     Divider().padding(.leading, 16)
                                 }
                             }
@@ -3682,6 +3871,9 @@ struct AttendingManagementView: View {
         .sheet(item: $selectedAttending) { attending in
             AdminAddEditAttendingSheet(attending: attending)
         }
+        .sheet(item: $selectedPlaceholder) { placeholder in
+            PlaceholderAttendingMergeSheet(placeholder: placeholder)
+        }
     }
 
     private func emptyStateView(message: String) -> some View {
@@ -3703,9 +3895,22 @@ struct AttendingRowNew: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(attending.name)
-                .font(.body)
-                .foregroundColor(Color(UIColor.label))
+            HStack(spacing: 6) {
+                Text(attending.name)
+                    .font(.body)
+                    .foregroundColor(Color(UIColor.label))
+
+                if attending.isPlaceholder {
+                    Text("Pending")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.15))
+                        .foregroundColor(.orange)
+                        .cornerRadius(4)
+                }
+            }
 
             Spacer()
 
@@ -3720,6 +3925,270 @@ struct AttendingRowNew: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Placeholder Attending Merge Sheet
+
+struct PlaceholderAttendingMergeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let placeholder: Attending
+
+    @Query private var allAttendings: [Attending]
+    @Query private var allCases: [CaseEntry]
+    @Query private var allNotifications: [Notification]
+    @Query private var allUsers: [User]
+
+    @State private var createNewOfficial = true
+    @State private var selectedOfficialId: UUID?
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var email = ""
+    @State private var enableLogin = true
+    @State private var showingConfirmation = false
+    @State private var isMerging = false
+
+    private var officialAttendings: [Attending] {
+        allAttendings.filter { !$0.isPlaceholder && !$0.isArchived }
+            .sorted { $0.name < $1.name }
+    }
+
+    private var casesToMigrate: [CaseEntry] {
+        allCases.filter { $0.attendingId == placeholder.id || $0.supervisorId == placeholder.id }
+    }
+
+    private var canMerge: Bool {
+        if createNewOfficial {
+            return !firstName.trimmingCharacters(in: .whitespaces).isEmpty ||
+                   !lastName.trimmingCharacters(in: .whitespaces).isEmpty
+        } else {
+            return selectedOfficialId != nil
+        }
+    }
+
+    private func creatorName() -> String {
+        guard let fellowId = placeholder.createdByFellowId,
+              let fellow = allUsers.first(where: { $0.id == fellowId }) else {
+            return "Unknown"
+        }
+        return fellow.displayName
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                // Placeholder Info Section
+                Section {
+                    LabeledContent("Name", value: placeholder.name)
+                    LabeledContent("Cases", value: "\(casesToMigrate.count)")
+                    LabeledContent("Added by", value: creatorName())
+                    LabeledContent("Created", value: placeholder.createdAt.formatted(date: .abbreviated, time: .omitted))
+                } header: {
+                    Text("Placeholder Attending")
+                }
+
+                // Action Section
+                Section {
+                    Picker("Action", selection: $createNewOfficial) {
+                        Text("Create Official Account").tag(true)
+                        Text("Link to Existing").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if createNewOfficial {
+                    // Create new official attending
+                    Section {
+                        TextField("First Name", text: $firstName)
+                            .textInputAutocapitalization(.words)
+                        TextField("Last Name", text: $lastName)
+                            .textInputAutocapitalization(.words)
+                        TextField("Email", text: $email)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
+                        Toggle("Enable Login Access", isOn: $enableLogin)
+                    } header: {
+                        Text("Official Account Details")
+                    } footer: {
+                        Text("This will create the official attending account and migrate all \(casesToMigrate.count) case(s).")
+                    }
+                } else {
+                    // Link to existing attending
+                    Section {
+                        if officialAttendings.isEmpty {
+                            Text("No official attendings available")
+                                .foregroundColor(.secondary)
+                                .italic()
+                        } else {
+                            Picker("Link To", selection: $selectedOfficialId) {
+                                Text("Select Attending").tag(nil as UUID?)
+                                ForEach(officialAttendings) { attending in
+                                    Text(attending.name).tag(attending.id as UUID?)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Select Existing Attending")
+                    } footer: {
+                        Text("All \(casesToMigrate.count) case(s) will be migrated to the selected attending.")
+                    }
+                }
+
+                // Preview Section
+                if !casesToMigrate.isEmpty {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "doc.text.fill")
+                                .foregroundColor(.blue)
+                            Text("\(casesToMigrate.count) case(s) will be migrated")
+                                .font(.subheadline)
+                        }
+                        HStack(spacing: 8) {
+                            Image(systemName: "bell.fill")
+                                .foregroundColor(.orange)
+                            Text("Attestation notifications will be created")
+                                .font(.subheadline)
+                        }
+                    } header: {
+                        Text("Migration Preview")
+                    }
+                }
+            }
+            .navigationTitle("Setup Official Account")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isMerging)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Merge") {
+                        showingConfirmation = true
+                    }
+                    .disabled(!canMerge || isMerging)
+                    .fontWeight(.semibold)
+                }
+            }
+            .confirmationDialog("Confirm Migration", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("Migrate \(casesToMigrate.count) Case(s)") {
+                    performMerge()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will migrate all cases from '\(placeholder.name)' to the official account. This action cannot be undone.")
+            }
+            .onAppear {
+                firstName = placeholder.firstName
+                lastName = placeholder.lastName
+            }
+            .overlay {
+                if isMerging {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                            Text("Migrating cases...")
+                                .font(.headline)
+                        }
+                        .padding(32)
+                        .background(Color(UIColor.systemBackground))
+                        .cornerRadius(16)
+                    }
+                }
+            }
+        }
+    }
+
+    private func performMerge() {
+        isMerging = true
+
+        let targetAttendingId: UUID
+
+        if createNewOfficial {
+            // Create new official attending
+            let trimmedFirst = firstName.trimmingCharacters(in: .whitespaces)
+            let trimmedLast = lastName.trimmingCharacters(in: .whitespaces)
+            let official = Attending(
+                firstName: trimmedFirst,
+                lastName: trimmedLast,
+                programId: placeholder.programId
+            )
+            modelContext.insert(official)
+
+            if enableLogin && !email.trimmingCharacters(in: .whitespaces).isEmpty {
+                let newUser = User(
+                    email: email.trimmingCharacters(in: .whitespaces),
+                    firstName: trimmedFirst,
+                    lastName: trimmedLast,
+                    role: .attending,
+                    accountMode: .institutional,
+                    programId: placeholder.programId
+                )
+                modelContext.insert(newUser)
+                official.userId = newUser.id
+            }
+
+            targetAttendingId = official.id
+        } else {
+            targetAttendingId = selectedOfficialId!
+        }
+
+        // Migrate all cases
+        for caseEntry in casesToMigrate {
+            if caseEntry.attendingId == placeholder.id {
+                caseEntry.attendingId = targetAttendingId
+            }
+            if caseEntry.supervisorId == placeholder.id {
+                caseEntry.supervisorId = targetAttendingId
+            }
+        }
+
+        // Clear old notifications for placeholder
+        let oldNotifications = allNotifications.filter { $0.attendingId == placeholder.id }
+        for notification in oldNotifications {
+            notification.isCleared = true
+            notification.autoCleared = true
+            notification.autoClearReason = "Attending migrated to official account"
+            notification.clearedAt = Date()
+        }
+
+        // Create new notifications for pending cases
+        let pendingCases = casesToMigrate.filter {
+            $0.attestationStatusRaw == AttestationStatus.pending.rawValue ||
+            $0.attestationStatusRaw == AttestationStatus.requested.rawValue
+        }
+
+        for caseEntry in pendingCases {
+            let notification = Notification(
+                userId: targetAttendingId,
+                title: "Case Pending Attestation",
+                message: "A case has been migrated to your account and requires attestation.",
+                notificationType: NotificationType.attestationRequested.rawValue,
+                caseId: caseEntry.id,
+                attendingId: targetAttendingId
+            )
+            modelContext.insert(notification)
+        }
+
+        // Mark placeholder as merged
+        placeholder.mergedIntoId = targetAttendingId
+        placeholder.mergedAt = Date()
+        placeholder.isArchived = true
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("Failed to save merge: \(error)")
+        }
+
+        isMerging = false
+        dismiss()
     }
 }
 
@@ -4167,7 +4636,7 @@ struct AdminAddEditFacilitySheet: View {
                 // Facility Information Section
                 Section {
                     TextField("Facility Name", text: $name)
-                    TextField("Short Name (optional)", text: $shortName)
+                    TextField("Short Name (e.g. TMC)", text: $shortName)
                 } header: {
                     Text("Facility Information")
                 }
@@ -4237,7 +4706,7 @@ struct AdminAddEditFacilitySheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(name.isEmpty)
+                        .disabled(name.isEmpty || shortName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .onAppear {
@@ -5901,6 +6370,7 @@ struct EditEvaluationFieldSheet: View {
 
 struct AttestationDashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
     @Query private var allCases: [CaseEntry]
     @Query private var allUsers: [User]
     @Query private var attendings: [Attending]
@@ -6007,6 +6477,10 @@ struct AttestationDashboardView: View {
                 },
                 onAttest: {
                     performProxyAttestation()
+                    showingProxyAttestation = false
+                },
+                onDeferAndAttest: {
+                    performProxyAttestation(deferEvaluation: true)
                     showingProxyAttestation = false
                 }
             )
@@ -6120,14 +6594,19 @@ struct AttestationDashboardView: View {
         }
     }
 
-    private func performProxyAttestation() {
+    private func performProxyAttestation(deferEvaluation: Bool = false) {
         if let caseEntry = caseForProxy {
             caseEntry.attestationStatus = .proxyAttested
             caseEntry.isProxyAttestation = true
             caseEntry.attestedAt = Date()
 
-            // If evaluations required and rating selected, apply to all rating fields
-            if evaluationsRequired, let rating = selectedProxyRating {
+            if deferEvaluation {
+                // Record evaluation deferral
+                caseEntry.evaluationDeferred = true
+                caseEntry.evaluationDeferredById = appState.currentUser?.id
+                caseEntry.evaluationDeferredAt = Date()
+            } else if evaluationsRequired, let rating = selectedProxyRating {
+                // Apply evaluation ratings
                 var responses: [String: String] = [:]
                 for field in activeRatingFields {
                     responses[field.id.uuidString] = String(rating)
@@ -6151,6 +6630,7 @@ struct ProxyAttestationSheet: View {
     @Binding var selectedRating: Int?
     let onCancel: () -> Void
     let onAttest: () -> Void
+    let onDeferAndAttest: () -> Void
 
     private var attendingName: String {
         guard let caseEntry = caseEntry,
@@ -6251,6 +6731,21 @@ struct ProxyAttestationSheet: View {
                     }
                     .disabled(!canAttest)
 
+                    // Defer evaluation option (only when evaluations are required)
+                    if evaluationsRequired {
+                        Button {
+                            onDeferAndAttest()
+                        } label: {
+                            Text("Defer Evaluation & Attest")
+                                .font(.subheadline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.orange.opacity(0.15))
+                                .foregroundStyle(.orange)
+                                .cornerRadius(12)
+                        }
+                    }
+
                     Button {
                         onCancel()
                     } label: {
@@ -6331,6 +6826,16 @@ struct AdminAttestationCaseRow: View {
                     Text("(Proxy)")
                         .font(.caption)
                         .foregroundColor(.blue)
+                }
+                if caseEntry.evaluationDeferred {
+                    Text("Eval Deferred")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.15))
+                        .foregroundColor(.orange)
+                        .cornerRadius(4)
                 }
             }
 

@@ -7,7 +7,6 @@ import UIKit
 import AVFoundation
 import CryptoKit
 
-@MainActor
 final class MediaStorageService {
     static let shared = MediaStorageService()
 

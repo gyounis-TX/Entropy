@@ -1133,17 +1133,22 @@ struct VideoLabelsView: View {
         newTerm = ""
     }
 
-    @MainActor
     private func generateThumbnail() async {
-        let asset = AVAsset(url: videoURL)
-        let imageGenerator = AVAssetImageGenerator(asset: asset)
-        imageGenerator.appliesPreferredTrackTransform = true
-
-        do {
-            let cgImage = try await imageGenerator.image(at: CMTime.zero).image
-            thumbnailImage = UIImage(cgImage: cgImage)
-        } catch {
-            print("Failed to generate video thumbnail: \(error)")
+        let url = videoURL
+        let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            let asset = AVAsset(url: url)
+            let imageGenerator = AVAssetImageGenerator(asset: asset)
+            imageGenerator.appliesPreferredTrackTransform = true
+            do {
+                let cgImage = try await imageGenerator.image(at: CMTime.zero).image
+                return UIImage(cgImage: cgImage)
+            } catch {
+                print("Failed to generate video thumbnail: \(error)")
+                return nil
+            }
+        }.value
+        if let image {
+            thumbnailImage = image
         }
     }
 }
@@ -1254,17 +1259,22 @@ struct VideoNoPHIConfirmationView: View {
         }
     }
 
-    @MainActor
     private func generateThumbnail() async {
-        let asset = AVAsset(url: videoURL)
-        let imageGenerator = AVAssetImageGenerator(asset: asset)
-        imageGenerator.appliesPreferredTrackTransform = true
-
-        do {
-            let cgImage = try await imageGenerator.image(at: CMTime.zero).image
-            thumbnailImage = UIImage(cgImage: cgImage)
-        } catch {
-            print("Failed to generate video thumbnail: \(error)")
+        let url = videoURL
+        let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            let asset = AVAsset(url: url)
+            let imageGenerator = AVAssetImageGenerator(asset: asset)
+            imageGenerator.appliesPreferredTrackTransform = true
+            do {
+                let cgImage = try await imageGenerator.image(at: CMTime.zero).image
+                return UIImage(cgImage: cgImage)
+            } catch {
+                print("Failed to generate video thumbnail: \(error)")
+                return nil
+            }
+        }.value
+        if let image {
+            thumbnailImage = image
         }
     }
 }

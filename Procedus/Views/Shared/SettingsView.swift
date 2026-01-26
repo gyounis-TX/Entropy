@@ -4062,9 +4062,9 @@ struct AddEditFacilitySheet: View {
             Form {
                 Section {
                     TextField("Facility Name", text: $name)
-                    TextField("Short Name (optional)", text: $shortName)
+                    TextField("Short Name (e.g. TMC)", text: $shortName)
                 } footer: {
-                    Text("Short name is displayed in compact views (e.g., 'TMC' for Texas Medical Center)")
+                    Text("Short name is required and displayed in compact views (e.g., 'TMC' for Texas Medical Center)")
                 }
             }
             .navigationTitle(facility == nil ? "Add Facility" : "Edit Facility")
@@ -4084,7 +4084,7 @@ struct AddEditFacilitySheet: View {
                         saveTrainingFacility()
                     }
                     .fontWeight(.semibold)
-                    .disabled(name.isEmpty)
+                    .disabled(name.isEmpty || shortName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
