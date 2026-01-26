@@ -4,6 +4,7 @@
 
 import SwiftUI
 import SwiftData
+import AVKit
 
 // MARK: - Gallery Tab Selection
 
@@ -561,6 +562,7 @@ struct MediaFullDetailView: View {
     @Query private var allAttendings: [Attending]
 
     @State private var fullImage: UIImage?
+    @State private var player: AVPlayer?
     @State private var isEditingLabels = false
     @State private var editedLabels: [String] = []
     @State private var isShared: Bool = false
@@ -680,8 +682,17 @@ struct MediaFullDetailView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .cornerRadius(12)
+                    } else if media.mediaType == .video, let player = player {
+                        VideoPlayer(player: player)
+                            .aspectRatio(
+                                (media.width != nil && media.height != nil)
+                                    ? CGFloat(media.width!) / CGFloat(media.height!) : 16.0 / 9.0,
+                                contentMode: .fit
+                            )
+                            .cornerRadius(12)
                     } else if media.mediaType == .video {
-                        videoPlaceholder
+                        ProgressView()
+                            .frame(height: 200)
                     } else {
                         ProgressView()
                             .frame(height: 200)
@@ -713,35 +724,26 @@ struct MediaFullDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        player?.pause()
+                        dismiss()
+                    }
                 }
             }
             .onAppear {
                 loadImage()
+                if media.mediaType == .video {
+                    let url = MediaStorageService.shared.fullURL(for: media.localPath)
+                    player = AVPlayer(url: url)
+                }
                 editedLabels = media.searchTerms
                 isShared = media.isSharedWithFellowship
             }
-        }
-    }
-
-    private var videoPlaceholder: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "video.fill")
-                .font(.system(size: 50))
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            Text("Video")
-                .font(.subheadline)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            if let duration = media.durationSeconds {
-                Text(formatDuration(duration))
-                    .font(.caption)
-                    .foregroundStyle(ProcedusTheme.textTertiary)
+            .onDisappear {
+                player?.pause()
+                player = nil
             }
         }
-        .frame(height: 200)
-        .frame(maxWidth: .infinity)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(12)
     }
 
     // MARK: - Labels Section (Editable for Fellows)

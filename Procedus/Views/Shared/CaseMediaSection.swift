@@ -4,6 +4,7 @@
 
 import SwiftUI
 import SwiftData
+import AVKit
 
 struct CaseMediaSection: View {
     let caseId: UUID
@@ -219,6 +220,7 @@ struct MediaDetailView: View {
     let media: CaseMedia
 
     @State private var fullImage: UIImage?
+    @State private var player: AVPlayer?
 
     var body: some View {
         NavigationStack {
@@ -228,8 +230,16 @@ struct MediaDetailView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .padding()
+                } else if media.mediaType == .video, let player = player {
+                    VideoPlayer(player: player)
+                        .aspectRatio(
+                            (media.width != nil && media.height != nil)
+                                ? CGFloat(media.width!) / CGFloat(media.height!) : 16.0 / 9.0,
+                            contentMode: .fit
+                        )
+                        .padding()
                 } else if media.mediaType == .video {
-                    videoPlaceholder
+                    ProgressView()
                 } else {
                     ProgressView()
                 }
@@ -283,41 +293,28 @@ struct MediaDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
+                        player?.pause()
                         dismiss()
                     }
                 }
             }
             .onAppear {
                 loadFullImage()
+                if media.mediaType == .video {
+                    let url = MediaStorageService.shared.fullURL(for: media.localPath)
+                    player = AVPlayer(url: url)
+                }
+            }
+            .onDisappear {
+                player?.pause()
+                player = nil
             }
         }
-    }
-
-    private var videoPlaceholder: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "video.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(ProcedusTheme.textSecondary)
-
-            if let duration = media.durationSeconds {
-                Text(formatDuration(duration))
-                    .font(.subheadline)
-                    .foregroundStyle(ProcedusTheme.textSecondary)
-            }
-
-            Text("Video playback coming soon")
-                .font(.caption)
-                .foregroundStyle(ProcedusTheme.textTertiary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.gray.opacity(0.1))
     }
 
     private func loadFullImage() {
         if media.mediaType == .image {
             fullImage = MediaStorageService.shared.loadImage(from: media.localPath)
-        } else if let thumbPath = media.thumbnailPath {
-            fullImage = MediaStorageService.shared.loadThumbnail(from: thumbPath)
         }
     }
 

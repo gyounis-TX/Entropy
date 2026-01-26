@@ -4,6 +4,7 @@
 
 import SwiftUI
 import SwiftData
+import AVKit
 
 // MARK: - Attending Gallery Tab Selection
 
@@ -496,6 +497,7 @@ struct AttendingMediaDetailView: View {
     @State private var isInfoExpanded: Bool = false
     @State private var newCommentText: String = ""
     @State private var showingSuggestedLabels: Bool = false
+    @State private var player: AVPlayer?
 
     private var linkedCase: CaseEntry? {
         allCases.first { $0.id == media.caseEntryId }
@@ -574,14 +576,23 @@ struct AttendingMediaDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Image display
+                    // Image/video display
                     if let image = fullImage {
                         Image(uiImage: image)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .cornerRadius(12)
+                    } else if media.mediaType == .video, let player = player {
+                        VideoPlayer(player: player)
+                            .aspectRatio(
+                                (media.width != nil && media.height != nil)
+                                    ? CGFloat(media.width!) / CGFloat(media.height!) : 16.0 / 9.0,
+                                contentMode: .fit
+                            )
+                            .cornerRadius(12)
                     } else if media.mediaType == .video {
-                        videoPlaceholder
+                        ProgressView()
+                            .frame(height: 200)
                     } else {
                         ProgressView()
                             .frame(height: 200)
@@ -607,34 +618,25 @@ struct AttendingMediaDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        player?.pause()
+                        dismiss()
+                    }
                 }
             }
             .onAppear {
                 loadImage()
                 editedLabels = media.searchTerms
+                if media.mediaType == .video {
+                    let url = MediaStorageService.shared.fullURL(for: media.localPath)
+                    player = AVPlayer(url: url)
+                }
+            }
+            .onDisappear {
+                player?.pause()
+                player = nil
             }
         }
-    }
-
-    private var videoPlaceholder: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "video.fill")
-                .font(.system(size: 50))
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            Text("Video")
-                .font(.subheadline)
-                .foregroundStyle(ProcedusTheme.textSecondary)
-            if let duration = media.durationSeconds {
-                Text(formatDuration(duration))
-                    .font(.caption)
-                    .foregroundStyle(ProcedusTheme.textTertiary)
-            }
-        }
-        .frame(height: 200)
-        .frame(maxWidth: .infinity)
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(12)
     }
 
     // MARK: - Labels Section (Attendings can edit)
@@ -897,8 +899,6 @@ struct AttendingMediaDetailView: View {
     private func loadImage() {
         if media.mediaType == .image {
             fullImage = MediaStorageService.shared.loadImage(from: media.localPath)
-        } else if let thumbPath = media.thumbnailPath {
-            fullImage = MediaStorageService.shared.loadThumbnail(from: thumbPath)
         }
     }
 
@@ -943,9 +943,4 @@ struct AttendingMediaDetailView: View {
         try? modelContext.save()
     }
 
-    private func formatDuration(_ seconds: Double) -> String {
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", minutes, secs)
-    }
 }
