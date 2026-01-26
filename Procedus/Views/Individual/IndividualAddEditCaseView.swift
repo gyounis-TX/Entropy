@@ -434,28 +434,27 @@ struct IndividualAddEditCaseView: View {
         }
     }
 
-    // MARK: - Combined Dropdown Section (Attending / Facility / Timeframe side-by-side)
+    // MARK: - Combined Dropdown Section (Attending / Facility / Date as compact rows)
 
     private var combinedDropdownSection: some View {
         Section {
-            HStack(alignment: .top, spacing: 8) {
-                // Attending dropdown (hidden for simplified noninvasive form)
+            VStack(spacing: 6) {
+                // Attending row
                 if !isSimplifiedNoninvasiveForm {
-                    VStack(spacing: 4) {
+                    HStack(spacing: 8) {
                         Text("Attending")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .frame(width: 68, alignment: .leading)
+
                         if attendings.isEmpty {
-                            Text("None")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color(UIColor.tertiarySystemFill))
-                                .cornerRadius(8)
+                            Text("Add in Settings")
+                                .font(.caption)
+                                .foregroundColor(.tertiary)
+                            Spacer()
                         } else {
                             Menu {
-                                Button("Select") { selectedAttendingId = nil }
+                                Button("None") { selectedAttendingId = nil }
                                 ForEach(attendings) { attending in
                                     Button(attending.name) {
                                         selectedAttendingId = attending.id
@@ -463,21 +462,19 @@ struct IndividualAddEditCaseView: View {
                                 }
                             } label: {
                                 HStack(spacing: 4) {
-                                    if let id = selectedAttendingId,
-                                       let att = attendings.first(where: { $0.id == id }) {
-                                        Text(att.initials)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                    } else {
-                                        Text("--")
-                                            .font(.subheadline)
-                                    }
-                                    Image(systemName: "chevron.down")
+                                    Text(selectedAttendingId.flatMap { id in
+                                        attendings.first { $0.id == id }?.name
+                                    } ?? "Select")
+                                        .font(.footnote)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.6)
+                                    Spacer(minLength: 2)
+                                    Image(systemName: "chevron.up.chevron.down")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
                                 .background(Color(UIColor.tertiarySystemFill))
                                 .cornerRadius(8)
                             }
@@ -486,40 +483,41 @@ struct IndividualAddEditCaseView: View {
                     }
                 }
 
-                // Facility dropdown
-                VStack(spacing: 4) {
+                // Facility row
+                HStack(spacing: 8) {
                     Text("Facility")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .frame(width: 68, alignment: .leading)
+
                     if facilities.isEmpty {
-                        Text("None")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(UIColor.tertiarySystemFill))
-                            .cornerRadius(8)
+                        Text("Add in Settings")
+                            .font(.caption)
+                            .foregroundColor(.tertiary)
+                        Spacer()
                     } else {
                         Menu {
-                            Button("Select") { selectedFacilityId = nil }
+                            Button("None") { selectedFacilityId = nil }
                             ForEach(facilities) { facility in
-                                Button(facility.shortName ?? facility.name) {
+                                Button(facility.name) {
                                     selectedFacilityId = facility.id
                                 }
                             }
                         } label: {
                             HStack(spacing: 4) {
                                 Text(selectedFacilityId.flatMap { id in
-                                    facilities.first { $0.id == id }
-                                        .map { $0.shortName ?? $0.name }
-                                } ?? "--")
-                                    .font(.subheadline)
-                                Image(systemName: "chevron.down")
+                                    facilities.first { $0.id == id }?.name
+                                } ?? "Select")
+                                    .font(.footnote)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.6)
+                                Spacer(minLength: 2)
+                                Image(systemName: "chevron.up.chevron.down")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                             .background(Color(UIColor.tertiarySystemFill))
                             .cornerRadius(8)
                         }
@@ -527,11 +525,13 @@ struct IndividualAddEditCaseView: View {
                     }
                 }
 
-                // Timeframe dropdown
-                VStack(spacing: 4) {
-                    Text("Timeframe")
+                // Date row
+                HStack(spacing: 8) {
+                    Text("Date")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .frame(width: 68, alignment: .leading)
+
                     Menu {
                         ForEach(availableWeekBuckets, id: \.self) { bucket in
                             Button(bucket.toWeekTimeframeLabel()) {
@@ -540,14 +540,17 @@ struct IndividualAddEditCaseView: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Text(selectedWeekBucket.toWeekTimeframeLabelShort())
-                                .font(.subheadline)
-                            Image(systemName: "chevron.down")
+                            Text(selectedWeekBucket.toWeekTimeframeLabel())
+                                .font(.footnote)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                            Spacer(minLength: 2)
+                            Image(systemName: "chevron.up.chevron.down")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                         .background(Color(UIColor.tertiarySystemFill))
                         .cornerRadius(8)
                     }
