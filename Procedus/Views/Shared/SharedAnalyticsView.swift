@@ -173,7 +173,7 @@ struct AnalyticsView: View {
 
         // Check which PGY levels have case data
         for caseEntry in userCases {
-            let caseAcademicYear = academicYear(for: caseEntry.createdAt)
+            let caseAcademicYear = academicYear(for: caseEntry.procedureDate)
             let yearsAgo = currentAcademicYear - caseAcademicYear
             let pgyLevel = currentPGY - yearsAgo
 
@@ -270,7 +270,7 @@ struct AnalyticsView: View {
             let targetAcademicYear = currentAcademicYear - yearsAgo
 
             cases = cases.filter { caseEntry in
-                academicYear(for: caseEntry.createdAt) == targetAcademicYear
+                academicYear(for: caseEntry.procedureDate) == targetAcademicYear
             }
         }
 
@@ -809,7 +809,7 @@ struct AnalyticsView: View {
                             }
                         }
                         Divider()
-                        ForEach(attendings.sorted { $0.name < $1.name }) { attending in
+                        ForEach(attendings.sorted { $0.lastName < $1.lastName }) { attending in
                             Button {
                                 selectedAttendingId = attending.id
                             } label: {
@@ -1112,20 +1112,21 @@ struct AnalyticsView: View {
     private var casesByMonth: [ChartDataPoint] {
         let calendar = Calendar.current
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
+        formatter.dateFormat = "MMM yy"
 
         var grouped: [String: Int] = [:]
         for caseEntry in procedureFilteredCases {
-            let year = calendar.component(.year, from: caseEntry.createdAt)
-            let month = calendar.component(.month, from: caseEntry.createdAt)
+            let year = calendar.component(.year, from: caseEntry.procedureDate)
+            let month = calendar.component(.month, from: caseEntry.procedureDate)
             let bucket = String(format: "%04d-%02d", year, month)
             grouped[bucket, default: 0] += 1
         }
         return grouped.map { bucket, count in
             let parts = bucket.split(separator: "-")
             var label = bucket
-            if parts.count == 2, let month = Int(parts[1]) {
+            if parts.count == 2, let year = Int(parts[0]), let month = Int(parts[1]) {
                 var components = DateComponents()
+                components.year = year
                 components.month = month
                 if let date = calendar.date(from: components) {
                     label = formatter.string(from: date)
@@ -1142,15 +1143,15 @@ struct AnalyticsView: View {
         let calendar = Calendar.current
         var grouped: [String: Int] = [:]
         for caseEntry in procedureFilteredCases {
-            let year = calendar.component(.year, from: caseEntry.createdAt)
-            let month = calendar.component(.month, from: caseEntry.createdAt)
+            let year = calendar.component(.year, from: caseEntry.procedureDate)
+            let month = calendar.component(.month, from: caseEntry.procedureDate)
             let quarter = (month - 1) / 3 + 1
             let bucket = String(format: "%04d-Q%d", year, quarter)
             grouped[bucket, default: 0] += 1
         }
         return grouped.map { bucket, count in
             let parts = bucket.split(separator: "-")
-            let label = parts.count == 2 ? String(parts[1]) : bucket
+            let label = parts.count == 2 ? "\(parts[1]) \(parts[0].suffix(2))" : bucket
             return ChartDataPoint(bucket: bucket, label: label, count: count)
         }
         .sorted { $0.bucket < $1.bucket }
@@ -1162,7 +1163,7 @@ struct AnalyticsView: View {
         let calendar = Calendar.current
         var grouped: [String: Int] = [:]
         for caseEntry in procedureFilteredCases {
-            let year = calendar.component(.year, from: caseEntry.createdAt)
+            let year = calendar.component(.year, from: caseEntry.procedureDate)
             let bucket = String(year)
             grouped[bucket, default: 0] += 1
         }
@@ -1187,7 +1188,7 @@ struct AnalyticsView: View {
         var grouped: [Int: Int] = [:] // PGY level -> case count
 
         for caseEntry in procedureFilteredCases {
-            let caseAcademicYear = academicYear(for: caseEntry.createdAt)
+            let caseAcademicYear = academicYear(for: caseEntry.procedureDate)
             let yearsAgo = currentAcademicYear - caseAcademicYear
             let pgyLevel = currentPGY - yearsAgo
 
@@ -1209,7 +1210,7 @@ struct AnalyticsView: View {
     private var casesByAcademicYear: [ChartDataPoint] {
         var grouped: [Int: Int] = [:]
         for caseEntry in procedureFilteredCases {
-            let year = academicYear(for: caseEntry.createdAt)
+            let year = academicYear(for: caseEntry.procedureDate)
             grouped[year, default: 0] += 1
         }
         return grouped.map { year, count in
