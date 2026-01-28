@@ -208,6 +208,65 @@ final class MediaStorageService {
         return (relativePath, relativeThumbnailPath, fileSize, metadata.width, metadata.height, metadata.duration, hash)
     }
 
+    // MARK: - Save Video (Synchronous — Dev Data Only)
+
+    /// Save a video for a case entry synchronously (for dev data population)
+    /// - Parameters:
+    ///   - sourceURL: The source URL of the video file
+    ///   - caseId: The case entry ID
+    /// - Returns: Tuple of media info or nil on failure
+    func saveVideoSync(
+        from sourceURL: URL,
+        forCaseId caseId: UUID
+    ) -> (localPath: String, thumbnailPath: String?, fileSize: Int, contentHash: String)? {
+        // Get file size from attributes
+        guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: sourceURL.path),
+              let fileSize = fileAttributes[.size] as? Int else {
+            print("MediaStorageService: Failed to read video file attributes at \(sourceURL.path)")
+            return nil
+        }
+
+        // Check video size limit
+        guard fileSize <= Self.maxVideoFileSizeBytes else {
+            print("MediaStorageService: Video exceeds size limit (\(formattedFileSize(fileSize)) > \(formattedFileSize(Self.maxVideoFileSizeBytes)))")
+            return nil
+        }
+
+        // Create case directory
+        let caseDirectory = mediaDirectory.appendingPathComponent(caseId.uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: caseDirectory, withIntermediateDirectories: true)
+
+        // Generate unique filename
+        let fileExtension = sourceURL.pathExtension.isEmpty ? "mp4" : sourceURL.pathExtension
+        let fileName = "\(UUID().uuidString).\(fileExtension)"
+        let filePath = caseDirectory.appendingPathComponent(fileName)
+
+        // Copy video file
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: filePath)
+        } catch {
+            print("MediaStorageService: Failed to save video: \(error)")
+            return nil
+        }
+
+        // Compute hash
+        let hash: String
+        if let videoData = try? Data(contentsOf: filePath) {
+            hash = computeSHA256(data: videoData)
+        } else {
+            hash = UUID().uuidString
+        }
+
+        // Generate video thumbnail (synchronous)
+        let thumbnailFileName = generateVideoThumbnail(from: filePath, caseId: caseId, originalFileName: fileName)
+
+        // Return relative paths
+        let relativePath = "CaseMedia/\(caseId.uuidString)/\(fileName)"
+        let relativeThumbnailPath = thumbnailFileName.map { "CaseMedia/Thumbnails/\($0)" }
+
+        return (relativePath, relativeThumbnailPath, fileSize, hash)
+    }
+
     // MARK: - Thumbnail Generation
 
     /// Generate thumbnail for an image

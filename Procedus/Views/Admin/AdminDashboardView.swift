@@ -1432,17 +1432,25 @@ struct AdminDashboardView: View {
             "Rare finding, well identified"
         ]
 
-        // Medical image types for simulation
-        let medicalImageTypes: [(icon: String, title: String, color: UIColor)] = [
-            ("waveform.path.ecg", "ECG Recording", UIColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1.0)),
-            ("heart.fill", "Echocardiogram", UIColor(red: 0.9, green: 0.3, blue: 0.3, alpha: 1.0)),
-            ("circle.hexagonpath", "Coronary Angiogram", UIColor(red: 0.3, green: 0.6, blue: 0.9, alpha: 1.0)),
-            ("bolt.heart.fill", "EP Study", UIColor(red: 0.9, green: 0.6, blue: 0.2, alpha: 1.0)),
-            ("lungs.fill", "Chest X-Ray", UIColor(red: 0.7, green: 0.7, blue: 0.8, alpha: 1.0)),
-            ("figure.walk.motion", "Stress Test", UIColor(red: 0.4, green: 0.8, blue: 0.6, alpha: 1.0)),
-            ("waveform.path.ecg.rectangle", "Holter Monitor", UIColor(red: 0.6, green: 0.4, blue: 0.8, alpha: 1.0)),
-            ("arrowtriangle.up.heart.fill", "Cath Lab Image", UIColor(red: 0.8, green: 0.4, blue: 0.5, alpha: 1.0))
-        ]
+        // Real medical images from asset catalog, mapped by case type
+        let coronaryImages = ["DevCoronary1", "DevCoronary2", "DevCoronary3"]
+        let echoImages = ["DevEcho1", "DevEcho2", "DevEcho3"]
+        let ctImages = ["DevCardiacCT", "DevCT1"]
+        let allDevImages = coronaryImages + echoImages + ctImages
+
+        // Determine which images to use based on procedure tags
+        func devImagesForCase(_ caseEntry: CaseEntry) -> [String] {
+            let tags = caseEntry.procedureTagIds
+            let hasCoronary = tags.contains { $0.hasPrefix("ic-dx-") || $0.hasPrefix("ic-pci-") }
+            let hasEcho = tags.contains { $0.hasPrefix("ci-echo-") }
+            let hasCT = tags.contains { $0.hasPrefix("ci-ct-") }
+
+            if hasCoronary { return coronaryImages }
+            if hasEcho { return echoImages }
+            if hasCT { return ctImages }
+            // EP, nuclear, or other → cycle through all
+            return allDevImages
+        }
 
         // All people who can comment (fellows + attendings)
         let allCommenters: [(id: UUID, name: String, role: UserRole)] =
@@ -1457,19 +1465,15 @@ struct AdminDashboardView: View {
             let selectedCases = fellowCases.shuffled().prefix(10)
 
             for (index, caseEntry) in selectedCases.enumerated() {
-                // Pick a medical image type
-                let imageType = medicalImageTypes[index % medicalImageTypes.count]
+                // Pick a real medical image from asset catalog based on case type
+                let imagePool = devImagesForCase(caseEntry)
+                let imageName = imagePool[index % imagePool.count]
 
-                // Generate actual medical simulation image
-                guard let simulatedImage = generateMedicalSimulationImage(
-                    icon: imageType.icon,
-                    title: imageType.title,
-                    accentColor: imageType.color,
-                    caseNumber: index + 1
-                ) else { continue }
+                // Load from asset catalog
+                guard let realImage = UIImage(named: imageName) else { continue }
 
                 // Save the image using MediaStorageService
-                guard let savedResult = MediaStorageService.shared.saveImage(simulatedImage, forCaseId: caseEntry.id) else { continue }
+                guard let savedResult = MediaStorageService.shared.saveImage(realImage, forCaseId: caseEntry.id) else { continue }
 
                 // Create media entry with actual saved path
                 let media = CaseMedia(
@@ -1477,7 +1481,7 @@ struct AdminDashboardView: View {
                     ownerId: fellowInfo.id,
                     ownerName: fellowInfo.name,
                     mediaType: .image,
-                    fileName: "medical_\(imageType.title.replacingOccurrences(of: " ", with: "_"))_\(index + 1).jpg",
+                    fileName: "\(imageName)_\(index + 1).jpg",
                     localPath: savedResult.localPath
                 )
 
@@ -1505,10 +1509,12 @@ struct AdminDashboardView: View {
                 // Add labels
                 if isShared {
                     let labelCount = Int.random(in: 2...4)
-                    var labels = [imageType.title]
+                    let imageLabel = imageName.hasPrefix("DevCoronary") ? "Coronary Angiogram" :
+                                     imageName.hasPrefix("DevEcho") ? "Echocardiogram" : "Cardiac CT"
+                    var labels = [imageLabel]
                     labels += teachingLabels.shuffled().prefix(labelCount - 1)
                     media.searchTerms = labels
-                    media.comment = "Teaching case - \(imageType.title)"
+                    media.comment = "Teaching case - \(imageLabel)"
                 } else {
                     media.searchTerms = [privateLabels.randomElement()!]
                 }
@@ -1554,112 +1560,85 @@ struct AdminDashboardView: View {
                     }
                 }
             }
+
+            // --- Video attachments: 1 procedure video on ~3 random cases per fellow ---
+            if let videoURL = Bundle.main.url(forResource: "DevProcedureVideo1", withExtension: "mov") {
+                let videoCases = fellowCases.shuffled().prefix(3)
+                let videoTitles = ["Procedure", "Fluoro Clip", "Cath Review"]
+
+                for (vIndex, caseEntry) in videoCases.enumerated() {
+                    guard let savedResult = MediaStorageService.shared.saveVideoSync(from: videoURL, forCaseId: caseEntry.id) else { continue }
+
+                    let media = CaseMedia(
+                        caseEntryId: caseEntry.id,
+                        ownerId: fellowInfo.id,
+                        ownerName: fellowInfo.name,
+                        mediaType: .video,
+                        fileName: "procedure_\(vIndex + 1).mov",
+                        localPath: savedResult.localPath
+                    )
+
+                    media.title = videoTitles[vIndex % videoTitles.count]
+                    media.fileSizeBytes = savedResult.fileSize
+                    media.contentHash = savedResult.contentHash
+                    media.thumbnailPath = savedResult.thumbnailPath
+                    media.caseDate = caseEntry.createdAt
+                    media.textDetectionRan = false
+                    media.textWasDetected = false
+                    media.userConfirmedNoPHI = true
+                    media.userConfirmedAt = caseEntry.createdAt
+                    media.createdAt = caseEntry.createdAt
+                    media.updatedAt = caseEntry.createdAt
+
+                    // Share 2 of 3 videos to Teaching Files
+                    let isShared = vIndex < 2
+                    media.isSharedWithFellowship = isShared
+
+                    if isShared {
+                        media.searchTerms = ["Procedure Video", teachingLabels.randomElement() ?? "Cardiology"]
+                        media.comment = "Procedure recording for review"
+                    } else {
+                        media.searchTerms = [privateLabels.randomElement() ?? "Personal"]
+                    }
+
+                    modelContext.insert(media)
+
+                    // Add sample comments to shared videos
+                    if isShared {
+                        let commentCount = Int.random(in: 1...3)
+                        let ownerComment = MediaComment(
+                            mediaId: media.id,
+                            authorId: fellowInfo.id,
+                            authorName: fellowInfo.name,
+                            authorRole: .fellow,
+                            text: media.comment ?? "Sharing this procedure video"
+                        )
+                        ownerComment.createdAt = caseEntry.createdAt
+                        modelContext.insert(ownerComment)
+
+                        let otherCommenters = allCommenters.filter { $0.id != fellowInfo.id }.shuffled()
+                        for commentIndex in 0..<min(commentCount, otherCommenters.count) {
+                            let commenter = otherCommenters[commentIndex]
+                            let commentText = commenter.role == .attending
+                                ? attendingComments.randomElement()!
+                                : fellowComments.randomElement()!
+
+                            let comment = MediaComment(
+                                mediaId: media.id,
+                                authorId: commenter.id,
+                                authorName: commenter.name,
+                                authorRole: commenter.role,
+                                text: commentText
+                            )
+                            comment.createdAt = caseEntry.createdAt.addingTimeInterval(Double((commentIndex + 1) * 3600 * Int.random(in: 1...24)))
+                            modelContext.insert(comment)
+                        }
+                    }
+                }
+            }
         }
 
         try? modelContext.save()
-    }
-
-    /// Generate a simulated medical image with icon and text
-    private func generateMedicalSimulationImage(icon: String, title: String, accentColor: UIColor, caseNumber: Int) -> UIImage? {
-        let size = CGSize(width: 800, height: 600)
-        let renderer = UIGraphicsImageRenderer(size: size)
-
-        return renderer.image { context in
-            let ctx = context.cgContext
-
-            // Dark medical background gradient
-            let backgroundColors = [
-                UIColor(red: 0.05, green: 0.08, blue: 0.12, alpha: 1.0).cgColor,
-                UIColor(red: 0.1, green: 0.15, blue: 0.2, alpha: 1.0).cgColor
-            ]
-            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                       colors: backgroundColors as CFArray,
-                                       locations: [0, 1])!
-            ctx.drawLinearGradient(gradient,
-                                   start: CGPoint(x: 0, y: 0),
-                                   end: CGPoint(x: size.width, y: size.height),
-                                   options: [])
-
-            // Draw grid lines (medical monitor style)
-            ctx.setStrokeColor(UIColor(white: 0.2, alpha: 0.5).cgColor)
-            ctx.setLineWidth(0.5)
-            let gridSpacing: CGFloat = 40
-            for x in stride(from: 0, through: size.width, by: gridSpacing) {
-                ctx.move(to: CGPoint(x: x, y: 0))
-                ctx.addLine(to: CGPoint(x: x, y: size.height))
-            }
-            for y in stride(from: 0, through: size.height, by: gridSpacing) {
-                ctx.move(to: CGPoint(x: 0, y: y))
-                ctx.addLine(to: CGPoint(x: size.width, y: y))
-            }
-            ctx.strokePath()
-
-            // Draw simulated waveform/data visualization
-            ctx.setStrokeColor(accentColor.cgColor)
-            ctx.setLineWidth(2.5)
-            ctx.move(to: CGPoint(x: 50, y: size.height * 0.6))
-
-            // Create a medical-looking waveform
-            let wavePoints = 30
-            for i in 0..<wavePoints {
-                let x = 50 + (size.width - 100) * CGFloat(i) / CGFloat(wavePoints - 1)
-                var y = size.height * 0.6
-
-                // Add ECG-like peaks at certain intervals
-                if i % 5 == 2 {
-                    y -= CGFloat.random(in: 80...150)  // R wave
-                } else if i % 5 == 3 {
-                    y += CGFloat.random(in: 20...40)   // S wave
-                } else {
-                    y += CGFloat.random(in: -15...15)  // Baseline noise
-                }
-
-                ctx.addLine(to: CGPoint(x: x, y: y))
-            }
-            ctx.strokePath()
-
-            // Draw SF Symbol icon
-            let iconConfig = UIImage.SymbolConfiguration(pointSize: 80, weight: .medium)
-            if let symbolImage = UIImage(systemName: icon, withConfiguration: iconConfig)?
-                .withTintColor(accentColor, renderingMode: .alwaysOriginal) {
-                let iconRect = CGRect(x: size.width - 150, y: 40, width: 100, height: 100)
-                symbolImage.draw(in: iconRect)
-            }
-
-            // Draw title text
-            let titleAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 28, weight: .bold),
-                .foregroundColor: UIColor.white
-            ]
-            let titleString = NSAttributedString(string: title, attributes: titleAttributes)
-            titleString.draw(at: CGPoint(x: 50, y: 40))
-
-            // Draw subtitle
-            let subtitleAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 16, weight: .medium),
-                .foregroundColor: UIColor(white: 0.7, alpha: 1.0)
-            ]
-            let subtitleString = NSAttributedString(string: "Simulated Medical Image • Case #\(caseNumber)", attributes: subtitleAttributes)
-            subtitleString.draw(at: CGPoint(x: 50, y: 80))
-
-            // Draw timestamp
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            let timestampAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                .foregroundColor: accentColor
-            ]
-            let timestampString = NSAttributedString(string: dateFormatter.string(from: Date()), attributes: timestampAttributes)
-            timestampString.draw(at: CGPoint(x: 50, y: size.height - 40))
-
-            // Draw "DEV MODE" watermark
-            let watermarkAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
-                .foregroundColor: UIColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 0.6)
-            ]
-            let watermarkString = NSAttributedString(string: "DEV MODE • SIMULATED DATA", attributes: watermarkAttributes)
-            watermarkString.draw(at: CGPoint(x: size.width - 250, y: size.height - 40))
-        }
     }
 
     private func checkAndAwardBadgesForFellow(_ fellowId: UUID, programId: UUID) {
@@ -3427,10 +3406,10 @@ struct FellowManagementView: View {
             }
         }
         .sheet(isPresented: $showingAddFellow) {
-            AddEditFellowSheet(fellow: nil, maxTrainingYear: currentProgram?.trainingProgramLength ?? 10)
+            AddEditFellowSheet(fellow: nil, maxTrainingYear: currentProgram?.trainingProgramLength ?? 10, earliestPGYLevel: currentProgram?.earliestPGYLevel ?? 4)
         }
         .sheet(item: $selectedFellow) { fellow in
-            AddEditFellowSheet(fellow: fellow, maxTrainingYear: currentProgram?.trainingProgramLength ?? 10)
+            AddEditFellowSheet(fellow: fellow, maxTrainingYear: currentProgram?.trainingProgramLength ?? 10, earliestPGYLevel: currentProgram?.earliestPGYLevel ?? 4)
         }
         .alert("Graduate Fellow?", isPresented: $showingGraduateConfirm) {
             Button("Cancel", role: .cancel) { fellowToGraduate = nil }
@@ -3563,6 +3542,7 @@ struct AddEditFellowSheet: View {
 
     let fellow: User?
     let maxTrainingYear: Int
+    let earliestPGYLevel: Int
 
     @State private var firstName = ""
     @State private var lastName = ""
@@ -3571,9 +3551,11 @@ struct AddEditFellowSheet: View {
     @State private var showingGraduateConfirm = false
     @State private var showingUngraduateConfirm = false
 
-    init(fellow: User?, maxTrainingYear: Int = 10) {
+    init(fellow: User?, maxTrainingYear: Int = 10, earliestPGYLevel: Int = 4) {
         self.fellow = fellow
         self.maxTrainingYear = maxTrainingYear
+        self.earliestPGYLevel = earliestPGYLevel
+        _trainingYear = State(initialValue: earliestPGYLevel)
     }
 
     private var totalCases: Int {
@@ -3623,7 +3605,7 @@ struct AddEditFellowSheet: View {
                             .textInputAutocapitalization(.never)
                             .keyboardType(.emailAddress)
                         Picker("Training Year", selection: $trainingYear) {
-                            ForEach(1...maxTrainingYear, id: \.self) { year in
+                            ForEach(earliestPGYLevel...(earliestPGYLevel + maxTrainingYear - 1), id: \.self) { year in
                                 Text("PGY-\(year)").tag(year)
                             }
                         }
@@ -3709,7 +3691,7 @@ struct AddEditFellowSheet: View {
                     firstName = fellow.firstName
                     lastName = fellow.lastName
                     email = fellow.email
-                    trainingYear = fellow.trainingYear ?? 1
+                    trainingYear = fellow.trainingYear ?? earliestPGYLevel
                 }
             }
             .alert("Graduate Fellow?", isPresented: $showingGraduateConfirm) {
@@ -3781,7 +3763,7 @@ struct AttendingManagementView: View {
     @State private var selectedTab = 0  // 0 = Active, 1 = Pending, 2 = Archived
 
     private var activeAttendings: [Attending] {
-        attendings.filter { !$0.isArchived && !$0.isPlaceholder }.sorted { $0.name < $1.name }
+        attendings.filter { !$0.isArchived && !$0.isPlaceholder }.sorted { $0.lastName < $1.lastName }
     }
 
     private var placeholderAttendings: [Attending] {
@@ -3790,7 +3772,7 @@ struct AttendingManagementView: View {
     }
 
     private var archivedAttendings: [Attending] {
-        attendings.filter { $0.isArchived }.sorted { $0.name < $1.name }
+        attendings.filter { $0.isArchived }.sorted { $0.lastName < $1.lastName }
     }
 
     private func caseCount(for attending: Attending) -> Int {
@@ -4049,7 +4031,7 @@ struct PlaceholderAttendingMergeSheet: View {
 
     private var officialAttendings: [Attending] {
         allAttendings.filter { !$0.isPlaceholder && !$0.isArchived }
-            .sorted { $0.name < $1.name }
+            .sorted { $0.lastName < $1.lastName }
     }
 
     private var casesToMigrate: [CaseEntry] {
@@ -6526,7 +6508,7 @@ struct AttestationDashboardView: View {
     }
 
     private var activeAttendings: [Attending] {
-        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
+        attendings.filter { !$0.isArchived }.sorted { $0.lastName < $1.lastName }
     }
 
     private var proxyAttestedCases: [CaseEntry] {
@@ -7321,27 +7303,33 @@ struct CaseLogRowNew: View {
 
     @ViewBuilder
     private var attestationStatusIcon: some View {
-        switch caseEntry.attestationStatus {
-        case .pending, .requested:
-            Image(systemName: "clock.fill")
+        if caseEntry.isImported {
+            Image(systemName: "square.and.arrow.down.fill")
                 .font(.system(size: 16))
-                .foregroundColor(.orange)
-        case .attested:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(.green)
-        case .proxyAttested:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(.blue)
-        case .rejected:
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(.red)
-        case .notRequired:
-            Image(systemName: "minus.circle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(.gray)
+                .foregroundColor(.teal)
+        } else {
+            switch caseEntry.attestationStatus {
+            case .pending, .requested:
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.orange)
+            case .attested:
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.green)
+            case .proxyAttested:
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.blue)
+            case .rejected:
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.red)
+            case .notRequired:
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.gray)
+            }
         }
     }
 }
@@ -8515,7 +8503,8 @@ struct ExportDataView: View {
                 outcome: caseEntry.outcome.rawValue,
                 attestationStatus: caseEntry.attestationStatus.rawValue,
                 attestedDate: caseEntry.attestedAt.map { dateFormatter.string(from: $0) } ?? "N/A",
-                createdDate: dateFormatter.string(from: caseEntry.createdAt)
+                createdDate: dateFormatter.string(from: caseEntry.createdAt),
+                procedureDate: dateFormatter.string(from: caseEntry.procedureDate)
             )
         }
     }
@@ -8989,7 +8978,7 @@ struct SendProgramUpdateSheet: View {
     }
 
     private func sendMessage() {
-        guard let program = program else { return }
+        guard program != nil else { return }
         isSending = true
 
         // Create a conversation ID for grouping replies
