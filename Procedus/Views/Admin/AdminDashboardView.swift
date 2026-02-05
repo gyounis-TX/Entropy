@@ -280,7 +280,7 @@ struct AdminDashboardView: View {
             }
 
             NavigationLink { ManageDutyHoursSettingsView() } label: {
-                AdminPillRow(icon: "clock.badge.checkmark.fill", iconColor: .orange, title: "Duty Hours", statusBadge: currentProgram?.allowSimpleDutyHours == true ? "Simple" : "Comprehensive", statusColor: .orange)
+                AdminPillRow(icon: "clock.badge.checkmark.fill", iconColor: .orange, title: "Duty Hours", statusBadge: currentProgram?.dutyHoursEnabled == true ? (currentProgram?.allowSimpleDutyHours == true ? "Simple" : "Comprehensive") : "Off", statusColor: currentProgram?.dutyHoursEnabled == true ? .orange : .secondary)
             }
 
             // PROCEDURES Section
@@ -318,8 +318,10 @@ struct AdminDashboardView: View {
                 AdminPillRow(icon: "star.fill", iconColor: .yellow, title: "Evaluation Dashboard")
             }
 
-            NavigationLink { DutyHoursDashboardView() } label: {
-                AdminPillRow(icon: "clock.badge.checkmark.fill", iconColor: .orange, title: "Duty Hours Dashboard")
+            if currentProgram?.dutyHoursEnabled == true {
+                NavigationLink { DutyHoursDashboardView() } label: {
+                    AdminPillRow(icon: "clock.badge.checkmark.fill", iconColor: .orange, title: "Duty Hours Dashboard")
+                }
             }
         }
     }
@@ -523,6 +525,7 @@ struct AdminDashboardView: View {
             program.specialtyPackIds = []
             program.evaluationsEnabled = false
             program.evaluationsRequired = false
+            program.dutyHoursEnabled = true
             program.updatedAt = Date()
         }
 
@@ -3605,7 +3608,7 @@ struct AddEditFellowSheet: View {
                             .textInputAutocapitalization(.never)
                             .keyboardType(.emailAddress)
                         Picker("Training Year", selection: $trainingYear) {
-                            ForEach(earliestPGYLevel...(earliestPGYLevel + maxTrainingYear - 1), id: \.self) { year in
+                            ForEach(earliestPGYLevel...10, id: \.self) { year in
                                 Text("PGY-\(year)").tag(year)
                             }
                         }
@@ -6138,107 +6141,131 @@ struct ManageDutyHoursSettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    // Logging Mode Section
+                    // Duty Hours Feature Toggle Section
                     Section {
                         if let program = program {
                             Toggle(isOn: Binding(
-                                get: { program.allowSimpleDutyHours },
-                                set: { program.allowSimpleDutyHours = $0; program.updatedAt = Date(); try? modelContext.save() }
+                                get: { program.dutyHoursEnabled },
+                                set: { program.dutyHoursEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
                             )) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Allow Simple Mode")
+                                    Text("Enable Duty Hours")
                                         .font(.subheadline)
-                                    Text("Fellows can log weekly hours totals instead of individual shifts")
+                                    Text("When disabled, fellows will not see the Hours tab or any duty hours features")
                                         .font(.caption)
                                         .foregroundColor(Color(UIColor.secondaryLabel))
                                 }
                             }
                         }
                     } header: {
-                        Text("Logging Mode")
+                        Text("Duty Hours Feature")
                     } footer: {
-                        Text("When disabled, fellows must use comprehensive shift-by-shift tracking.")
+                        Text("Toggle the entire duty hours tracking feature for your fellowship program.")
                     }
 
-                    // Shift Types Section
-                    Section {
-                        if let program = program {
-                            Toggle(isOn: Binding(
-                                get: { program.dutyHoursCallEnabled },
-                                set: { program.dutyHoursCallEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
-                            )) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "phone.fill")
-                                        .foregroundColor(.orange)
-                                        .frame(width: 24)
+                    if program?.dutyHoursEnabled == true {
+                        // Logging Mode Section
+                        Section {
+                            if let program = program {
+                                Toggle(isOn: Binding(
+                                    get: { program.allowSimpleDutyHours },
+                                    set: { program.allowSimpleDutyHours = $0; program.updatedAt = Date(); try? modelContext.save() }
+                                )) {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("Call")
+                                        Text("Allow Simple Mode")
                                             .font(.subheadline)
-                                        Text("In-hospital call shifts")
+                                        Text("Fellows can log weekly hours totals instead of individual shifts")
                                             .font(.caption)
                                             .foregroundColor(Color(UIColor.secondaryLabel))
                                     }
                                 }
                             }
-
-                            Toggle(isOn: Binding(
-                                get: { program.dutyHoursNightFloatEnabled },
-                                set: { program.dutyHoursNightFloatEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
-                            )) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "moon.fill")
-                                        .foregroundColor(.purple)
-                                        .frame(width: 24)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Night Float")
-                                            .font(.subheadline)
-                                        Text("Overnight coverage rotations")
-                                            .font(.caption)
-                                            .foregroundColor(Color(UIColor.secondaryLabel))
-                                    }
-                                }
-                            }
-
-                            Toggle(isOn: Binding(
-                                get: { program.dutyHoursMoonlightingEnabled },
-                                set: { program.dutyHoursMoonlightingEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
-                            )) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "moon.stars.fill")
-                                        .foregroundColor(.indigo)
-                                        .frame(width: 24)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Moonlighting")
-                                            .font(.subheadline)
-                                        Text("External or internal moonlighting shifts")
-                                            .font(.caption)
-                                            .foregroundColor(Color(UIColor.secondaryLabel))
-                                    }
-                                }
-                            }
-
-                            Toggle(isOn: Binding(
-                                get: { program.dutyHoursAtHomeCallEnabled },
-                                set: { program.dutyHoursAtHomeCallEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
-                            )) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "house.fill")
-                                        .foregroundColor(.green)
-                                        .frame(width: 24)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("At-Home Call")
-                                            .font(.subheadline)
-                                        Text("Home call with potential callback")
-                                            .font(.caption)
-                                            .foregroundColor(Color(UIColor.secondaryLabel))
-                                    }
-                                }
-                            }
+                        } header: {
+                            Text("Logging Mode")
+                        } footer: {
+                            Text("When disabled, fellows must use comprehensive shift-by-shift tracking.")
                         }
-                    } header: {
-                        Text("Enabled Shift Types")
-                    } footer: {
-                        Text("Disabled shift types will not appear in fellows' duty hours logging options. Regular shifts and Day Off are always available.")
+
+                        // Shift Types Section
+                        Section {
+                            if let program = program {
+                                Toggle(isOn: Binding(
+                                    get: { program.dutyHoursCallEnabled },
+                                    set: { program.dutyHoursCallEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                                )) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "phone.fill")
+                                            .foregroundColor(.orange)
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Call")
+                                                .font(.subheadline)
+                                            Text("In-hospital call shifts")
+                                                .font(.caption)
+                                                .foregroundColor(Color(UIColor.secondaryLabel))
+                                        }
+                                    }
+                                }
+
+                                Toggle(isOn: Binding(
+                                    get: { program.dutyHoursNightFloatEnabled },
+                                    set: { program.dutyHoursNightFloatEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                                )) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "moon.fill")
+                                            .foregroundColor(.purple)
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Night Float")
+                                                .font(.subheadline)
+                                            Text("Overnight coverage rotations")
+                                                .font(.caption)
+                                                .foregroundColor(Color(UIColor.secondaryLabel))
+                                        }
+                                    }
+                                }
+
+                                Toggle(isOn: Binding(
+                                    get: { program.dutyHoursMoonlightingEnabled },
+                                    set: { program.dutyHoursMoonlightingEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                                )) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "moon.stars.fill")
+                                            .foregroundColor(.indigo)
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Moonlighting")
+                                                .font(.subheadline)
+                                            Text("External or internal moonlighting shifts")
+                                                .font(.caption)
+                                                .foregroundColor(Color(UIColor.secondaryLabel))
+                                        }
+                                    }
+                                }
+
+                                Toggle(isOn: Binding(
+                                    get: { program.dutyHoursAtHomeCallEnabled },
+                                    set: { program.dutyHoursAtHomeCallEnabled = $0; program.updatedAt = Date(); try? modelContext.save() }
+                                )) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "house.fill")
+                                            .foregroundColor(.green)
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("At-Home Call")
+                                                .font(.subheadline)
+                                            Text("Home call with potential callback")
+                                                .font(.caption)
+                                                .foregroundColor(Color(UIColor.secondaryLabel))
+                                        }
+                                    }
+                                }
+                            }
+                        } header: {
+                            Text("Enabled Shift Types")
+                        } footer: {
+                            Text("Disabled shift types will not appear in fellows' duty hours logging options. Regular shifts and Day Off are always available.")
+                        }
                     }
                 }
             }
@@ -6982,28 +7009,28 @@ struct AdminCaseLogView: View {
         switch selectedDateRange {
         case .week:
             let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            return allCases.filter { $0.createdAt >= weekStart }
+            return allCases.filter { $0.procedureDate >= weekStart }
         case .last30Days:
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-            return allCases.filter { $0.createdAt >= thirtyDaysAgo }
+            return allCases.filter { $0.procedureDate >= thirtyDaysAgo }
         case .monthToDate:
             let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            return allCases.filter { $0.createdAt >= monthStart }
+            return allCases.filter { $0.procedureDate >= monthStart }
         case .yearToDate:
             let yearStart = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            return allCases.filter { $0.createdAt >= yearStart }
+            return allCases.filter { $0.procedureDate >= yearStart }
         case .academicYearToDate:
             // Academic year starts July 1
             let year = calendar.component(.month, from: now) >= 7 ? calendar.component(.year, from: now) : calendar.component(.year, from: now) - 1
             let academicYearStart = calendar.date(from: DateComponents(year: year, month: 7, day: 1)) ?? now
-            return allCases.filter { $0.createdAt >= academicYearStart }
+            return allCases.filter { $0.procedureDate >= academicYearStart }
         case .pgy:
             // Show all time for PGY - grouped by year elsewhere
             return allCases
         case .allTime:
             return allCases
         case .custom:
-            return allCases.filter { $0.createdAt >= customStartDate && $0.createdAt <= customEndDate }
+            return allCases.filter { $0.procedureDate >= customStartDate && $0.procedureDate <= customEndDate }
         }
     }
 
@@ -7533,24 +7560,24 @@ struct EvaluationSummaryView: View {
         switch selectedDateRange {
         case .week:
             let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            return allCases.filter { $0.createdAt >= weekStart }
+            return allCases.filter { $0.procedureDate >= weekStart }
         case .last30Days:
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-            return allCases.filter { $0.createdAt >= thirtyDaysAgo }
+            return allCases.filter { $0.procedureDate >= thirtyDaysAgo }
         case .monthToDate:
             let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            return allCases.filter { $0.createdAt >= monthStart }
+            return allCases.filter { $0.procedureDate >= monthStart }
         case .yearToDate:
             let yearStart = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            return allCases.filter { $0.createdAt >= yearStart }
+            return allCases.filter { $0.procedureDate >= yearStart }
         case .academicYearToDate:
             let year = calendar.component(.month, from: now) >= 7 ? calendar.component(.year, from: now) : calendar.component(.year, from: now) - 1
             let academicYearStart = calendar.date(from: DateComponents(year: year, month: 7, day: 1)) ?? now
-            return allCases.filter { $0.createdAt >= academicYearStart }
+            return allCases.filter { $0.procedureDate >= academicYearStart }
         case .pgy, .allTime:
             return allCases
         case .custom:
-            return allCases.filter { $0.createdAt >= customStartDate && $0.createdAt <= customEndDate }
+            return allCases.filter { $0.procedureDate >= customStartDate && $0.procedureDate <= customEndDate }
         }
     }
 
@@ -7980,7 +8007,7 @@ struct ExportEvaluationSheet: View {
 
     private var filteredCases: [CaseEntry] {
         cases.filter { caseEntry in
-            caseEntry.createdAt >= startDate && caseEntry.createdAt <= endDate
+            caseEntry.procedureDate >= startDate && caseEntry.procedureDate <= endDate
         }
     }
 
@@ -8273,7 +8300,7 @@ struct ExportDataView: View {
 
     private func filterCasesByDateRange(_ cases: [CaseEntry]) -> [CaseEntry] {
         let range = dateRange(for: selectedRange)
-        return cases.filter { $0.createdAt >= range.start && $0.createdAt <= range.end }
+        return cases.filter { $0.procedureDate >= range.start && $0.procedureDate <= range.end }
     }
 
     var body: some View {
@@ -8849,6 +8876,8 @@ struct SendProgramUpdateSheet: View {
     @State private var isSending = false
     @State private var showingConfirmation = false
     @State private var showingSuccess = false
+    @State private var selectedFellowId: UUID? = nil
+    @State private var selectedPGYYear: Int? = nil
 
     private var program: Program? { programs.first }
 
@@ -8874,10 +8903,21 @@ struct SendProgramUpdateSheet: View {
         return users.filter { $0.programId == programId && $0.role == .attending }
     }
 
+    private var availablePGYYears: [Int] {
+        Set(fellows.compactMap { $0.trainingYear }).sorted()
+    }
+
+    private var fellowsInSelectedClass: [User] {
+        guard let year = selectedPGYYear else { return [] }
+        return fellows.filter { $0.trainingYear == year }
+    }
+
     enum TargetAudience: String, CaseIterable, Identifiable {
         case all = "All Members"
         case fellowsOnly = "Fellows Only"
         case attendingsOnly = "Attendings Only"
+        case specificFellow = "Individual Fellow"
+        case fellowClass = "Fellow Class"
 
         var id: String { rawValue }
 
@@ -8886,6 +8926,8 @@ struct SendProgramUpdateSheet: View {
             case .all: return "person.3.fill"
             case .fellowsOnly: return "person.2.fill"
             case .attendingsOnly: return "stethoscope"
+            case .specificFellow: return "person.fill"
+            case .fellowClass: return "person.3.sequence.fill"
             }
         }
     }
@@ -8895,6 +8937,8 @@ struct SendProgramUpdateSheet: View {
         case .all: return fellows.count + attendings.count
         case .fellowsOnly: return fellows.count
         case .attendingsOnly: return attendings.count
+        case .specificFellow: return selectedFellowId != nil ? 1 : 0
+        case .fellowClass: return fellowsInSelectedClass.count
         }
     }
 
@@ -8935,6 +8979,41 @@ struct SendProgramUpdateSheet: View {
                     Text("Recipients")
                 } footer: {
                     Text("\(recipientCount) member\(recipientCount == 1 ? "" : "s") will receive this message")
+                }
+                .onChange(of: targetAudience) { _, _ in
+                    selectedFellowId = nil
+                    selectedPGYYear = nil
+                }
+
+                if targetAudience == .specificFellow {
+                    Section {
+                        Picker("Fellow", selection: $selectedFellowId) {
+                            Text("Select a fellow").tag(nil as UUID?)
+                            ForEach(fellows.sorted(by: { $0.displayName < $1.displayName })) { fellow in
+                                HStack {
+                                    Text(fellow.displayName)
+                                    if let year = fellow.trainingYear {
+                                        Text("PGY-\(year)")
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .tag(fellow.id as UUID?)
+                            }
+                        }
+                    }
+                }
+
+                if targetAudience == .fellowClass {
+                    Section {
+                        Picker("PGY Year", selection: $selectedPGYYear) {
+                            Text("Select a class").tag(nil as Int?)
+                            ForEach(availablePGYYears, id: \.self) { year in
+                                let count = fellows.filter { $0.trainingYear == year }.count
+                                Text("PGY-\(year) (\(count) fellow\(count == 1 ? "" : "s"))")
+                                    .tag(year as Int?)
+                            }
+                        }
+                    }
                 }
 
                 Section {
@@ -8997,7 +9076,16 @@ struct SendProgramUpdateSheet: View {
             recipientIds = Set(fellows.map { $0.id })
         case .attendingsOnly:
             recipientIds = Set(attendings.map { $0.id })
+        case .specificFellow:
+            recipientIds = selectedFellowId.map { Set([$0]) } ?? []
+        case .fellowClass:
+            recipientIds = Set(fellowsInSelectedClass.map { $0.id })
         }
+
+        // Use directMessage type for individual fellow, programUpdate for all others
+        let messageType = targetAudience == .specificFellow
+            ? NotificationType.directMessage.rawValue
+            : NotificationType.programUpdate.rawValue
 
         // Create notification records for each unique recipient
         for userId in recipientIds {
@@ -9005,7 +9093,7 @@ struct SendProgramUpdateSheet: View {
                 userId: userId,
                 title: messageTitle.trimmingCharacters(in: .whitespacesAndNewlines),
                 message: messageBody.trimmingCharacters(in: .whitespacesAndNewlines),
-                notificationType: NotificationType.programUpdate.rawValue
+                notificationType: messageType
             )
             // Set sender tracking
             notification.senderId = senderId
@@ -9016,6 +9104,18 @@ struct SendProgramUpdateSheet: View {
         }
 
         try? modelContext.save()
+
+        // Fire local push notification for program messages
+        PushNotificationManager.shared.notifyProgramMessage(
+            title: messageTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            body: messageBody.trimmingCharacters(in: .whitespacesAndNewlines),
+            messageId: conversationId
+        )
+
+        // Update badge for each recipient
+        for userId in recipientIds {
+            NotificationManager.shared.updateProgramMessageBadge(forUserId: userId)
+        }
 
         isSending = false
         showingSuccess = true

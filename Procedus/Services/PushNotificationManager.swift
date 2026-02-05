@@ -91,6 +91,20 @@ class PushNotificationManager: NSObject, ObservableObject, UNUserNotificationCen
         UNUserNotificationCenter.current().add(request)
     }
 
+    func notifyProgramMessage(title: String, body: String, messageId: UUID) {
+        // Default to true when key has never been set (UserDefaults.bool returns false for missing keys)
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "programMessagesAlertsEnabled") == nil || defaults.bool(forKey: "programMessagesAlertsEnabled") else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = String(body.prefix(200))
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "program-msg-\(messageId.uuidString)", content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+
     func clearBadge() {
         UNUserNotificationCenter.current().setBadgeCount(0)
     }

@@ -269,8 +269,9 @@ class NotificationManager: ObservableObject {
         context.insert(notification)
         try? context.save()
         updateUnreadCount(forUserId: userId)
+        updateProgramMessageBadge(forUserId: userId)
     }
-    
+
     // MARK: - Auto-Clear Behavior
     
     func autoClearNotifications(
@@ -314,6 +315,7 @@ class NotificationManager: ObservableObject {
         notification.readAt = Date()
         try? modelContext?.save()
         updateUnreadCount(forUserId: notification.userId)
+        updateProgramMessageBadge(forUserId: notification.userId)
     }
     
     func markAllAsRead(forUserId userId: UUID) {
@@ -334,6 +336,7 @@ class NotificationManager: ObservableObject {
             }
             try context.save()
             updateUnreadCount(forUserId: userId)
+            updateProgramMessageBadge(forUserId: userId)
         } catch {
             print("Failed to mark all as read: \(error)")
         }
@@ -344,6 +347,7 @@ class NotificationManager: ObservableObject {
         notification.clearedAt = Date()
         try? modelContext?.save()
         updateUnreadCount(forUserId: notification.userId)
+        updateProgramMessageBadge(forUserId: notification.userId)
     }
     
     func clearAllNotifications(forUserId userId: UUID) {
@@ -364,6 +368,7 @@ class NotificationManager: ObservableObject {
             }
             try context.save()
             updateUnreadCount(forUserId: userId)
+            updateProgramMessageBadge(forUserId: userId)
         } catch {
             print("Failed to clear all notifications: \(error)")
         }
@@ -419,6 +424,35 @@ class NotificationManager: ObservableObject {
             }
         } catch {
             print("Failed to count unread notifications: \(error)")
+        }
+    }
+
+    /// Counts only unread, non-cleared notifications where notificationType is programUpdate or directMessage,
+    /// then updates the app icon badge via PushNotificationManager.
+    func updateProgramMessageBadge(forUserId userId: UUID) {
+        guard let context = modelContext else {
+            Task { @MainActor in PushNotificationManager.shared.setBadgeCount(0) }
+            return
+        }
+
+        let programUpdateRaw = NotificationType.programUpdate.rawValue
+        let directMessageRaw = NotificationType.directMessage.rawValue
+
+        let descriptor = FetchDescriptor<Notification>(
+            predicate: #Predicate { notification in
+                notification.userId == userId &&
+                !notification.isRead &&
+                !notification.isCleared &&
+                (notification.notificationType == programUpdateRaw ||
+                 notification.notificationType == directMessageRaw)
+            }
+        )
+
+        do {
+            let count = try context.fetchCount(descriptor)
+            Task { @MainActor in PushNotificationManager.shared.setBadgeCount(count) }
+        } catch {
+            print("Failed to count program message badge: \(error)")
         }
     }
 }

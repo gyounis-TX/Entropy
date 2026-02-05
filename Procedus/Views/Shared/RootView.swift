@@ -8,6 +8,14 @@ import SwiftData
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
+    @Query private var programs: [Program]
+
+    private var currentProgram: Program? { programs.first }
+
+    private var isDutyHoursEnabled: Bool {
+        if appState.isIndividualMode { return true }
+        return currentProgram?.dutyHoursEnabled ?? true
+    }
 
     var body: some View {
         Group {
@@ -87,11 +95,18 @@ struct RootView: View {
                         }
                         .tag(FellowTab.analytics)
 
-                    DutyHoursView()
-                        .tabItem {
-                            Label("Hours", systemImage: "clock")
-                        }
-                        .tag(FellowTab.hours)
+                    if isDutyHoursEnabled {
+                        DutyHoursView()
+                            .tabItem {
+                                Label("Hours", systemImage: "clock")
+                            }
+                            .tag(FellowTab.hours)
+                    }
+                }
+                .onChange(of: isDutyHoursEnabled) { _, enabled in
+                    if !enabled && institutionalFellowSelectedTab == .hours {
+                        institutionalFellowSelectedTab = .log
+                    }
                 }
             }
 
@@ -133,10 +148,12 @@ struct RootView: View {
                             Label("Evaluations", systemImage: "star.fill")
                         }
 
-                    DutyHoursDashboardView()
-                        .tabItem {
-                            Label("Hours", systemImage: "clock.fill")
-                        }
+                    if currentProgram?.dutyHoursEnabled == true {
+                        DutyHoursDashboardView()
+                            .tabItem {
+                                Label("Hours", systemImage: "clock.fill")
+                            }
+                    }
                 }
             }
         }
@@ -160,6 +177,7 @@ struct FellowContentWrapper<Content: View>: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
     @Query private var notifications: [Procedus.Notification]
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
@@ -170,6 +188,7 @@ struct FellowContentWrapper<Content: View>: View {
     @State private var showingNotifications = false
     @State private var showingAddCase = false
     @State private var showingExportOptions = false
+    @State private var showingDeleteImportedConfirmation = false
     #if DEBUG
     @State private var showingDevRoleSwitcher = false
     #endif
@@ -267,6 +286,22 @@ struct FellowContentWrapper<Content: View>: View {
                 facilities: Array(facilities)
             )
         }
+        .alert("Delete All Imported Cases?", isPresented: $showingDeleteImportedConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete All", role: .destructive) {
+                let imported = myCases.filter { $0.isImported }
+                for caseEntry in imported {
+                    modelContext.delete(caseEntry)
+                }
+                try? modelContext.save()
+            }
+        } message: {
+            let count = myCases.filter { $0.isImported }.count
+            Text("This will permanently delete \(count) imported case(s). Manually added cases will not be affected. This cannot be undone.")
+        }
+        .onAppear {
+            NotificationManager.shared.updateProgramMessageBadge(forUserId: currentUserId)
+        }
         #if DEBUG
         .sheet(isPresented: $showingDevRoleSwitcher) {
             DevRoleSwitcherSheet()
@@ -342,17 +377,31 @@ struct FellowContentWrapper<Content: View>: View {
 
                 Spacer()
 
-                // Right: Export and Add buttons (only on Log tab)
+                // Right: Menu and Add buttons (only on Log tab)
                 if showCaseLogActions {
                     HStack(spacing: 16) {
-                        Button {
-                            showingExportOptions = true
+                        Menu {
+                            Button {
+                                showingExportOptions = true
+                            } label: {
+                                Label("Export Log", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(myCases.isEmpty)
+
+                            let importedCount = myCases.filter { $0.isImported }.count
+                            if importedCount > 0 {
+                                Divider()
+                                Button(role: .destructive) {
+                                    showingDeleteImportedConfirmation = true
+                                } label: {
+                                    Label("Delete All Imported (\(importedCount))", systemImage: "trash")
+                                }
+                            }
                         } label: {
-                            Image(systemName: "square.and.arrow.up")
+                            Image(systemName: "ellipsis.circle")
                                 .font(.system(size: 18))
-                                .foregroundStyle(myCases.isEmpty ? inactiveIconColor.opacity(0.5) : inactiveIconColor)
+                                .foregroundStyle(inactiveIconColor)
                         }
-                        .disabled(myCases.isEmpty)
 
                         Button {
                             showingAddCase = true
@@ -448,6 +497,11 @@ struct AttendingContentWrapper<Content: View>: View {
                             Button("Done") { showingSettings = false }
                         }
                     }
+            }
+        }
+        .onAppear {
+            if let userId = currentUserId {
+                NotificationManager.shared.updateProgramMessageBadge(forUserId: userId)
             }
         }
         #if DEBUG
@@ -575,6 +629,11 @@ struct AdminContentWrapper<Content: View>: View {
                             Button("Done") { showingSettings = false }
                         }
                     }
+            }
+        }
+        .onAppear {
+            if let userId = currentUserId {
+                NotificationManager.shared.updateProgramMessageBadge(forUserId: userId)
             }
         }
         #if DEBUG

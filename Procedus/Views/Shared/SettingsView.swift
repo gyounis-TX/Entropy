@@ -50,6 +50,7 @@ struct SettingsView: View {
     @AppStorage("caseLoggingReminderHour") private var caseLoggingReminderHour = 17 // 5 PM default
     @AppStorage("teachingFilesAlertsEnabled") private var teachingFilesAlertsEnabled = true
     @AppStorage("attestationSummaryEnabled") private var attestationSummaryEnabled = false
+    @AppStorage("programMessagesAlertsEnabled") private var programMessagesAlertsEnabled = true
     @State private var showingNotificationsSheet = false
 
     // Achievement settings
@@ -140,7 +141,7 @@ struct SettingsView: View {
     // Active attendings (for identity selection)
     private var activeAttendingsForSelection: [Attending] {
         attendings.filter { !$0.isArchived }
-            .sorted { $0.name < $1.name }
+            .sorted { $0.lastName < $1.lastName }
     }
 
     // Active facilities
@@ -265,15 +266,17 @@ struct SettingsView: View {
                 showingSecuritySettings = true
             }
 
-            // Cloud Backup Row
-            SettingsPillRow(
-                icon: "cloud.fill",
-                iconColor: .blue,
-                title: "Cloud Backup",
-                badge: cloudBackupEnabled ? .checkmark : nil,
-                showChevron: true
-            ) {
-                showingCloudBackup = true
+            if !appState.isIndividualMode {
+                // Cloud Backup Row
+                SettingsPillRow(
+                    icon: "cloud.fill",
+                    iconColor: .blue,
+                    title: "Cloud Backup",
+                    badge: cloudBackupEnabled ? .checkmark : nil,
+                    showChevron: true
+                ) {
+                    showingCloudBackup = true
+                }
             }
 
             // TRAINING PROGRAM Section
@@ -992,15 +995,17 @@ struct SettingsView: View {
                     showingSecuritySettings = true
                 }
 
-                // Cloud Backup Row
-                SettingsPillRow(
-                    icon: "cloud.fill",
-                    iconColor: .blue,
-                    title: "Cloud Backup",
-                    badge: cloudBackupEnabled ? .checkmark : nil,
-                    showChevron: true
-                ) {
-                    showingCloudBackup = true
+                if !appState.isIndividualMode {
+                    // Cloud Backup Row
+                    SettingsPillRow(
+                        icon: "cloud.fill",
+                        iconColor: .blue,
+                        title: "Cloud Backup",
+                        badge: cloudBackupEnabled ? .checkmark : nil,
+                        showChevron: true
+                    ) {
+                        showingCloudBackup = true
+                    }
                 }
 
                 // Send Message Row
@@ -1167,13 +1172,15 @@ struct SettingsView: View {
                 }
 
                 // Export Duty Hours Row
-                SettingsPillRow(
-                    icon: "clock.badge.checkmark.fill",
-                    iconColor: .orange,
-                    title: "Export Duty Hours",
-                    showChevron: true
-                ) {
-                    showingDutyHoursExport = true
+                if currentProgram?.dutyHoursEnabled == true {
+                    SettingsPillRow(
+                        icon: "clock.badge.checkmark.fill",
+                        iconColor: .orange,
+                        title: "Export Duty Hours",
+                        showChevron: true
+                    ) {
+                        showingDutyHoursExport = true
+                    }
                 }
 
                 // ACHIEVEMENTS Section
@@ -1212,6 +1219,15 @@ struct SettingsView: View {
                         iconColor: .orange,
                         title: "Rejected Cases",
                         isOn: $rejectedCasesAlertsEnabled
+                    )
+                    .padding(.leading, 20)
+
+                    // Program Messages
+                    SettingsPillToggle(
+                        icon: "megaphone.fill",
+                        iconColor: .purple,
+                        title: "Program Messages",
+                        isOn: $programMessagesAlertsEnabled
                     )
                     .padding(.leading, 20)
 
@@ -1401,6 +1417,15 @@ struct SettingsView: View {
                         )
                         .padding(.leading, 20)
                     }
+
+                    // Program Messages
+                    SettingsPillToggle(
+                        icon: "megaphone.fill",
+                        iconColor: .purple,
+                        title: "Program Messages",
+                        isOn: $programMessagesAlertsEnabled
+                    )
+                    .padding(.leading, 20)
 
                     // Frequency picker for both roles
                     NotificationFrequencyPicker(
@@ -1915,7 +1940,7 @@ struct InstitutionalProfileEditSheet: View {
                                 .foregroundColor(.secondary)
                                 .italic()
                         } else {
-                            ForEach(attendings.sorted { $0.name < $1.name }) { attending in
+                            ForEach(attendings.sorted { $0.lastName < $1.lastName }) { attending in
                                 Button {
                                     appState.selectedAttendingId = attending.id
                                 } label: {
@@ -3794,7 +3819,7 @@ struct DevInstitutionalSheet: View {
     }
 
     private var availableAttendings: [Attending] {
-        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
+        attendings.filter { !$0.isArchived }.sorted { $0.lastName < $1.lastName }
     }
 
     var body: some View {
@@ -3884,7 +3909,7 @@ struct DevRoleSwitcherSheet: View {
     }
 
     private var availableAttendings: [Attending] {
-        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
+        attendings.filter { !$0.isArchived }.sorted { $0.lastName < $1.lastName }
     }
 
     var body: some View {
@@ -3988,6 +4013,9 @@ struct AddEditAttendingSheet: View {
     @Environment(\.modelContext) private var modelContext
 
     let attending: Attending?
+    var defaultFirstName: String? = nil
+    var defaultLastName: String? = nil
+    var onCreated: ((Attending) -> Void)? = nil
     @State private var firstName: String = ""
     @State private var lastName: String = ""
     @State private var phoneNumber: String = ""
@@ -4009,6 +4037,9 @@ struct AddEditAttendingSheet: View {
                     firstName = attending.firstName
                     lastName = attending.lastName
                     phoneNumber = attending.phoneNumber ?? ""
+                } else {
+                    firstName = defaultFirstName ?? ""
+                    lastName = defaultLastName ?? ""
                 }
             }
             .toolbar {
@@ -4036,6 +4067,7 @@ struct AddEditAttendingSheet: View {
             let newAttending = Attending(firstName: firstName, lastName: lastName)
             newAttending.phoneNumber = phoneNumber.isEmpty ? nil : phoneNumber
             modelContext.insert(newAttending)
+            onCreated?(newAttending)
         }
         dismiss()
     }
@@ -4104,6 +4136,8 @@ struct AddCustomProcedureSheet: View {
     @Environment(AppState.self) private var appState
 
     var existingProcedure: CustomProcedure?
+    var defaultTitle: String? = nil
+    var onCreated: ((CustomProcedure) -> Void)? = nil
 
     @State private var title: String = ""
     @State private var selectedCategoryId: String = ""
@@ -4146,27 +4180,17 @@ struct AddCustomProcedureSheet: View {
 
                 Section {
                     Picker("Category", selection: $selectedCategoryId) {
-                        // Categories from enabled packs
                         if !packCategories.isEmpty {
-                            Section {
-                                ForEach(availableCategories.filter { packCategories.contains($0.rawValue) }) { category in
-                                    Text(category.rawValue).tag(category.rawValue)
-                                }
-                            } header: {
-                                Text("From Your Specialty Packs")
-                            }
-                        }
-
-                        // Other categories
-                        Section {
-                            ForEach(availableCategories.filter { !packCategories.contains($0.rawValue) }) { category in
+                            ForEach(availableCategories.filter { packCategories.contains($0.rawValue) }) { category in
                                 Text(category.rawValue).tag(category.rawValue)
                             }
-                        } header: {
-                            Text("Other Categories")
+                        } else {
+                            ForEach(availableCategories) { category in
+                                Text(category.rawValue).tag(category.rawValue)
+                            }
                         }
                     }
-                    .pickerStyle(.navigationLink)
+                    .pickerStyle(.menu)
                 } header: {
                     Text("Category")
                 } footer: {
@@ -4179,8 +4203,13 @@ struct AddCustomProcedureSheet: View {
                 if let procedure = existingProcedure {
                     title = procedure.title
                     selectedCategoryId = procedure.categoryRaw
-                } else if let firstCategory = availableCategories.first {
-                    selectedCategoryId = firstCategory.rawValue
+                } else {
+                    if let defaultTitle = defaultTitle {
+                        title = defaultTitle
+                    }
+                    if let firstCategory = availableCategories.first {
+                        selectedCategoryId = firstCategory.rawValue
+                    }
                 }
             }
             .toolbar {
@@ -4212,6 +4241,7 @@ struct AddCustomProcedureSheet: View {
                 creatorId: nil
             )
             modelContext.insert(newProcedure)
+            onCreated?(newProcedure)
         }
 
         try? modelContext.save()
@@ -5028,6 +5058,15 @@ struct SendMessageSheet: View {
 
         do {
             try modelContext.save()
+
+            // Fire local push notification for the direct message
+            PushNotificationManager.shared.notifyProgramMessage(
+                title: "Message from \(senderName)",
+                body: messageText.trimmingCharacters(in: .whitespacesAndNewlines),
+                messageId: notification.id
+            )
+            NotificationManager.shared.updateProgramMessageBadge(forUserId: recipientId)
+
             isSending = false
             showingSuccess = true
         } catch {
