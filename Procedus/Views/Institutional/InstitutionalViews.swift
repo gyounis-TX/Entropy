@@ -14,7 +14,7 @@ struct FellowLogView: View {
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var notifications: [Lumenus.Notification]
 
     @AppStorage("selectedFellowId") private var selectedFellowIdString = ""
 
@@ -360,7 +360,7 @@ struct AttestationDetailSheet: View {
 
         for earned in newBadges {
             if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Procedus.Notification(
+                let notification = Lumenus.Notification(
                     userId: fellowId,
                     title: "Achievement Unlocked!",
                     message: "You earned the \"\(badge.title)\" badge!",
@@ -541,7 +541,7 @@ struct RejectionSheet: View {
 
         // Create database notification for the fellow
         if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
-            let notification = Procedus.Notification(
+            let notification = Lumenus.Notification(
                 userId: fellowId,
                 title: "Case Rejected",
                 message: "Your case was rejected. Reason: \(fullReason.prefix(200))",

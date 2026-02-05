@@ -178,7 +178,7 @@ struct FellowContentWrapper<Content: View>: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var notifications: [Lumenus.Notification]
     @Query(sort: \CaseEntry.createdAt, order: .reverse) private var allCases: [CaseEntry]
     @Query(filter: #Predicate<Attending> { !$0.isArchived }) private var attendings: [Attending]
     @Query(filter: #Predicate<TrainingFacility> { !$0.isArchived }) private var facilities: [TrainingFacility]
@@ -436,7 +436,7 @@ struct AttendingContentWrapper<Content: View>: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var notifications: [Lumenus.Notification]
 
     @State private var showingSettings = false
     @State private var showingNotifications = false
@@ -567,7 +567,7 @@ struct AdminContentWrapper<Content: View>: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var notifications: [Lumenus.Notification]
 
     @State private var showingSettings = false
     @State private var showingNotifications = false

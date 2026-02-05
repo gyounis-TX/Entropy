@@ -163,6 +163,23 @@ struct CategoryBubble: View {
     }
 }
 
+/// Bubble shown for procedure tag IDs that don't resolve to any known category
+struct UnmappedProcedureBubble: View {
+    let size: CGFloat
+
+    /// Amber color to indicate "needs attention" without alarming red
+    private let amber = Color(red: 0.85, green: 0.55, blue: 0.20)
+
+    var body: some View {
+        Text("?")
+            .font(.system(size: size * 0.5, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(amber)
+            .clipShape(Circle())
+    }
+}
+
 // MARK: - Outcome Button
 
 struct OutcomeButton: View {

@@ -1374,7 +1374,7 @@ extension AttendingAttestationDetailSheet {
         // Create notifications for earned badges
         for earned in newBadges {
             if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Procedus.Notification(
+                let notification = Lumenus.Notification(
                     userId: fellowId,
                     title: "Achievement Unlocked!",
                     message: "You earned the \"\(badge.title)\" badge!",
@@ -1498,7 +1498,7 @@ struct RejectAttestationSheet: View {
 
         // Create database notification for the fellow
         if let fellowId = caseEntry.fellowId ?? caseEntry.ownerId {
-            let notification = Procedus.Notification(
+            let notification = Lumenus.Notification(
                 userId: fellowId,
                 title: "Case Rejected",
                 message: "Your case was rejected. Reason: \(fullReason.prefix(200))",

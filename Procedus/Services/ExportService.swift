@@ -23,6 +23,7 @@ class ExportService {
         let attestationStatus: String
         let attestedDate: String
         let createdDate: String
+        let procedureDate: String
     }
     
     struct ProcedureCountRow {
@@ -34,9 +35,9 @@ class ExportService {
     // MARK: - CSV Export
     
     func exportToCSV(rows: [CaseExportRow], filename: String) -> URL? {
-        var csv = "Fellow,Attending,Facility,Week,Procedures,Count,Access Sites,Complications,Outcome,Status,Attested,Created\n"
+        var csv = "Fellow,Attending,Facility,Week,Procedure Date,Procedures,Count,Access Sites,Complications,Outcome,Status,Attested,Created\n"
         for row in rows {
-            csv += "\(escape(row.fellowName)),\(escape(row.attendingName)),\(escape(row.facilityName)),\(row.weekBucket),\(escape(row.procedures)),\(row.procedureCount),\(escape(row.accessSites)),\(escape(row.complications)),\(row.outcome),\(row.attestationStatus),\(row.attestedDate),\(row.createdDate)\n"
+            csv += "\(escape(row.fellowName)),\(escape(row.attendingName)),\(escape(row.facilityName)),\(row.weekBucket),\(row.procedureDate),\(escape(row.procedures)),\(row.procedureCount),\(escape(row.accessSites)),\(escape(row.complications)),\(row.outcome),\(row.attestationStatus),\(row.attestedDate),\(row.createdDate)\n"
         }
         return saveFile(csv, filename: "\(filename).csv")
     }
@@ -50,9 +51,9 @@ class ExportService {
     // MARK: - Excel Export
     
     func exportToExcel(rows: [CaseExportRow], filename: String) -> URL? {
-        var content = "Fellow\tAttending\tFacility\tWeek\tProcedures\tCount\tAccess Sites\tComplications\tOutcome\tStatus\tAttested\tCreated\n"
+        var content = "Fellow\tAttending\tFacility\tWeek\tProcedure Date\tProcedures\tCount\tAccess Sites\tComplications\tOutcome\tStatus\tAttested\tCreated\n"
         for row in rows {
-            content += "\(row.fellowName)\t\(row.attendingName)\t\(row.facilityName)\t\(row.weekBucket)\t\(row.procedures)\t\(row.procedureCount)\t\(row.accessSites)\t\(row.complications)\t\(row.outcome)\t\(row.attestationStatus)\t\(row.attestedDate)\t\(row.createdDate)\n"
+            content += "\(row.fellowName)\t\(row.attendingName)\t\(row.facilityName)\t\(row.weekBucket)\t\(row.procedureDate)\t\(row.procedures)\t\(row.procedureCount)\t\(row.accessSites)\t\(row.complications)\t\(row.outcome)\t\(row.attestationStatus)\t\(row.attestedDate)\t\(row.createdDate)\n"
         }
         return saveFile(content, filename: "\(filename).xls")
     }

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "31A4BB39-52B5-4410-BC2E-B302B038E23A"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "077D87C7-3C96-4C69-81AB-720495406007"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Procedus/Services/ProcedureLogImporter.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "551"
+            endingLineNumber = "551"
+            landmarkName = "autoDetectColumns(headers:dataRows:)"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "077D87C7-3C96-4C69-81AB-720495406007 - 108a6fd60f4e77d9"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Lumenus.ProcedureLogImporter.cellValue(_: CoreXLSX.Cell, sharedStrings: Swift.Optional&lt;CoreXLSX.SharedStrings&gt;) -&gt; Swift.String"
+                  moduleName = "Lumenus.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/gyounis/Desktop/LumenInnovations/Lumenus/Procedus/Services/ProcedureLogImporter.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "552"
+                  endingLineNumber = "552">
+               </Location>
+               <Location
+                  uuid = "077D87C7-3C96-4C69-81AB-720495406007 - 108a6fd60f4e77d9"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Lumenus.ProcedureLogImporter.cellValue(_: CoreXLSX.Cell, sharedStrings: Swift.Optional&lt;CoreXLSX.SharedStrings&gt;) -&gt; Swift.String"
+                  moduleName = "Lumenus.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/gyounis/Desktop/LumenInnovations/Lumenus/Procedus/Services/ProcedureLogImporter.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "552"
+                  endingLineNumber = "552">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>

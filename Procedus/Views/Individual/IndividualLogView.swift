@@ -27,6 +27,7 @@ struct IndividualLogView: View {
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
     @State private var caseToDelete: CaseEntry? = nil
     @State private var showingDeleteConfirmation = false
+    @State private var showingDeleteImportedConfirmation = false
     @State private var showingAttestedCaseAlert = false
     @State private var selectedAttestationFilter: LogAttestationFilter = .all
 
@@ -78,19 +79,19 @@ struct IndividualLogView: View {
         switch selectedRange {
         case .week:
             let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            filteredCases = myCases.filter { $0.createdAt >= startOfWeek }
+            filteredCases = myCases.filter { $0.procedureDate >= startOfWeek }
         case .last30Days:
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-            filteredCases = myCases.filter { $0.createdAt >= thirtyDaysAgo }
+            filteredCases = myCases.filter { $0.procedureDate >= thirtyDaysAgo }
         case .monthToDate:
             let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            filteredCases = myCases.filter { $0.createdAt >= startOfMonth }
+            filteredCases = myCases.filter { $0.procedureDate >= startOfMonth }
         case .yearToDate:
             let startOfYear = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            filteredCases = myCases.filter { $0.createdAt >= startOfYear }
+            filteredCases = myCases.filter { $0.procedureDate >= startOfYear }
         case .academicYearToDate:
             let startOfAcademicYear = academicYearStartDate(for: now)
-            filteredCases = myCases.filter { $0.createdAt >= startOfAcademicYear }
+            filteredCases = myCases.filter { $0.procedureDate >= startOfAcademicYear }
         case .pgy:
             // Filter by specific PGY year if selected
             if let pgyLevel = selectedPGYLevelFilter, let currentPGY = appState.individualPGYLevel {
@@ -99,7 +100,7 @@ struct IndividualLogView: View {
                 let targetAcademicYear = currentAcademicYear - yearsAgo
 
                 filteredCases = myCases.filter { caseEntry in
-                    academicYear(for: caseEntry.createdAt) == targetAcademicYear
+                    academicYear(for: caseEntry.procedureDate) == targetAcademicYear
                 }
             } else {
                 filteredCases = myCases
@@ -399,12 +400,21 @@ struct IndividualCaseRowView: View {
 
     @State private var showingProcedurePopover = false
 
-    /// Get unique procedure categories for this case
+    /// Get unique procedure categories for this case (including custom procedures)
     private var procedureCategories: [ProcedureCategory] {
         var seen = Set<ProcedureCategory>()
         var result: [ProcedureCategory] = []
         for procedureId in caseEntry.procedureTagIds {
-            if let category = SpecialtyPackCatalog.findCategory(for: procedureId) {
+            if procedureId.hasPrefix("custom-") {
+                let uuidString = String(procedureId.dropFirst(7))
+                if let uuid = UUID(uuidString: uuidString),
+                   let customProc = customProcedures.first(where: { $0.id == uuid }) {
+                    if !seen.contains(customProc.category) {
+                        seen.insert(customProc.category)
+                        result.append(customProc.category)
+                    }
+                }
+            } else if let category = SpecialtyPackCatalog.findCategory(for: procedureId) {
                 if !seen.contains(category) {
                     seen.insert(category)
                     result.append(category)
@@ -412,6 +422,18 @@ struct IndividualCaseRowView: View {
             }
         }
         return result
+    }
+
+    /// Whether any procedure tag IDs don't resolve to a known category
+    private var hasUnresolvedProcedures: Bool {
+        caseEntry.procedureTagIds.contains { tagId in
+            if tagId.hasPrefix("custom-") {
+                let uuidString = String(tagId.dropFirst(7))
+                guard let uuid = UUID(uuidString: uuidString) else { return true }
+                return !customProcedures.contains { $0.id == uuid }
+            }
+            return SpecialtyPackCatalog.findCategory(for: tagId) == nil
+        }
     }
 
     /// Check if this is a noninvasive case (all procedures from cardiac imaging)
@@ -471,6 +493,10 @@ struct IndividualCaseRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+
+                if hasUnresolvedProcedures {
+                    UnmappedProcedureBubble(size: 20)
+                }
             }
             .onTapGesture {
                 showingProcedurePopover = true
@@ -502,27 +528,33 @@ struct IndividualCaseRowView: View {
 
     @ViewBuilder
     private var attestationStatusIcon: some View {
-        switch caseEntry.attestationStatus {
-        case .pending, .requested:
-            Image(systemName: "clock.fill")
+        if caseEntry.isImported {
+            Image(systemName: "square.and.arrow.down.fill")
                 .font(.system(size: 18))
-                .foregroundColor(.orange)
-        case .attested:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
-                .foregroundColor(.green)
-        case .proxyAttested:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
-                .foregroundColor(.blue)
-        case .rejected:
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 18))
-                .foregroundColor(.red)
-        case .notRequired:
-            Image(systemName: "minus.circle.fill")
-                .font(.system(size: 18))
-                .foregroundColor(.gray)
+                .foregroundColor(.teal)
+        } else {
+            switch caseEntry.attestationStatus {
+            case .pending, .requested:
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.orange)
+            case .attested:
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.green)
+            case .proxyAttested:
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.blue)
+            case .rejected:
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.red)
+            case .notRequired:
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.gray)
+            }
         }
     }
 }
@@ -575,7 +607,8 @@ struct LogExportSheet: View {
                 outcome: c.outcome.rawValue,
                 attestationStatus: c.attestationStatus.displayName,
                 attestedDate: c.attestedAt?.formatted(date: .abbreviated, time: .omitted) ?? "N/A",
-                createdDate: df.string(from: c.createdAt)
+                createdDate: df.string(from: c.createdAt),
+                procedureDate: df.string(from: c.procedureDate)
             )
         }
     }

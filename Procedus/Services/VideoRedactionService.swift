@@ -52,14 +52,13 @@ final class VideoRedactionService {
 
     /// Get a thumbnail from the video at specified time
     func getThumbnail(from videoURL: URL, at time: CMTime = .zero) async -> UIImage? {
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         imageGenerator.requestedTimeToleranceBefore = .zero
         imageGenerator.requestedTimeToleranceAfter = .zero
 
-        var actualTime = CMTime.zero
-        guard let cgImage = try? imageGenerator.copyCGImage(at: time, actualTime: &actualTime) else {
+        guard let cgImage = try? await imageGenerator.image(at: time).image else {
             return nil
         }
         return UIImage(cgImage: cgImage)
@@ -67,7 +66,7 @@ final class VideoRedactionService {
 
     /// Get video dimensions
     func getVideoDimensions(from videoURL: URL) async -> CGSize? {
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
 
         guard let track = try? await asset.loadTracks(withMediaType: .video).first else {
             return nil
@@ -90,7 +89,7 @@ final class VideoRedactionService {
 
     /// Get video duration
     func getVideoDuration(from videoURL: URL) async -> Double? {
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
         guard let duration = try? await asset.load(.duration) else {
             return nil
         }
@@ -114,7 +113,7 @@ final class VideoRedactionService {
             return .failure("No redaction regions specified")
         }
 
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
 
         // Get video track
         guard let videoTrack = try? await asset.loadTracks(withMediaType: .video).first else {
@@ -210,33 +209,26 @@ final class VideoRedactionService {
             return .failure("Could not create export session")
         }
 
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mp4
         exportSession.videoComposition = videoComposition
         exportSession.shouldOptimizeForNetworkUse = true
 
         // Monitor progress
         let progressTask = Task {
-            while !Task.isCancelled && exportSession.status == .exporting {
+            while !Task.isCancelled {
                 progress?(exportSession.progress)
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             }
         }
 
         // Perform export
-        await exportSession.export()
-        progressTask.cancel()
-
-        switch exportSession.status {
-        case .completed:
+        do {
+            try await exportSession.export(to: outputURL, as: .mp4)
+            progressTask.cancel()
             progress?(1.0)
             return .success(outputURL)
-        case .failed:
-            return .failure(exportSession.error?.localizedDescription ?? "Export failed")
-        case .cancelled:
-            return .failure("Export was cancelled")
-        default:
-            return .failure("Unknown export status")
+        } catch {
+            progressTask.cancel()
+            return .failure(error.localizedDescription)
         }
     }
 

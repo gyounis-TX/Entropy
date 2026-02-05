@@ -27,6 +27,7 @@ final class Program {
     var requireAttestationForMigratedCases: Bool
     var trainingProgramLength: Int
     var fellowshipSpecialtyRaw: String?
+    var dutyHoursEnabled: Bool  // Master toggle for entire duty hours feature
     var allowSimpleDutyHours: Bool  // When false, fellows must use comprehensive shift tracking
     var earliestPGYLevel: Int  // Earliest PGY year for fellows (default 4, range 1-10)
 
@@ -68,6 +69,7 @@ final class Program {
         self.requireAttestationForMigratedCases = false
         self.trainingProgramLength = 3  // Default 3-year fellowship
         self.fellowshipSpecialtyRaw = nil
+        self.dutyHoursEnabled = true  // Enabled by default
         self.allowSimpleDutyHours = false  // Off by default
         self.earliestPGYLevel = 4  // Default PGY4 (most fellowships start after 3-year residency)
         self.dutyHoursCallEnabled = true  // Enable all shift types by default
@@ -185,7 +187,7 @@ final class Attending {
 
     // Placeholder attending support (created by fellows before admin setup)
     /// True if this attending was created by a fellow and needs admin to set up official account
-    var isPlaceholder: Bool
+    var isPlaceholder: Bool = false
     /// Fellow who created this placeholder attending
     var createdByFellowId: UUID?
     /// After merge: points to the official Attending.id this placeholder was merged into
@@ -516,6 +518,7 @@ final class CaseEntry {
     var caseTypeRaw: String?
     var operatorPositionRaw: String?
     var customDetailSelections: [String: [String]]  // detailId.uuidString -> selected option strings
+    var isImported: Bool  // True if created via CSV/file import
 
     @Transient var outcome: CaseOutcome {
         get { CaseOutcome(rawValue: outcomeRaw) ?? .success }
@@ -535,6 +538,24 @@ final class CaseEntry {
     @Transient var operatorPosition: OperatorPosition? {
         get { operatorPositionRaw.flatMap { OperatorPosition(rawValue: $0) } }
         set { operatorPositionRaw = newValue?.rawValue }
+    }
+
+    /// Derives procedure date from weekBucket (e.g. "2025-W03" → Monday of that week)
+    /// For manually entered cases this matches createdAt; for imported cases this is the actual procedure date
+    @Transient var procedureDate: Date {
+        let parts = weekBucket.split(separator: "-W")
+        if parts.count == 2,
+           let year = Int(parts[0]),
+           let week = Int(parts[1]) {
+            var cal = Calendar(identifier: .iso8601)
+            cal.firstWeekday = 2
+            var components = DateComponents()
+            components.yearForWeekOfYear = year
+            components.weekOfYear = week
+            components.weekday = 2
+            return cal.date(from: components) ?? createdAt
+        }
+        return createdAt
     }
 
     /// Evaluation responses keyed by field ID (UUID string)
@@ -608,6 +629,7 @@ final class CaseEntry {
         self.caseTypeRaw = nil
         self.operatorPositionRaw = nil
         self.customDetailSelections = [:]
+        self.isImported = false
     }
 
     static func makeWeekBucket(for date: Date) -> String {

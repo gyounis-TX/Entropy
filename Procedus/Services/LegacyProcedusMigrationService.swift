@@ -112,6 +112,16 @@ enum LegacyProcedusMigrationService {
         "renal artery stent": "ic-periph-renal",
         "renal intervention": "ic-periph-renal",
 
+        // Venous / PE
+        "ivc filter": "ic-venous-ivc",
+        "ivc filter placement": "ic-venous-ivc",
+        "ivc filter retrieval": "ic-venous-ivc-rem",
+        "ekos": "ic-venous-pe-cdt",
+        "pe cdt": "ic-venous-pe-cdt",
+        "pe thrombectomy": "ic-venous-pe-cdt",
+        "dvt intervention": "ic-venous-dvt",
+        "cardiomems": "ic-venous-cardiomems",
+
         // Hemodynamic Support
         "iabp": "ic-support-iabp",
         "intra-aortic balloon pump": "ic-support-iabp",

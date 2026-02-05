@@ -256,9 +256,6 @@ struct MyImageLibraryView: View {
     private var mediaList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                // Stats header
-                statsHeader
-
                 // Grouped by case
                 ForEach(groupedByCase, id: \.caseEntry?.id) { group in
                     CaseMediaGroupView(
@@ -276,20 +273,6 @@ struct MyImageLibraryView: View {
             }
             .padding()
         }
-    }
-
-    // MARK: - Stats Header
-
-    private var statsHeader: some View {
-        HStack(spacing: 24) {
-            StatItem(value: "\(myMedia.count)", label: "Total")
-            StatItem(value: "\(myMedia.filter { $0.mediaType == .image }.count)", label: "Images")
-            StatItem(value: "\(myMedia.filter { $0.mediaType == .video }.count)", label: "Videos")
-            StatItem(value: "\(myMedia.filter { $0.isSharedWithFellowship }.count)", label: "Shared")
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
     }
 
     // MARK: - Helpers
@@ -600,15 +583,25 @@ struct MediaFullDetailView: View {
         if appState.isIndividualMode {
             return getOrCreateIndividualUserId()
         }
+        if appState.userRole == .attending {
+            return appState.selectedAttendingId ?? appState.currentUser?.id ?? UUID()
+        }
         return appState.selectedFellowId ?? appState.currentUser?.id ?? UUID()
     }
 
     private var currentUserName: String {
-        appState.currentUser?.fullName ?? "Unknown"
+        if appState.userRole == .attending {
+            if let attendingId = appState.selectedAttendingId,
+               let attending = allAttendings.first(where: { $0.id == attendingId }) {
+                return attending.fullName
+            }
+            return appState.currentUser?.fullName ?? "Attending"
+        }
+        return appState.currentUser?.fullName ?? "Unknown"
     }
 
     private var currentUserRole: UserRole {
-        appState.currentUser?.role ?? .fellow
+        appState.userRole
     }
 
     /// Only fellows can edit labels - not attendings
@@ -793,6 +786,7 @@ struct MediaFullDetailView: View {
                         showingSuggestedLabels = false
                     }
                     .font(.subheadline)
+                    .foregroundStyle(ProcedusTheme.accent)
                 }
             }
 
@@ -1309,6 +1303,7 @@ struct AddLabelButton: View {
                 } label: {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
+                        .foregroundStyle(ProcedusTheme.accent)
                 }
             }
             .padding(.horizontal, 8)
@@ -1325,6 +1320,7 @@ struct AddLabelButton: View {
                     Text("Add")
                         .font(.caption)
                 }
+                .foregroundStyle(ProcedusTheme.accent)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.gray.opacity(0.15))

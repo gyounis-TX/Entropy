@@ -7,6 +7,18 @@ import Foundation
 
 extension SpecialtyPackCatalog {
     
+    /// Find which pack a procedure belongs to by its tag ID
+    static func findPackId(for tagId: String) -> String? {
+        for pack in allPacks {
+            for packCategory in pack.categories {
+                if packCategory.procedures.contains(where: { $0.id == tagId }) {
+                    return pack.id
+                }
+            }
+        }
+        return nil
+    }
+
     /// Find the category for a given procedure tag ID
     static func findCategory(for tagId: String) -> ProcedureCategory? {
         for pack in allPacks {

@@ -511,7 +511,7 @@ struct AdminDashboardView: View {
         }
 
         // Delete notifications (especially badge notifications from dev data)
-        let notificationsDescriptor = FetchDescriptor<Procedus.Notification>()
+        let notificationsDescriptor = FetchDescriptor<Lumenus.Notification>()
         if let allNotifications = try? modelContext.fetch(notificationsDescriptor) {
             for notification in allNotifications {
                 modelContext.delete(notification)
@@ -1676,7 +1676,7 @@ struct AdminDashboardView: View {
         // Create notifications for earned badges
         for earned in newBadges {
             if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Procedus.Notification(
+                let notification = Lumenus.Notification(
                     userId: fellowId,
                     title: "Achievement Unlocked!",
                     message: "You earned the \"\(badge.title)\" badge!",
@@ -9089,7 +9089,7 @@ struct SendProgramUpdateSheet: View {
 
         // Create notification records for each unique recipient
         for userId in recipientIds {
-            let notification = Procedus.Notification(
+            let notification = Lumenus.Notification(
                 userId: userId,
                 title: messageTitle.trimmingCharacters(in: .whitespacesAndNewlines),
                 message: messageBody.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -9127,7 +9127,7 @@ struct SendProgramUpdateSheet: View {
 struct NotificationsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var notifications: [Lumenus.Notification]
     @Query private var attendings: [Attending]
     @Query private var users: [User]
 
@@ -9135,7 +9135,7 @@ struct NotificationsSheet: View {
     let userId: UUID?
 
     @State private var selectedCategory: NotificationCategory
-    @State private var notificationToReply: Procedus.Notification?
+    @State private var notificationToReply: Lumenus.Notification?
 
     init(role: UserRole, userId: UUID?) {
         self.role = role
@@ -9248,7 +9248,7 @@ struct NotificationsSheet: View {
         }
     }
 
-    private var allRelevantNotifications: [Procedus.Notification] {
+    private var allRelevantNotifications: [Lumenus.Notification] {
         // For admin role: show messages where they are the recipient (replies from fellows/attendings)
         // For other roles: show notifications where userId matches one of the related IDs
         guard userId != nil, !relatedIds.isEmpty else { return [] }
@@ -9261,7 +9261,7 @@ struct NotificationsSheet: View {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    private var filteredNotifications: [Procedus.Notification] {
+    private var filteredNotifications: [Lumenus.Notification] {
         allRelevantNotifications.filter { selectedCategory.notificationTypes.contains($0.notificationType) }
     }
 
@@ -9277,7 +9277,7 @@ struct NotificationsSheet: View {
         allRelevantNotifications.filter { NotificationCategory.achievements.notificationTypes.contains($0.notificationType) && !$0.isRead }.count
     }
 
-    private var attestationNotifications: [Procedus.Notification] {
+    private var attestationNotifications: [Lumenus.Notification] {
         allRelevantNotifications.filter { NotificationCategory.attestations.notificationTypes.contains($0.notificationType) }
     }
 
@@ -9422,7 +9422,7 @@ struct NotificationsSheet: View {
 // MARK: - Notification Row
 
 struct NotificationRow: View {
-    let notification: Procedus.Notification
+    let notification: Lumenus.Notification
     var onReply: (() -> Void)? = nil
     @State private var isExpanded = false
 
@@ -9509,7 +9509,7 @@ struct ReplyToMessageSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
-    let originalNotification: Procedus.Notification
+    let originalNotification: Lumenus.Notification
     let currentUserId: UUID
     let currentUserName: String
     let currentUserRole: UserRole
@@ -9582,7 +9582,7 @@ struct ReplyToMessageSheet: View {
         originalNotification.isRead = true
 
         // Create reply notification for the original sender
-        let replyNotification = Procedus.Notification(
+        let replyNotification = Lumenus.Notification(
             userId: recipientId,
             title: "Reply from \(currentUserName)",
             message: replyMessage.trimmingCharacters(in: .whitespacesAndNewlines),

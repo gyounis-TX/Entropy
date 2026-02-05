@@ -104,6 +104,7 @@ struct LogView: View {
     @State private var selectedCaseTypeFilter: CaseType? = nil  // nil = all cases
     @State private var caseToDelete: CaseEntry? = nil
     @State private var showingDeleteConfirmation = false
+    @State private var showingDeleteImportedConfirmation = false
     @State private var rejectedCaseToHandle: CaseEntry? = nil
     @State private var showingRejectedCaseActions = false
     @State private var showingAttestedCaseAlert = false
@@ -152,19 +153,19 @@ struct LogView: View {
         switch selectedRange {
         case .week:
             let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            filteredCases = sortedCases.filter { $0.createdAt >= startOfWeek }
+            filteredCases = sortedCases.filter { $0.procedureDate >= startOfWeek }
         case .last30Days:
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-            filteredCases = sortedCases.filter { $0.createdAt >= thirtyDaysAgo }
+            filteredCases = sortedCases.filter { $0.procedureDate >= thirtyDaysAgo }
         case .monthToDate:
             let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            filteredCases = sortedCases.filter { $0.createdAt >= startOfMonth }
+            filteredCases = sortedCases.filter { $0.procedureDate >= startOfMonth }
         case .yearToDate:
             let startOfYear = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            filteredCases = sortedCases.filter { $0.createdAt >= startOfYear }
+            filteredCases = sortedCases.filter { $0.procedureDate >= startOfYear }
         case .academicYearToDate:
             let startOfAcademicYear = academicYearStartDate(for: now)
-            filteredCases = sortedCases.filter { $0.createdAt >= startOfAcademicYear }
+            filteredCases = sortedCases.filter { $0.procedureDate >= startOfAcademicYear }
         case .pgy:
             // PGY shows all cases - useful for year-over-year comparison
             filteredCases = sortedCases
@@ -300,14 +301,28 @@ struct LogView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 16) {
-                        // Export button
-                        Button {
-                            showingExportOptions = true
+                        // More actions menu
+                        Menu {
+                            Button {
+                                showingExportOptions = true
+                            } label: {
+                                Label("Export Log", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(!hasFellowSelected || myCases.isEmpty)
+
+                            let importedCount = myCases.filter { $0.isImported }.count
+                            if importedCount > 0 {
+                                Divider()
+                                Button(role: .destructive) {
+                                    showingDeleteImportedConfirmation = true
+                                } label: {
+                                    Label("Delete All Imported (\(importedCount))", systemImage: "trash")
+                                }
+                            }
                         } label: {
-                            Image(systemName: "square.and.arrow.up")
+                            Image(systemName: "ellipsis.circle")
                                 .font(.system(size: 16))
                         }
-                        .disabled(!hasFellowSelected || myCases.isEmpty)
 
                         // Add case button
                         Button {
@@ -584,6 +599,19 @@ struct LogView: View {
         } message: {
             Text("This action cannot be undone. The case and all its procedures will be permanently removed.")
         }
+        .alert("Delete All Imported Cases?", isPresented: $showingDeleteImportedConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete All", role: .destructive) {
+                let imported = myCases.filter { $0.isImported }
+                for caseEntry in imported {
+                    modelContext.delete(caseEntry)
+                }
+                try? modelContext.save()
+            }
+        } message: {
+            let count = myCases.filter { $0.isImported }.count
+            Text("This will permanently delete \(count) imported case(s). Manually added cases will not be affected. This cannot be undone.")
+        }
         .alert("Case Cannot Be Modified", isPresented: $showingAttestedCaseAlert) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -674,6 +702,11 @@ struct CaseRowView: View {
         return attendings.first { $0.id == caseEntry.attendingId }?.lastName ?? "Unknown"
     }
     
+    private var isAllCustomProcedures: Bool {
+        !caseEntry.procedureTagIds.isEmpty &&
+        caseEntry.procedureTagIds.allSatisfy { $0.hasPrefix("custom-") }
+    }
+
     private var categoryBubbles: [ProcedureCategory] {
         var categories: Set<ProcedureCategory> = []
 
@@ -699,6 +732,18 @@ struct CaseRowView: View {
         }
 
         return Array(categories).sorted { $0.rawValue < $1.rawValue }
+    }
+
+    /// Whether any procedure tag IDs don't resolve to a known category
+    private var hasUnresolvedProcedures: Bool {
+        caseEntry.procedureTagIds.contains { tagId in
+            if tagId.hasPrefix("custom-") {
+                let uuidString = String(tagId.dropFirst(7))
+                guard let uuid = UUID(uuidString: uuidString) else { return true }
+                return !customProcedures.contains { $0.id == uuid }
+            }
+            return SpecialtyPackCatalog.findCategory(for: tagId) == nil
+        }
     }
     
     var body: some View {
@@ -735,15 +780,28 @@ struct CaseRowView: View {
                 
                 // Category Bubbles - inline (tappable for procedure list)
                 HStack(spacing: 4) {
-                    ForEach(categoryBubbles.prefix(3), id: \.rawValue) { category in
-                        CategoryBubble(category: category, size: 20)
+                    if isAllCustomProcedures {
+                        Text("C")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 20, height: 20)
+                            .background(ProcedusTheme.accent)
+                            .clipShape(Circle())
+                    } else {
+                        ForEach(categoryBubbles.prefix(3), id: \.rawValue) { category in
+                            CategoryBubble(category: category, size: 20)
+                        }
+
+                        // Show +N if more than 3 categories
+                        if categoryBubbles.count > 3 {
+                            Text("+\(categoryBubbles.count - 3)")
+                                .font(.caption2)
+                                .foregroundColor(Color(UIColor.secondaryLabel))
+                        }
                     }
 
-                    // Show +N if more than 3 categories
-                    if categoryBubbles.count > 3 {
-                        Text("+\(categoryBubbles.count - 3)")
-                            .font(.caption2)
-                            .foregroundColor(Color(UIColor.secondaryLabel))
+                    if hasUnresolvedProcedures {
+                        UnmappedProcedureBubble(size: 20)
                     }
                 }
                 .onTapGesture {
@@ -958,7 +1016,8 @@ struct FellowExportSheet: View {
                 outcome: caseEntry.outcome.rawValue,
                 attestationStatus: caseEntry.attestationStatus.rawValue,
                 attestedDate: caseEntry.attestedAt.map { dateFormatter.string(from: $0) } ?? "N/A",
-                createdDate: dateFormatter.string(from: caseEntry.createdAt)
+                createdDate: dateFormatter.string(from: caseEntry.createdAt),
+                procedureDate: dateFormatter.string(from: caseEntry.procedureDate)
             )
         }
     }

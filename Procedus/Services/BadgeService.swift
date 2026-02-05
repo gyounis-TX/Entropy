@@ -35,7 +35,7 @@ class BadgeService {
         attestedCase: CaseEntry,
         allCases: [CaseEntry],
         existingBadges: [BadgeEarned],
-        modelContext: ModelContext
+        modelContext: ModelContext? = nil
     ) -> [BadgeEarned] {
         var newlyEarned: [BadgeEarned] = []
 
@@ -63,13 +63,16 @@ class BadgeService {
                     procedureCount: countForCriteria(criteria, cases: eligibleCases)
                 )
 
-                modelContext.insert(earned)
+                // Only insert into modelContext if provided (caller may handle insertion)
+                modelContext?.insert(earned)
                 newlyEarned.append(earned)
             }
         }
 
         if !newlyEarned.isEmpty {
-            try? modelContext.save()
+            if modelContext != nil {
+                try? modelContext?.save()
+            }
             recentlyEarnedBadges = newlyEarned
         }
 
@@ -111,16 +114,16 @@ class BadgeService {
             matchingCases = matchingCases.filter { $0.operatorPosition == .primary }
         }
 
-        // Filter by time if specified
+        // Filter by time if specified (use procedureDate for correct date attribution)
         if let withinDays = criteria.withinDays {
             let cutoffDate = Calendar.current.date(byAdding: .day, value: -withinDays, to: Date()) ?? Date()
-            matchingCases = matchingCases.filter { $0.createdAt >= cutoffDate }
+            matchingCases = matchingCases.filter { $0.procedureDate >= cutoffDate }
         }
 
-        // Filter by academic year if required
+        // Filter by academic year if required (use procedureDate for correct date attribution)
         if criteria.academicYearOnly {
             let startOfAcademicYear = academicYearStartDate(for: Date())
-            matchingCases = matchingCases.filter { $0.createdAt >= startOfAcademicYear }
+            matchingCases = matchingCases.filter { $0.procedureDate >= startOfAcademicYear }
         }
 
         // Count based on criteria type

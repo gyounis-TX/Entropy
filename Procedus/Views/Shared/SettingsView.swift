@@ -11,7 +11,7 @@ struct SettingsView: View {
     @Query private var customProcedures: [CustomProcedure]
     @Query private var customAccessSites: [CustomAccessSite]
     @Query private var customComplications: [CustomComplication]
-    @Query private var notifications: [Procedus.Notification]
+    @Query private var notifications: [Lumenus.Notification]
     @Query private var allUsers: [User]
     @Query private var procedureGroups: [FellowProcedureGroup]
     @Query private var customProcedureDetails: [CustomProcedureDetail]
@@ -879,7 +879,7 @@ struct SettingsView: View {
         // Create notifications for earned badges
         for earned in newBadges {
             if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Procedus.Notification(
+                let notification = Lumenus.Notification(
                     userId: fellowId,
                     title: "Achievement Unlocked!",
                     message: "You earned the \"\(badge.title)\" badge!",
@@ -932,7 +932,7 @@ struct SettingsView: View {
         }
 
         // Delete notifications for individual user
-        let allNotifications = (try? modelContext.fetch(FetchDescriptor<Procedus.Notification>())) ?? []
+        let allNotifications = (try? modelContext.fetch(FetchDescriptor<Lumenus.Notification>())) ?? []
         for notification in allNotifications where notification.userId == individualUserId {
             modelContext.delete(notification)
         }
@@ -5043,7 +5043,7 @@ struct SendMessageSheet: View {
         isSending = true
 
         // Create the notification
-        let notification = Procedus.Notification(
+        let notification = Lumenus.Notification(
             userId: recipientId,
             title: "Message from \(senderName)",
             message: messageText.trimmingCharacters(in: .whitespacesAndNewlines),

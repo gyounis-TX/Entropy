@@ -513,7 +513,11 @@ struct AttendingMediaDetailView: View {
     }
 
     private var currentUserName: String {
-        appState.currentUser?.fullName ?? "Attending"
+        if let attendingId = appState.selectedAttendingId,
+           let attending = attendings.first(where: { $0.id == attendingId }) {
+            return attending.fullName
+        }
+        return appState.currentUser?.fullName ?? "Attending"
     }
 
     private var fellowName: String {

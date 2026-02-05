@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumen Innovations | Medical Education Technology</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #C41E3A;
+            --primary-dark: #9B1830;
+            --accent: #FF6B35;
+            --blue: #2563EB;
+            --blue-dark: #1D4ED8;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --gradient-red: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            --gradient-blue: linear-gradient(135deg, var(--blue) 0%, #06B6D4 100%);
+            --purple: #6366F1;
+            --gradient-purple: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+            --teal: #14B8A6;
+            --gradient-teal: linear-gradient(135deg, #0D9488 0%, #2DD4BF 100%);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: var(--light);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            padding: 1rem 0;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.05);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo img {
+            height: 40px;
+            width: auto;
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .logo-text span {
+            color: var(--primary);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+
+        .cta-button {
+            background: var(--gradient-red);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(196, 30, 58, 0.3);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 8rem 2rem 4rem;
+            background: linear-gradient(180deg, #fff 0%, var(--light) 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 80%;
+            height: 150%;
+            background: radial-gradient(ellipse, rgba(196, 30, 58, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .hero-logo {
+            max-width: 550px;
+            height: auto;
+            margin-bottom: 2rem;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            color: var(--dark);
+        }
+
+        .hero-content h1 span {
+            background: var(--gradient-red);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-content p {
+            font-size: 1.35rem;
+            color: var(--gray);
+            margin-bottom: 3rem;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            margin-top: 4rem;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Apps Section */
+        .apps-section {
+            padding: 6rem 2rem;
+            background: white;
+        }
+
+        .section-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .section-header p {
+            font-size: 1.1rem;
+            color: var(--gray);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3rem;
+        }
+
+        .app-card {
+            background: var(--light);
+            border-radius: 24px;
+            padding: 3rem;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .app-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.12);
+        }
+
+        .app-card.lumenus {
+            border: 2px solid rgba(196, 30, 58, 0.1);
+        }
+
+        .app-card.cathcpt {
+            border: 2px solid rgba(37, 99, 235, 0.1);
+        }
+
+        .app-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 22px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+
+        .app-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1.5rem;
+        }
+
+        .app-card.lumenus .app-badge {
+            background: rgba(196, 30, 58, 0.1);
+            color: var(--primary);
+        }
+
+        .app-card.cathcpt .app-badge {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--blue);
+        }
+
+        .app-card h3 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .app-card .tagline {
+            font-size: 1.1rem;
+            color: var(--gray);
+            margin-bottom: 2rem;
+        }
+
+        .app-features {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+
+        .app-features li {
+            padding: 0.75rem 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            color: var(--dark);
+        }
+
+        .app-features li .icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .app-card.lumenus .app-features li .icon {
+            background: var(--gradient-red);
+            color: white;
+        }
+
+        .app-card.cathcpt .app-features li .icon {
+            background: var(--gradient-blue);
+            color: white;
+        }
+
+        .app-features li strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .app-features li span {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        .btn-app {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .app-card.lumenus .btn-app {
+            background: var(--gradient-red);
+            color: white;
+        }
+
+        .app-card.lumenus .btn-app:hover {
+            box-shadow: 0 15px 40px rgba(196, 30, 58, 0.35);
+            transform: translateY(-2px);
+        }
+
+        .app-card.cathcpt .btn-app {
+            background: var(--gradient-blue);
+            color: white;
+        }
+
+        .app-card.cathcpt .btn-app:hover {
+            box-shadow: 0 15px 40px rgba(37, 99, 235, 0.35);
+            transform: translateY(-2px);
+        }
+
+        .app-card.textify {
+            border: 2px solid rgba(99, 102, 241, 0.1);
+        }
+
+        .app-card.textify .app-badge {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--purple);
+        }
+
+        .app-card.textify .app-features li .icon {
+            background: var(--gradient-purple);
+            color: white;
+        }
+
+        .app-card.textify .btn-app {
+            background: var(--gradient-purple);
+            color: white;
+        }
+
+        .app-card.textify .btn-app:hover {
+            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.35);
+            transform: translateY(-2px);
+        }
+
+        .app-card.explify {
+            border: 2px solid rgba(20, 184, 166, 0.1);
+        }
+
+        .app-card.explify .app-badge {
+            background: rgba(20, 184, 166, 0.1);
+            color: var(--teal);
+        }
+
+        .app-card.explify .app-features li .icon {
+            background: var(--gradient-teal);
+            color: white;
+        }
+
+        .app-card.explify .btn-app {
+            background: var(--gradient-teal);
+            color: white;
+        }
+
+        .app-card.explify .btn-app:hover {
+            box-shadow: 0 15px 40px rgba(20, 184, 166, 0.35);
+            transform: translateY(-2px);
+        }
+
+        /* Feature Details - Lumenus */
+        .feature-details {
+            padding: 6rem 2rem;
+            background: var(--light);
+        }
+
+        .feature-details.alt {
+            background: white;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+
+        .feature-details.alt .feature-card {
+            background: var(--light);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+        }
+
+        .feature-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.25rem;
+            font-size: 1.5rem;
+        }
+
+        .feature-icon.red {
+            background: var(--gradient-red);
+        }
+
+        .feature-icon.blue {
+            background: var(--gradient-blue);
+        }
+
+        .feature-card h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--dark);
+        }
+
+        .feature-card p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        /* Screenshot Gallery */
+        .screenshot-gallery {
+            padding: 4rem 2rem;
+            background: linear-gradient(135deg, var(--dark) 0%, #2d2d44 100%);
+        }
+
+        .screenshot-gallery .section-header h2,
+        .screenshot-gallery .section-header p {
+            color: white;
+        }
+
+        .screenshot-gallery .section-header p {
+            opacity: 0.8;
+        }
+
+        .screenshots-container {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            padding: 1rem 0 2rem;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .screenshots-container::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .screenshots-container::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+        }
+
+        .screenshots-container::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 4px;
+        }
+
+        .screenshot-item {
+            flex: 0 0 auto;
+            scroll-snap-align: start;
+            text-align: center;
+        }
+
+        .screenshot-item img {
+            height: 500px;
+            width: auto;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            transition: transform 0.3s;
+        }
+
+        .screenshot-item img:hover {
+            transform: scale(1.02);
+        }
+
+        .screenshot-item p {
+            color: rgba(255,255,255,0.7);
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        /* Roles Section */
+        .roles {
+            padding: 6rem 2rem;
+            background: white;
+        }
+
+        .roles-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+
+        .role-card {
+            background: var(--light);
+            padding: 2.5rem;
+            border-radius: 24px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .role-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 25px 60px rgba(0,0,0,0.1);
+        }
+
+        .role-icon {
+            width: 80px;
+            height: 80px;
+            background: var(--gradient-red);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2rem;
+        }
+
+        .role-card h3 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--dark);
+        }
+
+        .role-card p {
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 6rem 2rem;
+            background: var(--gradient-red);
+            text-align: center;
+            color: white;
+        }
+
+        .cta-section h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .cta-section p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .cta-section .btn-white {
+            background: white;
+            color: var(--primary);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .cta-section .btn-white:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+
+        .cta-section .btn-outline {
+            background: transparent;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            border: 2px solid rgba(255,255,255,0.5);
+            transition: all 0.3s;
+        }
+
+        .cta-section .btn-outline:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: white;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 4rem 2rem 2rem;
+        }
+
+        .footer-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 3rem;
+            margin-bottom: 3rem;
+        }
+
+        .footer-brand p {
+            color: #aaa;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .footer-column h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .footer-column ul {
+            list-style: none;
+        }
+
+        .footer-column li {
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-column a {
+            color: #aaa;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+
+        .footer-column a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid #333;
+            padding-top: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        /* About Section */
+        .about-section {
+            padding: 6rem 2rem;
+            background: white;
+        }
+
+        .about-container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2.5rem;
+            text-align: center;
+        }
+
+        .about-photo {
+            text-align: center;
+        }
+
+        .about-photo .photo-placeholder {
+            width: 440px;
+            height: 440px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            border: 4px solid var(--primary);
+            overflow: hidden;
+        }
+
+        .about-photo .photo-placeholder img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .about-photo .photo-placeholder span {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        .about-content h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+
+        .about-content .credentials {
+            font-size: 1.1rem;
+            color: var(--primary);
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+
+        .about-content p {
+            color: var(--gray);
+            font-size: 1.05rem;
+            margin-bottom: 1rem;
+            line-height: 1.7;
+            text-align: justify;
+        }
+
+        .about-content .about-tagline {
+            font-style: italic;
+            color: var(--dark);
+            font-weight: 500;
+            margin-top: 1.5rem;
+            padding: 1.5rem 2rem;
+            background: var(--light);
+            border-radius: 12px;
+            border-top: 3px solid var(--primary);
+        }
+
+        /* Mobile Menu */
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            color: var(--dark);
+        }
+
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            background: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 1rem;
+            z-index: 999;
+        }
+
+        .mobile-nav.active {
+            display: block;
+        }
+
+        .mobile-nav a {
+            display: block;
+            padding: 1rem;
+            text-decoration: none;
+            color: var(--dark);
+            font-weight: 500;
+            border-bottom: 1px solid #eee;
+        }
+
+        .mobile-nav a:last-child {
+            border-bottom: none;
+        }
+
+        .mobile-nav a:hover {
+            background: var(--light);
+            color: var(--primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 968px) {
+            .hero-content h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-stats {
+                gap: 2rem;
+            }
+
+            .apps-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .feature-grid,
+            .roles-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+                    }
+
+        @media (max-width: 600px) {
+            .hero {
+                padding: 6rem 1rem 3rem;
+                min-height: auto;
+            }
+
+            .hero-logo {
+                max-width: 280px;
+            }
+
+            .hero-content h1 {
+                font-size: 1.75rem;
+            }
+
+            .hero-content p {
+                font-size: 1rem;
+            }
+
+            .hero-stats {
+                flex-direction: column;
+                gap: 1.5rem;
+                margin-top: 2rem;
+            }
+
+            .stat-number {
+                font-size: 2rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .cta-button {
+                display: none;
+            }
+
+            .mobile-menu-btn {
+                display: block;
+            }
+
+            .nav-container {
+                padding: 0 1rem;
+            }
+
+            .logo-text {
+                font-size: 1rem;
+            }
+
+            .logo img {
+                height: 32px;
+            }
+
+            .apps-section,
+            .feature-details,
+            .roles,
+            .about-section {
+                padding: 3rem 1rem;
+            }
+
+            .section-header h2 {
+                font-size: 1.75rem;
+            }
+
+            .section-header p {
+                font-size: 1rem;
+            }
+
+            .app-card {
+                padding: 1.5rem;
+                border-radius: 16px;
+            }
+
+            .app-icon {
+                width: 70px;
+                height: 70px;
+            }
+
+            .app-card h3 {
+                font-size: 1.5rem;
+            }
+
+            .app-card .tagline {
+                font-size: 1rem;
+            }
+
+            .feature-card {
+                padding: 1.5rem;
+            }
+
+            .role-card {
+                padding: 1.5rem;
+            }
+
+            .role-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 1.5rem;
+            }
+
+            .screenshot-gallery {
+                padding: 2rem 1rem;
+            }
+
+            .screenshot-item img {
+                height: 350px;
+                border-radius: 16px;
+            }
+
+            .cta-section {
+                padding: 3rem 1rem;
+            }
+
+            .cta-section h2 {
+                font-size: 1.75rem;
+            }
+
+            .cta-section p {
+                font-size: 1rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .cta-section .btn-white,
+            .cta-section .btn-outline {
+                width: 100%;
+                max-width: 280px;
+                text-align: center;
+            }
+
+            footer {
+                padding: 2rem 1rem 1rem;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            .about-photo .photo-placeholder {
+                width: 360px;
+                height: 360px;
+            }
+
+            .about-content h2 {
+                font-size: 1.5rem;
+            }
+
+            .about-content p {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <img src="lumenus-logo.png" alt="Lumen Innovations Logo">
+                <span class="logo-text">Lumen <span>Innovations</span></span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#apps">Our Apps</a></li>
+                <li><a href="#lumenus">Lumenus</a></li>
+                <li><a href="#cathcpt">CathCPT</a></li>
+                <li><a href="#textify">Textify</a></li>
+                <li><a href="#explify">Explify</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="privacy.html">Privacy</a></li>
+                <li><a href="contact.html">Contact</a></li>
+            </ul>
+            <a href="contact.html" class="cta-button">Get Started</a>
+            <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
+        </div>
+    </nav>
+
+    <!-- Mobile Navigation -->
+    <div class="mobile-nav" id="mobileNav">
+        <a href="#apps" onclick="closeMobileMenu()">Our Apps</a>
+        <a href="#lumenus" onclick="closeMobileMenu()">Lumenus</a>
+        <a href="#cathcpt" onclick="closeMobileMenu()">CathCPT</a>
+        <a href="#textify" onclick="closeMobileMenu()">Textify</a>
+        <a href="#explify" onclick="closeMobileMenu()">Explify</a>
+        <a href="#about" onclick="closeMobileMenu()">About</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="contact.html">Contact Us</a>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <img src="lumen-logo.jpeg" alt="Lumen Innovations" class="hero-logo">
+                <h1>Tools Built by <span>Physicians</span>, for Physicians</h1>
+                <p>Lumen Innovations creates software that solves real problems in medical education and practice. From procedure logging to billing optimization, we're here to help you focus on patient care.</p>
+            </div>
+            <div class="hero-stats">
+                <div class="stat">
+                    <div class="stat-number">4</div>
+                    <div class="stat-label">Apps</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">Multi</div>
+                    <div class="stat-label">Platform</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">Zero</div>
+                    <div class="stat-label">PHI Stored</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Apps Section -->
+    <section class="apps-section" id="apps">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Our Applications</h2>
+                <p>Purpose-built tools that integrate seamlessly into your clinical workflow.</p>
+            </div>
+            <div class="apps-grid">
+                <!-- Lumenus -->
+                <div class="app-card lumenus">
+                    <img src="lumenus-app-icon.png" alt="Lumenus App Icon" class="app-icon">
+                    <span class="app-badge">iOS • Medical Education</span>
+                    <h3>Lumenus</h3>
+                    <p class="tagline">The complete procedure logging platform for medical trainees and training programs. Available on the App Store.</p>
+                    <ul class="app-features">
+                        <li>
+                            <div class="icon">📋</div>
+                            <div>
+                                <strong>Quick Case Logging</strong>
+                                <span>Log procedures in seconds with smart procedure packs for cardiology, EP, vascular, and more.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🖼️</div>
+                            <div>
+                                <strong>Shared Image Repository</strong>
+                                <span>Build a teaching library with program-wide case images. Auto PHI detection and redaction protects patient privacy. No PHI is stored.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">⏱️</div>
+                            <div>
+                                <strong>Duty Hours Tracking</strong>
+                                <span>Clock in/out, track shifts, and export ACGME-compliant duty hour reports.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">📊</div>
+                            <div>
+                                <strong>Powerful Analytics</strong>
+                                <span>Filter by time, PGY level, facility, attending, procedure type. Charts and exports included.</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#lumenus" class="btn-app">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+                        Learn More
+                    </a>
+                </div>
+
+                <!-- CathCPT -->
+                <div class="app-card cathcpt">
+                    <img src="cathcpt-app-icon.png" alt="CathCPT App Icon" class="app-icon">
+                    <span class="app-badge">iOS • Billing & Coding</span>
+                    <h3>CathCPT</h3>
+                    <p class="tagline">The complete CPT code manager for interventional cardiologists. Track RVUs and generate HIPAA-compliant reports. Available on the App Store.</p>
+                    <ul class="app-features">
+                        <li>
+                            <div class="icon">💰</div>
+                            <div>
+                                <strong>RVU Calculator</strong>
+                                <span>Real-time work RVU totals and Medicare reimbursement estimates for every case.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🫀</div>
+                            <div>
+                                <strong>Vessel & Modifier Selection</strong>
+                                <span>Document coronary vessels for PCI codes. Auto -59 modifier for same-day diagnostic + PCI.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">📋</div>
+                            <div>
+                                <strong>Report Generation</strong>
+                                <span>Create share-ready, HIPAA-compliant procedure reports. Uses case IDs, no PHI stored.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🔄</div>
+                            <div>
+                                <strong>2026 CPT Codes</strong>
+                                <span>Full coverage: diagnostic cath, PCI, structural heart, TAVR, peripheral, and more.</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#cathcpt" class="btn-app">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+                        Learn More
+                    </a>
+                </div>
+
+                <!-- Textify -->
+                <div class="app-card textify">
+                    <img src="textify-app-icon.png" alt="Textify App Icon" class="app-icon">
+                    <span class="app-badge">Windows/macOS • Utility</span>
+                    <h3>Textify</h3>
+                    <p class="tagline">Convert PDF reports to clean text for easy copy/paste into your EHR. Available for Windows and macOS.</p>
+                    <ul class="app-features">
+                        <li>
+                            <div class="icon">📄</div>
+                            <div>
+                                <strong>PDF to Text Conversion</strong>
+                                <span>Instantly extract text from PDF-based reports for seamless EHR documentation.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">📋</div>
+                            <div>
+                                <strong>Easy Copy/Paste</strong>
+                                <span>Clean, formatted text output ready to paste directly into any electronic health record system.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">💻</div>
+                            <div>
+                                <strong>Cross-Platform</strong>
+                                <span>Available for both Windows PC and macOS. Works offline on your local machine.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🔒</div>
+                            <div>
+                                <strong>No Data Storage</strong>
+                                <span>All processing happens locally. No PHI is collected, transmitted, or stored.</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#textify" class="btn-app">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v12h16V6H4zm2 2h8v2H6V8zm0 4h12v2H6v-2zm0 4h8v2H6v-2z"/></svg>
+                        Learn More
+                    </a>
+                </div>
+
+                <!-- Explify -->
+                <div class="app-card explify">
+                    <img src="explify-app-icon.png" alt="Explify App Icon" class="app-icon">
+                    <span class="app-badge">Windows/macOS • AI-Powered</span>
+                    <h3>Explify</h3>
+                    <p class="tagline">Empower clinicians to deliver meaningful, personalized interpretations of test results to patients. AI-assisted explanations with PHI scrubbed before processing. Available for Windows and macOS.</p>
+                    <ul class="app-features">
+                        <li>
+                            <div class="icon">🤖</div>
+                            <div>
+                                <strong>AI-Powered Explanations</strong>
+                                <span>Import PDFs, images, or text from your EMR. Get plain-language explanations your patients can understand.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🔒</div>
+                            <div>
+                                <strong>PHI Scrubbing</strong>
+                                <span>Protected health information is automatically detected and removed before any AI processing occurs.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">🎚️</div>
+                            <div>
+                                <strong>Customizable Output</strong>
+                                <span>Adjust literacy level (Grade 4 to Clinical), tone (Reassuring to Concerning), and detail level to match your patient's needs.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="icon">📝</div>
+                            <div>
+                                <strong>Context-Aware Refinement</strong>
+                                <span>Add patient history and symptoms to generate personalized explanations ready to paste into your EHR or send via SMS.</span>
+                            </div>
+                        </li>
+                    </ul>
+                    <a href="#explify" class="btn-app">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v12h16V6H4zm2 2h8v2H6V8zm0 4h12v2H6v-2zm0 4h8v2H6v-2z"/></svg>
+                        Learn More
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Lumenus Features Detail -->
+    <section class="feature-details" id="lumenus">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Lumenus Features</h2>
+                <p>Everything trainees, attendings, and program directors need to manage procedure education.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon red">📋</div>
+                    <h3>Case Logging</h3>
+                    <p>Log procedures in under 30 seconds. Select procedures, access sites, devices used, complications, and operator role. Attach notes and media.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">✅</div>
+                    <h3>Attestation Workflow</h3>
+                    <p>Attendings review and attest cases with one tap. Bulk attestation for efficiency. Optional structured evaluations and feedback.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">🖼️</div>
+                    <h3>Image Repository</h3>
+                    <p>Upload case images and videos. Build your personal portfolio or contribute to your program's shared teaching library. On-device PHI detection with automatic redaction protects patient privacy.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">⏱️</div>
+                    <h3>Duty Hours</h3>
+                    <p>Clock in and out of shifts. Track daily, weekly, and monthly hours. Export ACGME-compliant reports. Never miss a duty hour violation.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">📊</div>
+                    <h3>Analytics Dashboard</h3>
+                    <p>Filter by time range, PGY level, facility, attending, or procedure category. Bar charts, trend lines, and detailed breakdowns. Export to CSV.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon red">🏆</div>
+                    <h3>Achievement Badges</h3>
+                    <p>Earn badges as you hit procedure milestones. Gamification that motivates trainees and celebrates progress throughout training.</p>
+                </div>
+                <div class="feature-card" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border: 2px solid #4caf50;">
+                    <div class="feature-icon red" style="background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);">🔒</div>
+                    <h3>No PHI Stored</h3>
+                    <p>Lumenus does not collect or store patient names, MRNs, or any identifying information. Cases are logged by date and procedure type only. <a href="privacy.html" style="color: #2e7d32;">Read our Privacy Policy →</a></p>
+                </div>
+            </div>
+
+            <!-- Lumenus Screenshots -->
+            <div class="screenshot-gallery" style="margin-top: 4rem; border-radius: 24px; padding: 3rem;">
+                <div class="section-header" style="margin-bottom: 2rem;">
+                    <h2 style="font-size: 1.8rem;">See Lumenus in Action</h2>
+                </div>
+                <div class="screenshots-container">
+                    <div class="screenshot-item">
+                        <img src="Lumenus-1.png" alt="Case Log">
+                        <p>Case Log</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-3.png" alt="Edit Case">
+                        <p>Log a Case</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-4.png" alt="Attending Attestation">
+                        <p>Attending Attestation</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-5.png" alt="Analytics">
+                        <p>Analytics</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-6.png" alt="Badges & COCATS">
+                        <p>Badges & COCATS</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-8.png" alt="Clock In">
+                        <p>Clock In</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-7.png" alt="Shift Log">
+                        <p>Shift Log</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-2.png" alt="Duty Hours">
+                        <p>Duty Hours</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-9.PNG" alt="Teaching Files">
+                        <p>Teaching Files</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Lumenus-10.PNG" alt="Shared Comments">
+                        <p>Shared Comments</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Who Lumenus Is For -->
+            <div class="roles-grid" style="margin-top: 4rem;">
+                <div class="role-card">
+                    <div class="role-icon">🎓</div>
+                    <h3>Fellows & Residents</h3>
+                    <p>Focus on learning while Lumenus handles documentation. Log cases fast, track your progress, and build a portfolio that showcases your training.</p>
+                </div>
+                <div class="role-card">
+                    <div class="role-icon">👨‍⚕️</div>
+                    <h3>Attendings</h3>
+                    <p>Attest cases in seconds without disrupting your day. Provide meaningful feedback when it matters.</p>
+                </div>
+                <div class="role-card">
+                    <div class="role-icon">🏥</div>
+                    <h3>Program Directors</h3>
+                    <p>Monitor all trainees from one dashboard. Track duty hours compliance, procedure numbers, and attestation rates. Export reports for ACGME.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CathCPT Features Detail -->
+    <section class="feature-details alt" id="cathcpt">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>CathCPT Features</h2>
+                <p>Stop leaving money on the table. Capture accurate billing for every cath lab procedure.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon blue">💰</div>
+                    <h3>RVU Calculator</h3>
+                    <p>Real-time work RVU totals and Medicare reimbursement estimates. Know exactly what each case is worth before you submit.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">🫀</div>
+                    <h3>Vessel Documentation</h3>
+                    <p>Select coronary vessels (LAD, LCx, RCA, Left Main, Ramus) for all PCI codes, add-ons, and intravascular imaging. Proper modifier support built in.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">⚡</div>
+                    <h3>Auto -59 Modifier</h3>
+                    <p>Automatic modifier application when billing diagnostic cath + PCI on the same day. No more missed revenue or rejected claims.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">🩺</div>
+                    <h3>Full 2026 CPT Coverage</h3>
+                    <p>Diagnostic cath, PCI, structural heart, TAVR, peripheral interventions, drug-coated balloons, FFR/CFR, and intravascular imaging.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">📋</div>
+                    <h3>Multi-Vessel PCI</h3>
+                    <p>Support for up to 3 vessels with individual code selection. ICD-10 indications for cardiac, peripheral, and structural procedures.</p>
+                </div>
+                <div class="feature-card" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border: 2px solid #4caf50;">
+                    <div class="feature-icon blue" style="background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);">🔒</div>
+                    <h3>No PHI Stored</h3>
+                    <p>CathCPT uses case IDs instead of patient names. No patient identifiers are ever entered, stored, or transmitted. Data stays on your device. <a href="privacy.html" style="color: #2e7d32;">Read our Privacy Policy →</a></p>
+                </div>
+            </div>
+
+            <!-- CathCPT Screenshots -->
+            <div class="screenshot-gallery" style="margin-top: 4rem; border-radius: 24px; padding: 3rem; background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 100%);">
+                <div class="section-header" style="margin-bottom: 2rem;">
+                    <h2 style="font-size: 1.8rem;">See CathCPT in Action</h2>
+                </div>
+                <div class="screenshots-container">
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-1.PNG" alt="Case Information">
+                        <p>Case Information</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-2.PNG" alt="ICD-10 Indications">
+                        <p>ICD-10 Indications</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-3.PNG" alt="CPT Codes">
+                        <p>CPT Codes</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-4.PNG" alt="Code Details">
+                        <p>Code Details</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-5.PNG" alt="Vessel Selection">
+                        <p>Vessel Selection</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-6.PNG" alt="RVU Summary">
+                        <p>RVU Summary</p>
+                    </div>
+                    <div class="screenshot-item">
+                        <img src="Cathcpt-7.PNG" alt="Share Report">
+                        <p>Share Report</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Textify Features Detail -->
+    <section class="feature-details" id="textify">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Textify Features</h2>
+                <p>Streamline your EHR documentation workflow with fast, secure PDF text extraction.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-purple);">📄</div>
+                    <h3>Instant PDF Extraction</h3>
+                    <p>Convert any PDF-based report—cath reports, echo findings, lab results—into clean, editable text in seconds.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-purple);">📋</div>
+                    <h3>EHR-Ready Output</h3>
+                    <p>Formatted text output designed for easy copy/paste into Epic, Cerner, MEDITECH, or any electronic health record system.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-purple);">💻</div>
+                    <h3>Windows & macOS</h3>
+                    <p>Native desktop application available for both platforms. No browser required, no internet connection needed.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-purple);">⚡</div>
+                    <h3>Batch Processing</h3>
+                    <p>Process multiple PDF files at once. Perfect for busy practices handling high volumes of outside records.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-purple);">🔌</div>
+                    <h3>Works Offline</h3>
+                    <p>All processing happens locally on your machine. No cloud uploads, no internet dependency, no latency.</p>
+                </div>
+                <div class="feature-card" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border: 2px solid #4caf50;">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);">🔒</div>
+                    <h3>No PHI Collected</h3>
+                    <p>Textify never collects, transmits, or stores any data. Your documents stay on your computer. <a href="privacy.html" style="color: #2e7d32;">Read our Privacy Policy →</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Explify Features Detail -->
+    <section class="feature-details alt" id="explify">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>Explify Features</h2>
+                <p>Help clinicians deliver meaningful, personalized test result interpretations that patients can understand.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">📥</div>
+                    <h3>Multi-Format Import</h3>
+                    <p>Import medical reports from PDFs, images, or paste text directly from your EMR. Supports echocardiograms, stress tests, cath reports, and more.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">🔐</div>
+                    <h3>PHI Scrubbing</h3>
+                    <p>Protected health information is automatically detected and removed before any AI processing. Patient privacy protected by design.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">📝</div>
+                    <h3>Literacy Level Control</h3>
+                    <p>Adjust reading level from Grade 4 to Clinical. Generate explanations appropriate for any patient's health literacy level.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">🎛️</div>
+                    <h3>Tone & Detail Sliders</h3>
+                    <p>Fine-tune the tone from Concerning to Very Reassuring, and detail level from Minimal to Very Detailed. Match your clinical judgment.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">📚</div>
+                    <h3>Teaching Points</h3>
+                    <p>Create personalized instructions that customize how AI interprets and explains results. Apply stylistic or clinical preferences automatically.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">🩺</div>
+                    <h3>Context-Aware Refinement</h3>
+                    <p>Add patient history, symptoms, and clinical context to generate personalized explanations that address your patient's specific situation.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">✉️</div>
+                    <h3>Patient Letters</h3>
+                    <p>Generate patient-facing letters from reports. Use custom templates. Edit and refine before sending.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background: var(--gradient-teal);">📋</div>
+                    <h3>EHR & SMS Ready</h3>
+                    <p>Copy explanations directly to your EHR, send via patient messaging or SMS, or export to PDF for print.</p>
+                </div>
+                <div class="feature-card" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border: 2px solid #4caf50;">
+                    <div class="feature-icon" style="background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);">🔒</div>
+                    <h3>Privacy by Design</h3>
+                    <p>PHI is scrubbed before AI processing. No patient data is stored after processing. Your API key stays on your device. <a href="privacy.html" style="color: #2e7d32;">Read our Privacy Policy →</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about-section" id="about">
+        <div class="section-container">
+            <div class="section-header">
+                <h2>About Lumen Innovations</h2>
+                <p>Built by a physician who understands the challenges of modern medical practice.</p>
+            </div>
+            <div class="about-container">
+                <div class="about-photo">
+                    <div class="photo-placeholder">
+                        <!-- Replace src with actual photo: george-younis.jpg -->
+                        <img src="george-younis.jpg" alt="George A. Younis, MD, FACC" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <span style="display: none;">Photo</span>
+                    </div>
+                </div>
+                <div class="about-content">
+                    <h2>George A. Younis, MD, FACC</h2>
+                    <p class="credentials">Founder & Developer</p>
+                    <p>Dr. George Younis is a board-certified interventional cardiologist with over 20 years of experience in clinical interventional cardiology and medical education. He currently serves as Program Director for the Interventional Cardiology Fellowship at Texas Heart Institute, where he previously served as Associate Program Director for the General Cardiology Fellowship. He has also held multiple leadership positions in cardiovascular quality improvement at Baylor St. Luke's Medical Center. Beyond these academic and institutional roles, Dr. Younis manages a private cardiology practice, giving him firsthand insight into the importance of accurate charge capture and revenue cycle optimization.</p>
+                    <p>In helping to run both general and interventional cardiology fellowship programs, he became acutely aware of the limitations of existing software solutions for managing trainee procedure logs, analytics, and work hours documentation. He also recognized training programs' and ACGME's need for procedure attestation, meaningful trainee evaluation, and shared image repositories for teaching purposes—alongside attendings' universal desire to make everything they're required to do as quick and easy as possible so they can get back to the cath lab.</p>
+                    <p>From running a private cardiology practice for over 20 years, Dr. Younis also became intimately familiar with the bottlenecks and pain points experienced by his clinical staff. This firsthand understanding of daily workflow challenges motivated him to develop AI-powered applications that make clinical processes simpler and more effective—not just for physicians, but for the entire care team.</p>
+                    <p>His unique combination of clinical expertise, leadership in medical education and quality improvement, paired with a passion for solving problems with technology, positioned him to create apps that fill these unmet needs for physicians and training programs alike.</p>
+                    <p class="about-tagline">"Technology should make a physician's life easier. Clicks matter. Every feature in these apps exists to address a workflow gap I have experienced myself."</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section" id="contact">
+        <div class="section-container">
+            <h2>Ready to Get Started?</h2>
+            <p>Join the physicians and training programs already using Lumen Innovations apps to work smarter.</p>
+            <div class="cta-buttons">
+                <a href="contact.html" class="btn-white">Contact Us</a>
+                <a href="#apps" class="btn-outline">View Our Apps</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo">
+                        <span class="logo-text" style="color: white;">Lumen <span>Innovations</span></span>
+                    </div>
+                    <p>Building software that helps physicians focus on what matters most: excellent patient care and medical education.</p>
+                </div>
+                <div class="footer-column">
+                    <h4>Apps</h4>
+                    <ul>
+                        <li><a href="#lumenus">Lumenus</a></li>
+                        <li><a href="#cathcpt">CathCPT</a></li>
+                        <li><a href="#textify">Textify</a></li>
+                        <li><a href="#explify">Explify</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#about">About Us</a></li>
+                        <li><a href="contact.html">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="privacy.html">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Lumen Innovations. All rights reserved.</p>
+                <p>Made with ❤️ for physicians everywhere</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMobileMenu() {
+            const mobileNav = document.getElementById('mobileNav');
+            mobileNav.classList.toggle('active');
+        }
+
+        function closeMobileMenu() {
+            const mobileNav = document.getElementById('mobileNav');
+            mobileNav.classList.remove('active');
+        }
+
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', function(e) {
+            const mobileNav = document.getElementById('mobileNav');
+            const menuBtn = document.querySelector('.mobile-menu-btn');
+            if (!mobileNav.contains(e.target) && !menuBtn.contains(e.target)) {
+                mobileNav.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

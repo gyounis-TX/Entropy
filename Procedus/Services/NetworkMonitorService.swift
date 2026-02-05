@@ -56,7 +56,7 @@ final class NetworkMonitorService: ObservableObject {
 
     private func startMonitoring() {
         monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.updateConnectionStatus(path)
             }
         }

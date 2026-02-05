@@ -221,8 +221,6 @@ struct SharedImageLibraryContent: View {
     private var mediaList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                statsHeader
-
                 switch sortMode {
                 case .byDateUploaded:
                     LazyVGrid(columns: gridColumns, spacing: 8) {
@@ -246,31 +244,6 @@ struct SharedImageLibraryContent: View {
             }
             .padding()
         }
-    }
-
-    private var statsHeader: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 24) {
-                StatItem(value: "\(sharedMedia.count)", label: "Total Shared")
-                StatItem(value: "\(Set(sharedMedia.map { $0.ownerId }).count)", label: "Contributors")
-                StatItem(value: "\(Set(sharedMedia.flatMap { $0.searchTerms }).count)", label: "Labels")
-            }
-            if sharedMedia.filter({ $0.ownerId == currentUserId }).isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(.yellow)
-                    Text("Share your first image to help others learn!")
-                        .font(.caption)
-                        .foregroundStyle(ProcedusTheme.textSecondary)
-                }
-                .padding(8)
-                .background(Color.yellow.opacity(0.1))
-                .cornerRadius(8)
-            }
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
     }
 
     private func countForFilter(_ option: SharedMediaFilterOption) -> Int {
@@ -588,8 +561,6 @@ struct SharedImageLibraryView: View {
     private var mediaList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                statsHeader
-
                 switch sortMode {
                 case .byDateUploaded:
                     LazyVGrid(columns: gridColumns, spacing: 8) {
@@ -615,35 +586,6 @@ struct SharedImageLibraryView: View {
             }
             .padding()
         }
-    }
-
-    // MARK: - Stats Header
-
-    private var statsHeader: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 24) {
-                StatItem(value: "\(sharedMedia.count)", label: "Total Shared")
-                StatItem(value: "\(Set(sharedMedia.map { $0.ownerId }).count)", label: "Contributors")
-                StatItem(value: "\(Set(sharedMedia.flatMap { $0.searchTerms }).count)", label: "Labels")
-            }
-
-            // Contribution encouragement
-            if sharedMedia.filter({ $0.ownerId == currentUserId }).isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(.yellow)
-                    Text("Share your first image to help others learn!")
-                        .font(.caption)
-                        .foregroundStyle(ProcedusTheme.textSecondary)
-                }
-                .padding(8)
-                .background(Color.yellow.opacity(0.1))
-                .cornerRadius(8)
-            }
-        }
-        .padding()
-        .background(ProcedusTheme.cardBackground)
-        .cornerRadius(12)
     }
 
     // MARK: - Helpers

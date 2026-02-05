@@ -203,27 +203,27 @@ struct AnalyticsView: View {
         switch selectedRange {
         case .week:
             let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
-            cases = userCases.filter { $0.createdAt >= startOfWeek }
+            cases = userCases.filter { $0.procedureDate >= startOfWeek }
         case .last30Days:
             let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-            cases = userCases.filter { $0.createdAt >= thirtyDaysAgo }
+            cases = userCases.filter { $0.procedureDate >= thirtyDaysAgo }
         case .monthToDate:
             let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
-            cases = userCases.filter { $0.createdAt >= startOfMonth }
+            cases = userCases.filter { $0.procedureDate >= startOfMonth }
         case .yearToDate:
             let startOfYear = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
-            cases = userCases.filter { $0.createdAt >= startOfYear }
+            cases = userCases.filter { $0.procedureDate >= startOfYear }
         case .academicYearToDate:
             // Academic year starts July 1
             let startOfAcademicYear = academicYearStartDate(for: now)
-            cases = userCases.filter { $0.createdAt >= startOfAcademicYear }
+            cases = userCases.filter { $0.procedureDate >= startOfAcademicYear }
         case .pgy:
             // PGY shows all cases - grouping is done by academic year in chart
             cases = userCases
         case .allTime:
             cases = userCases
         case .custom:
-            cases = userCases.filter { $0.createdAt >= customStartDate && $0.createdAt <= customEndDate }
+            cases = userCases.filter { $0.procedureDate >= customStartDate && $0.procedureDate <= customEndDate }
         }
 
         // Apply facility filter

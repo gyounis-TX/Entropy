@@ -113,7 +113,7 @@ struct AddEditCaseView: View {
     
     // Computed sorted/filtered versions
     private var sortedAttendingsActive: [Attending] {
-        attendings.filter { !$0.isArchived }.sorted { $0.name < $1.name }
+        attendings.filter { !$0.isArchived }.sorted { $0.lastName < $1.lastName }
     }
     
     private var sortedFacilitiesActive: [TrainingFacility] {
@@ -263,26 +263,10 @@ struct AddEditCaseView: View {
         return false
     }
 
-    /// Filter packs based on case type
+    /// All current packs — always show every installed pack so that
+    /// imported cases with procedures from any pack can be edited.
     private var filteredCurrentPacks: [SpecialtyPack] {
-        // If only cardiac imaging mode
-        if hasCardiacImaging && !hasOtherCardiologyPacks {
-            return currentPacks.filter { $0.id == "cardiac-imaging" }
-        }
-
-        // If toggle is showing, filter based on selection
-        if shouldShowCaseTypeToggle {
-            switch selectedCaseType {
-            case .noninvasive:
-                return currentPacks.filter { $0.id == "cardiac-imaging" }
-            case .ep:
-                return currentPacks.filter { $0.id == "electrophysiology" }
-            case .invasive:
-                return currentPacks.filter { $0.id == "interventional-cardiology" }
-            }
-        }
-
-        return currentPacks
+        currentPacks
     }
 
     private var canSave: Bool {
@@ -326,8 +310,36 @@ struct AddEditCaseView: View {
                 details[detailId] = Set(optionList)
             }
             _customDetailSelections = State(initialValue: details)
-            // Load case type and operator position
-            _selectedCaseType = State(initialValue: existing.caseType ?? .invasive)
+            // Infer case type: use stored value, or detect from procedure pack membership
+            let inferredType: CaseType
+            if let ct = existing.caseType {
+                inferredType = ct
+            } else {
+                var hasCI = false, hasEP = false, hasIC = false
+                for tagId in existing.procedureTagIds {
+                    if tagId.hasPrefix("ci-") { hasCI = true; continue }
+                    if tagId.hasPrefix("ep-") { hasEP = true; continue }
+                    if tagId.hasPrefix("ic-") || tagId.hasPrefix("dx-") { hasIC = true; continue }
+                    if tagId.hasPrefix("custom-") { continue }
+                    // Fallback: catalog lookup for non-standard IDs
+                    if let packId = SpecialtyPackCatalog.findPackId(for: tagId) {
+                        switch packId {
+                        case "cardiac-imaging": hasCI = true
+                        case "electrophysiology": hasEP = true
+                        case "interventional-cardiology": hasIC = true
+                        default: break
+                        }
+                    }
+                }
+                if hasCI && !hasEP && !hasIC {
+                    inferredType = .noninvasive
+                } else if hasEP {
+                    inferredType = .ep
+                } else {
+                    inferredType = .invasive
+                }
+            }
+            _selectedCaseType = State(initialValue: inferredType)
             _selectedOperatorPosition = State(initialValue: existing.operatorPosition)
         }
     }
@@ -1195,7 +1207,6 @@ struct AddEditCaseView: View {
 
     @ViewBuilder
     private var packProceduresSection: some View {
-        // Use filteredCurrentPacks based on case type (invasive/noninvasive)
         ForEach(filteredCurrentPacks, id: \.id) { pack in
             Section {
                 packCategoriesList(for: pack)
@@ -2080,54 +2091,61 @@ struct AddEditCaseView: View {
             return
         }
 
-        // Get existing badges for this fellow
+        // Snapshot data needed for badge checking
         let existingBadges = earnedBadgesQuery.filter { $0.fellowId == fellowId }
+        let casesCopy = allCases
 
-        // Check and award new badges
-        let newBadges = BadgeService.shared.checkAndAwardBadges(
-            for: fellowId,
-            attestedCase: savedCase,
-            allCases: allCases,
-            existingBadges: existingBadges,
-            modelContext: modelContext
-        )
-
-        // Create notifications for earned badges
-        for earned in newBadges {
-            if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
-                let notification = Notification(
-                    userId: fellowId,
-                    title: "Achievement Unlocked!",
-                    message: "You earned the \"\(badge.title)\" badge!",
-                    notificationType: NotificationType.badgeEarned.rawValue,
-                    caseId: savedCaseId
-                )
-                modelContext.insert(notification)
-            }
-        }
-
-        if !newBadges.isEmpty {
-            try? modelContext.save()
-
-            // Get the actual Badge objects to display
-            earnedBadges = newBadges.compactMap { earned in
-                BadgeCatalog.badge(withId: earned.badgeId)
-            }
-
-            if !earnedBadges.isEmpty {
-                // Show badge celebration
-                withAnimation {
-                    showingBadgeCelebration = true
+        // Run badge checking on background thread to avoid blocking UI
+        Task {
+            let newBadges: [BadgeEarned] = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    let result = BadgeService.shared.checkAndAwardBadges(
+                        for: fellowId,
+                        attestedCase: savedCase,
+                        allCases: casesCopy,
+                        existingBadges: existingBadges,
+                        modelContext: nil
+                    )
+                    continuation.resume(returning: result)
                 }
-                return
             }
-        }
 
-        // No badges earned, proceed with normal dismissal
-        if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry && bulkSavedCount > 0 {
-            bulkShowingSuccess = true
-        } else {
-            dismiss()
+            // Back on main thread — insert badges and notifications
+            for earned in newBadges {
+                modelContext.insert(earned)
+                if let badge = BadgeCatalog.badge(withId: earned.badgeId) {
+                    let notification = Notification(
+                        userId: fellowId,
+                        title: "Achievement Unlocked!",
+                        message: "You earned the \"\(badge.title)\" badge!",
+                        notificationType: NotificationType.badgeEarned.rawValue,
+                        caseId: savedCaseId
+                    )
+                    modelContext.insert(notification)
+                }
+            }
+
+            if !newBadges.isEmpty {
+                try? modelContext.save()
+
+                earnedBadges = newBadges.compactMap { earned in
+                    BadgeCatalog.badge(withId: earned.badgeId)
+                }
+
+                if !earnedBadges.isEmpty {
+                    withAnimation {
+                        showingBadgeCelebration = true
+                    }
+                    return
+                }
+            }
+
+            // No badges earned, proceed with normal dismissal
+            if isSimplifiedNoninvasiveForm && noninvasiveEntryMode == .bulkEntry && bulkSavedCount > 0 {
+                bulkShowingSuccess = true
+            } else {
+                dismiss()
+            }
         }
     }
     

@@ -23,6 +23,7 @@ enum MediaFlowState {
 struct AddCaseMediaFlow: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
 
     let caseId: UUID
     let ownerId: UUID
@@ -287,7 +288,7 @@ struct AddCaseMediaFlow: View {
         caseMedia.userConfirmedAt = Date()
         caseMedia.redactionApplied = wasRedacted
 
-        caseMedia.uploadStatus = .pending
+        caseMedia.uploadStatus = appState.isIndividualMode ? .uploaded : .pending
         modelContext.insert(caseMedia)
 
         // Create MediaComment record if comment was provided during upload
@@ -315,60 +316,62 @@ struct AddCaseMediaFlow: View {
             let uploaderUserId = ownerId
             let programId = allCases.first(where: { $0.id == caseIdValue })?.programId
 
-            Task {
-                // Mark uploading
-                await MainActor.run {
-                    caseMedia.uploadStatus = .uploading
-                    try? modelContext.save()
-                }
+            if !appState.isIndividualMode {
+                Task {
+                    // Mark uploading
+                    await MainActor.run {
+                        caseMedia.uploadStatus = .uploading
+                        try? modelContext.save()
+                    }
 
-                do {
-                    let uid = try await CloudMediaUploadService.shared.authUid()
-                    let cloudPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/original.jpg"
-                    let cloudThumbPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/thumb.jpg"
+                    do {
+                        let uid = try await CloudMediaUploadService.shared.authUid()
+                        let cloudPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/original.jpg"
+                        let cloudThumbPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/thumb.jpg"
 
-                    try await CloudMediaUploadService.shared.uploadWithRetry(
-                        relativeLocalPath: mediaLocalPath,
-                        to: cloudPath,
-                        contentType: "image/jpeg"
-                    )
-
-                    if let thumbPath = mediaThumbnailPath {
                         try await CloudMediaUploadService.shared.uploadWithRetry(
-                            relativeLocalPath: thumbPath,
-                            to: cloudThumbPath,
+                            relativeLocalPath: mediaLocalPath,
+                            to: cloudPath,
                             contentType: "image/jpeg"
                         )
-                    }
 
-                    await MainActor.run {
-                        caseMedia.cloudPath = cloudPath
-                        caseMedia.uploadedToCloudAt = Date()
-                        caseMedia.uploadStatus = .uploaded
-                        caseMedia.uploadRetryCount = 0
-                        caseMedia.lastUploadError = nil
-                        try? modelContext.save()
-                    }
-                    print("[MediaUpload] Image upload succeeded for \(mediaId)")
-
-                    // Send Teaching Files notification
-                    if shared, let pid = programId {
-                        await MainActor.run {
-                            NotificationManager.shared.notifyTeachingFileUploaded(
-                                uploaderName: uploaderName,
-                                uploaderUserId: uploaderUserId,
-                                mediaId: mediaId,
-                                programId: pid
+                        if let thumbPath = mediaThumbnailPath {
+                            try await CloudMediaUploadService.shared.uploadWithRetry(
+                                relativeLocalPath: thumbPath,
+                                to: cloudThumbPath,
+                                contentType: "image/jpeg"
                             )
                         }
+
+                        await MainActor.run {
+                            caseMedia.cloudPath = cloudPath
+                            caseMedia.uploadedToCloudAt = Date()
+                            caseMedia.uploadStatus = .uploaded
+                            caseMedia.uploadRetryCount = 0
+                            caseMedia.lastUploadError = nil
+                            try? modelContext.save()
+                        }
+                        print("[MediaUpload] Image upload succeeded for \(mediaId)")
+
+                        // Send Teaching Files notification
+                        if shared, let pid = programId {
+                            await MainActor.run {
+                                NotificationManager.shared.notifyTeachingFileUploaded(
+                                    uploaderName: uploaderName,
+                                    uploaderUserId: uploaderUserId,
+                                    mediaId: mediaId,
+                                    programId: pid
+                                )
+                            }
+                        }
+                    } catch {
+                        await MainActor.run {
+                            caseMedia.uploadStatus = .failed
+                            caseMedia.lastUploadError = error.localizedDescription
+                            try? modelContext.save()
+                        }
+                        print("[MediaUpload] Image upload failed: \(error.localizedDescription)")
                     }
-                } catch {
-                    await MainActor.run {
-                        caseMedia.uploadStatus = .failed
-                        caseMedia.lastUploadError = error.localizedDescription
-                        try? modelContext.save()
-                    }
-                    print("[MediaUpload] Image upload failed: \(error.localizedDescription)")
                 }
             }
 
@@ -419,7 +422,7 @@ struct AddCaseMediaFlow: View {
         caseMedia.userConfirmedAt = Date()
         caseMedia.redactionApplied = wasRedacted
 
-        caseMedia.uploadStatus = .pending
+        caseMedia.uploadStatus = appState.isIndividualMode ? .uploaded : .pending
         modelContext.insert(caseMedia)
 
         // Create MediaComment record if comment was provided during upload
@@ -449,58 +452,60 @@ struct AddCaseMediaFlow: View {
             let uploaderUserId = ownerId
             let programId = allCases.first(where: { $0.id == caseIdValue })?.programId
 
-            Task {
-                await MainActor.run {
-                    caseMedia.uploadStatus = .uploading
-                    try? modelContext.save()
-                }
-
-                do {
-                    let uid = try await CloudMediaUploadService.shared.authUid()
-                    let cloudPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/original.\(safeExt)"
-                    let cloudThumbPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/thumb.jpg"
-
-                    try await CloudMediaUploadService.shared.uploadWithRetry(
-                        relativeLocalPath: mediaLocalPath,
-                        to: cloudPath,
-                        contentType: "video/mp4"
-                    )
-
-                    if let thumbPath = mediaThumbnailPath {
-                        try await CloudMediaUploadService.shared.uploadWithRetry(
-                            relativeLocalPath: thumbPath,
-                            to: cloudThumbPath,
-                            contentType: "image/jpeg"
-                        )
-                    }
-
+            if !appState.isIndividualMode {
+                Task {
                     await MainActor.run {
-                        caseMedia.cloudPath = cloudPath
-                        caseMedia.uploadedToCloudAt = Date()
-                        caseMedia.uploadStatus = .uploaded
-                        caseMedia.uploadRetryCount = 0
-                        caseMedia.lastUploadError = nil
+                        caseMedia.uploadStatus = .uploading
                         try? modelContext.save()
                     }
-                    print("[MediaUpload] Video upload succeeded for \(mediaId)")
 
-                    if shared, let pid = programId {
-                        await MainActor.run {
-                            NotificationManager.shared.notifyTeachingFileUploaded(
-                                uploaderName: uploaderName,
-                                uploaderUserId: uploaderUserId,
-                                mediaId: mediaId,
-                                programId: pid
+                    do {
+                        let uid = try await CloudMediaUploadService.shared.authUid()
+                        let cloudPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/original.\(safeExt)"
+                        let cloudThumbPath = "v1/users/\(uid)/cases/\(caseIdValue.uuidString)/media/\(mediaId.uuidString)/thumb.jpg"
+
+                        try await CloudMediaUploadService.shared.uploadWithRetry(
+                            relativeLocalPath: mediaLocalPath,
+                            to: cloudPath,
+                            contentType: "video/mp4"
+                        )
+
+                        if let thumbPath = mediaThumbnailPath {
+                            try await CloudMediaUploadService.shared.uploadWithRetry(
+                                relativeLocalPath: thumbPath,
+                                to: cloudThumbPath,
+                                contentType: "image/jpeg"
                             )
                         }
+
+                        await MainActor.run {
+                            caseMedia.cloudPath = cloudPath
+                            caseMedia.uploadedToCloudAt = Date()
+                            caseMedia.uploadStatus = .uploaded
+                            caseMedia.uploadRetryCount = 0
+                            caseMedia.lastUploadError = nil
+                            try? modelContext.save()
+                        }
+                        print("[MediaUpload] Video upload succeeded for \(mediaId)")
+
+                        if shared, let pid = programId {
+                            await MainActor.run {
+                                NotificationManager.shared.notifyTeachingFileUploaded(
+                                    uploaderName: uploaderName,
+                                    uploaderUserId: uploaderUserId,
+                                    mediaId: mediaId,
+                                    programId: pid
+                                )
+                            }
+                        }
+                    } catch {
+                        await MainActor.run {
+                            caseMedia.uploadStatus = .failed
+                            caseMedia.lastUploadError = error.localizedDescription
+                            try? modelContext.save()
+                        }
+                        print("[MediaUpload] Video upload failed: \(error.localizedDescription)")
                     }
-                } catch {
-                    await MainActor.run {
-                        caseMedia.uploadStatus = .failed
-                        caseMedia.lastUploadError = error.localizedDescription
-                        try? modelContext.save()
-                    }
-                    print("[MediaUpload] Video upload failed: \(error.localizedDescription)")
                 }
             }
 
@@ -1402,12 +1407,11 @@ struct VideoLabelsView: View {
     private func generateThumbnail() async {
         let url = videoURL
         let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            let asset = AVAsset(url: url)
+            let asset = AVURLAsset(url: url)
             let imageGenerator = AVAssetImageGenerator(asset: asset)
             imageGenerator.appliesPreferredTrackTransform = true
             imageGenerator.maximumSize = CGSize(width: 400, height: 400)
-            var actualTime = CMTime.zero
-            guard let cgImage = try? imageGenerator.copyCGImage(at: .zero, actualTime: &actualTime) else {
+            guard let cgImage = try? await imageGenerator.image(at: .zero).image else {
                 return nil
             }
             return UIImage(cgImage: cgImage)
@@ -1527,12 +1531,11 @@ struct VideoNoPHIConfirmationView: View {
     private func generateThumbnail() async {
         let url = videoURL
         let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            let asset = AVAsset(url: url)
+            let asset = AVURLAsset(url: url)
             let imageGenerator = AVAssetImageGenerator(asset: asset)
             imageGenerator.appliesPreferredTrackTransform = true
             imageGenerator.maximumSize = CGSize(width: 400, height: 400)
-            var actualTime = CMTime.zero
-            guard let cgImage = try? imageGenerator.copyCGImage(at: .zero, actualTime: &actualTime) else {
+            guard let cgImage = try? await imageGenerator.image(at: .zero).image else {
                 return nil
             }
             return UIImage(cgImage: cgImage)
