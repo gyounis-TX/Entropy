@@ -15,7 +15,7 @@ enum RecurrenceRule: Codable {
 }
 
 enum ReminderSource: String, Codable {
-    case trip, note, vault, project
+    case trip, note, vault, project, standalone
 }
 
 @Model
@@ -71,6 +71,7 @@ final class Reminder {
         case .note: return note?.title ?? "Note"
         case .vault: return vaultItem?.label ?? "Vault"
         case .project: return project?.name ?? "Project"
+        case .standalone: return "Reminder"
         }
     }
 }

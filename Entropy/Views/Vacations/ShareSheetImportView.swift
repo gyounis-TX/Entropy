@@ -5,6 +5,7 @@ import SwiftData
 struct ShareSheetImportView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(GmailScanService.self) private var gmailService
     @Query(sort: \Trip.startDate) private var trips: [Trip]
 
     @State private var parsedBooking: ParsedBooking?
@@ -79,7 +80,6 @@ struct ShareSheetImportView: View {
 
                     if let trip = selectedTrip {
                         Button("Add to \(trip.name)") {
-                            let gmailService = GmailScanService()
                             gmailService.commitBooking(booking, to: trip, context: context)
                             dismiss()
                         }

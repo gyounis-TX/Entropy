@@ -50,7 +50,7 @@ struct RemindersHubView: View {
         }
         .sheet(isPresented: $showingAddReminder) {
             NavigationStack {
-                AddReminderView(sourceType: .note, onSave: { reminder in
+                AddReminderView(sourceType: .standalone, onSave: { reminder in
                     context.insert(reminder)
                 })
             }
@@ -168,6 +168,7 @@ struct ReminderRow: View {
         case .note: return "note.text"
         case .vault: return "lock.shield.fill"
         case .project: return "folder.fill"
+        case .standalone: return "bell.fill"
         }
     }
 }
