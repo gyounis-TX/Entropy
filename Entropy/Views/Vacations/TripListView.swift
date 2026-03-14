@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct TripListView: View {
     @Environment(\.modelContext) private var context

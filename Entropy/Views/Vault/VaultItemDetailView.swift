@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct VaultItemDetailView: View {
     @Bindable var item: VaultItem

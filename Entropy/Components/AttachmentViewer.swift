@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Displays a list of attachments with thumbnails and allows viewing/removing.
 struct AttachmentViewer: View {
