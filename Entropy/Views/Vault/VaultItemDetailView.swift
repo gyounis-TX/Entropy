@@ -5,29 +5,51 @@ struct VaultItemDetailView: View {
     @Bindable var item: VaultItem
     @Environment(\.modelContext) private var context
     @State private var showingAddReminder = false
+    @State private var isEditingPhotos = false
 
     var body: some View {
         List {
             // Images
             Section("Document Images") {
-                if let frontData = item.imagesFront, let uiImage = UIImage(data: frontData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                if isEditingPhotos {
+                    DocumentImagePicker(
+                        frontImage: $item.imagesFront,
+                        backImage: $item.imagesBack
+                    )
+                } else {
+                    if let frontData = item.imagesFront, let uiImage = UIImage(data: frontData) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Front").font(.caption).foregroundStyle(.secondary)
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxHeight: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                    if let backData = item.imagesBack, let uiImage = UIImage(data: backData) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Back").font(.caption).foregroundStyle(.secondary)
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxHeight: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                    if item.imagesFront == nil && item.imagesBack == nil {
+                        Button {
+                            isEditingPhotos = true
+                        } label: {
+                            Label("Add document photos", systemImage: "doc.viewfinder")
+                        }
+                    }
                 }
-                if let backData = item.imagesBack, let uiImage = UIImage(data: backData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Button(isEditingPhotos ? "Done Editing" : "Edit Photos") {
+                    isEditingPhotos.toggle()
                 }
-                if item.imagesFront == nil && item.imagesBack == nil {
-                    Label("No images — tap to add photos", systemImage: "camera.fill")
-                        .foregroundStyle(.secondary)
-                }
+                .font(.caption)
             }
 
             // Details
@@ -89,6 +111,8 @@ struct VaultItemDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: item.label) { item.updatedAt = Date() }
         .onChange(of: item.notes) { item.updatedAt = Date() }
+        .onChange(of: item.imagesFront) { item.updatedAt = Date() }
+        .onChange(of: item.imagesBack) { item.updatedAt = Date() }
         .sheet(isPresented: $showingAddReminder) {
             NavigationStack {
                 AddReminderView(sourceType: .vault, onSave: { reminder in

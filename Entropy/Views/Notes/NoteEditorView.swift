@@ -6,6 +6,7 @@ struct NoteEditorView: View {
     @Environment(\.modelContext) private var context
     @State private var showingAddReminder = false
     @State private var showingTagEditor = false
+    @State private var isPreviewMode = false
     @FocusState private var bodyFocused: Bool
 
     var body: some View {
@@ -21,12 +22,21 @@ struct NoteEditorView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(note.tags, id: \.self) { tag in
-                                Text("#\(tag)")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.blue.opacity(0.1))
-                                    .clipShape(Capsule())
+                                HStack(spacing: 4) {
+                                    Text("#\(tag)")
+                                        .font(.caption)
+                                    Button {
+                                        note.tags.removeAll { $0 == tag }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption2)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(Capsule())
                             }
                         }
                     }
@@ -55,13 +65,28 @@ struct NoteEditorView: View {
                     }
                 }
 
+                // Edit/Preview toggle
+                Picker("Mode", selection: $isPreviewMode) {
+                    Label("Edit", systemImage: "pencil").tag(false)
+                    Label("Preview", systemImage: "eye").tag(true)
+                }
+                .pickerStyle(.segmented)
+
                 Divider()
 
-                // Body editor
-                TextEditor(text: $note.body)
-                    .focused($bodyFocused)
-                    .frame(minHeight: 300)
-                    .scrollContentBackground(.hidden)
+                // Body — markdown editor or preview
+                if isPreviewMode {
+                    if note.body.isEmpty {
+                        Text("Nothing to preview")
+                            .foregroundStyle(.tertiary)
+                            .italic()
+                    } else {
+                        MarkdownPreview(markdown: note.body)
+                    }
+                } else {
+                    MarkdownEditorView(text: $note.body, isFocused: $bodyFocused)
+                        .frame(minHeight: 300)
+                }
             }
             .padding()
         }

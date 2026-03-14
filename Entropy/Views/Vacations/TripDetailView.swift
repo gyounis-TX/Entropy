@@ -223,8 +223,29 @@ struct TripDetailView: View {
 
     // MARK: - Todos
 
+    @State private var generatedCount: Int?
+    private let checklistGenerator = TripChecklistGenerator()
+
     private var todosTab: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Auto-generate button
+            Button {
+                let newTodos = checklistGenerator.generateChecklist(for: trip, context: context)
+                generatedCount = newTodos.count
+            } label: {
+                Label("Auto-Generate Checklist", systemImage: "sparkles")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+
+            if let count = generatedCount {
+                Text(count > 0 ? "\(count) items added based on your bookings" : "Checklist is up to date")
+                    .font(.caption)
+                    .foregroundStyle(count > 0 ? .green : .secondary)
+            }
+
+            Divider()
+
             ForEach(trip.todoItems.sorted(by: { !$0.isCompleted && $1.isCompleted })) { todo in
                 TripTodoRow(todo: todo)
             }

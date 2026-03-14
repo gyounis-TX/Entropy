@@ -10,6 +10,8 @@ struct AddDocumentView: View {
     @State private var expirationDate: Date?
     @State private var hasExpiration = false
     @State private var notes = ""
+    @State private var frontImageData: Data?
+    @State private var backImageData: Data?
 
     var body: some View {
         Form {
@@ -33,10 +35,11 @@ struct AddDocumentView: View {
                 }
             }
 
-            Section("Photos") {
-                Label("Camera and photo picker will be available on device", systemImage: "camera.fill")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+            Section("Document Photos") {
+                DocumentImagePicker(
+                    frontImage: $frontImageData,
+                    backImage: $backImageData
+                )
             }
 
             Section("Notes") {
@@ -55,6 +58,8 @@ struct AddDocumentView: View {
                     let item = VaultItem(type: type, label: label)
                     item.expirationDate = hasExpiration ? expirationDate : nil
                     item.notes = notes
+                    item.imagesFront = frontImageData
+                    item.imagesBack = backImageData
                     context.insert(item)
 
                     // Auto-create expiration reminder if applicable
