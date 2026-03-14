@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="#1C1C1E"/>
+
+  <!-- Tornado body - flat stylized funnel shape -->
+  <!-- Top wide part -->
+  <path d="M280 320 C280 320, 400 290, 512 290 C624 290, 744 320, 744 320 C744 320, 680 360, 512 360 C344 360, 280 320, 280 320Z" fill="#A0A0A8"/>
+  <!-- Upper middle -->
+  <path d="M340 380 C340 380, 410 355, 512 355 C614 355, 684 380, 684 380 C684 380, 640 415, 512 415 C384 415, 340 380, 340 380Z" fill="#8E8E93"/>
+  <!-- Middle -->
+  <path d="M380 430 C380 430, 430 410, 512 410 C594 410, 644 430, 644 430 C644 430, 610 465, 512 465 C414 465, 380 430, 380 430Z" fill="#7C7C82"/>
+  <!-- Lower middle -->
+  <path d="M420 480 C420 480, 455 462, 512 462 C569 462, 604 480, 604 480 C604 480, 575 510, 512 510 C449 510, 420 480, 420 480Z" fill="#6C6C72"/>
+  <!-- Lower -->
+  <path d="M455 520 C455 520, 478 508, 512 508 C546 508, 569 520, 569 520 C569 520, 550 548, 512 548 C474 548, 455 520, 455 520Z" fill="#5C5C62"/>
+  <!-- Narrow tail -->
+  <path d="M480 555 C480 555, 494 545, 512 545 C530 545, 544 555, 544 555 L524 640 C524 640, 518 660, 512 680 C506 660, 500 640, 500 640 Z" fill="#4A4A50"/>
+  <!-- Tail tip -->
+  <ellipse cx="512" cy="700" rx="16" ry="8" fill="#4A4A50"/>
+
+  <!-- Prohibition circle - outline -->
+  <circle cx="512" cy="490" r="280" fill="none" stroke="#FF3B30" stroke-width="48"/>
+
+  <!-- Red slash - diagonal line from top-left to bottom-right -->
+  <line x1="314" y1="292" x2="710" y2="688" stroke="#FF3B30" stroke-width="48" stroke-linecap="round"/>
+</svg>
