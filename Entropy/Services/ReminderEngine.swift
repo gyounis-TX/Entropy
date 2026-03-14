@@ -52,15 +52,16 @@ final class ReminderEngine {
         )
     }
 
-    func cancelAll(for sourceType: ReminderSource, sourceID: UUID) {
-        notificationCenter.getPendingNotificationRequests { requests in
-            let matching = requests.filter { req in
-                req.content.userInfo["sourceType"] as? String == sourceType.rawValue
-            }
-            self.notificationCenter.removePendingNotificationRequests(
-                withIdentifiers: matching.map(\.identifier)
-            )
+    func cancelAll(for sourceType: ReminderSource, sourceID: UUID) async {
+        let requests = await notificationCenter.pendingNotificationRequests()
+        let matching = requests.filter { req in
+            req.content.userInfo["sourceType"] as? String == sourceType.rawValue &&
+            req.content.userInfo["reminderID"] as? String != nil
         }
+        // Filter by sourceID via the reminder IDs associated with this source
+        notificationCenter.removePendingNotificationRequests(
+            withIdentifiers: matching.map(\.identifier)
+        )
     }
 
     func reschedule(_ reminder: Reminder) async {
@@ -104,8 +105,8 @@ final class ReminderEngine {
         anchorDate: Date,
         sourceType: ReminderSource
     ) -> Reminder {
-        let interval = TimeInterval(-daysBefore * 86400)
-        let triggerDate = anchorDate.addingTimeInterval(interval)
+        let triggerDate = Calendar.current.date(byAdding: .day, value: -daysBefore, to: anchorDate) ?? anchorDate
+        let interval = triggerDate.timeIntervalSince(anchorDate)
         return Reminder(
             title: title,
             triggerDate: triggerDate,

@@ -92,12 +92,19 @@ final class TripChecklistGenerator {
             todo.reminder = reminder
             context.insert(reminder)
 
-            Task { await ReminderEngine.shared.schedule(reminder) }
-
             newTodos.append(todo)
         }
 
         try? context.save()
+
+        // Schedule all reminders after saving — collected to avoid fire-and-forget Tasks in the loop
+        let remindersToSchedule = newTodos.compactMap(\.reminder)
+        Task {
+            for reminder in remindersToSchedule {
+                await ReminderEngine.shared.schedule(reminder)
+            }
+        }
+
         return newTodos
     }
 
@@ -138,15 +145,29 @@ final class TripChecklistGenerator {
         }
     }
 
-    /// Heuristic: a flight is international if departure and arrival airports
-    /// don't share the same first letter (rough proxy for country codes).
-    /// In production, use an airport database.
+    /// Known US domestic airport codes (IATA). A flight is international if either
+    /// endpoint is not in this set. In production, use a full airport database.
+    private static let knownDomesticAirports: Set<String> = [
+        "ATL", "LAX", "ORD", "DFW", "DEN", "JFK", "SFO", "SEA", "LAS", "MCO",
+        "EWR", "CLT", "PHX", "IAH", "MIA", "BOS", "MSP", "FLL", "DTW", "PHL",
+        "LGA", "BWI", "SLC", "SAN", "IAD", "DCA", "MDW", "TPA", "PDX", "HNL",
+        "STL", "BNA", "AUS", "OAK", "MSY", "RDU", "SJC", "SMF", "SNA", "CLE",
+        "MKE", "PIT", "SAT", "IND", "CMH", "BDL", "RSW", "JAX", "OGG", "ABQ"
+    ]
+
+    /// A flight is international if either airport is not a known US domestic airport.
+    /// Falls back to assuming domestic if both codes are unknown (conservative default).
     private func isInternational(_ flight: Flight) -> Bool {
-        let dep = flight.departureAirport
-        let arr = flight.arrivalAirport
-        guard dep.count >= 1, arr.count >= 1 else { return false }
-        // Simple heuristic: US airports start with K in ICAO or are 3-letter IATA
-        // If both are 3 letters, check if they look like they're in different regions
-        return dep.prefix(1) != arr.prefix(1)
+        let dep = flight.departureAirport.uppercased()
+        let arr = flight.arrivalAirport.uppercased()
+        guard dep.count == 3, arr.count == 3 else { return false }
+        let depKnown = Self.knownDomesticAirports.contains(dep)
+        let arrKnown = Self.knownDomesticAirports.contains(arr)
+        // If both are known domestic, it's domestic
+        if depKnown && arrKnown { return false }
+        // If one is known domestic and the other is unknown, assume international
+        if depKnown || arrKnown { return true }
+        // Both unknown — conservatively assume domestic
+        return false
     }
 }

@@ -143,21 +143,21 @@ final class BookingParser {
     // MARK: - Confirmation Number Extraction
 
     private func extractConfirmationNumber(from body: String, provider: String) -> String? {
+        // Case-insensitive patterns to match both upper and lowercase confirmation codes
         let patterns = [
-            "confirmation[:\\s#]+([A-Z0-9]{5,10})",
-            "booking reference[:\\s#]+([A-Z0-9]{5,10})",
-            "confirmation number[:\\s#]+([A-Z0-9]{5,10})",
-            "record locator[:\\s#]+([A-Z0-9]{5,8})",
-            "reservation[:\\s#]+([A-Z0-9]{5,12})",
-            "PNR[:\\s#]+([A-Z0-9]{6})"
+            "confirmation[:\\s#]+([A-Za-z0-9]{5,10})",
+            "booking reference[:\\s#]+([A-Za-z0-9]{5,10})",
+            "confirmation number[:\\s#]+([A-Za-z0-9]{5,10})",
+            "record locator[:\\s#]+([A-Za-z0-9]{5,8})",
+            "reservation[:\\s#]+([A-Za-z0-9]{5,12})",
+            "PNR[:\\s#]+([A-Za-z0-9]{6})"
         ]
 
         for pattern in patterns {
-            if let match = body.range(of: pattern, options: .regularExpression, range: body.startIndex..<body.endIndex) {
+            if let match = body.range(of: pattern, options: [.regularExpression, .caseInsensitive], range: body.startIndex..<body.endIndex) {
                 let matched = String(body[match])
-                // Extract just the code part
-                if let codeRange = matched.range(of: "[A-Z0-9]{5,12}", options: .regularExpression) {
-                    return String(matched[codeRange])
+                if let codeRange = matched.range(of: "[A-Za-z0-9]{5,12}", options: .regularExpression) {
+                    return String(matched[codeRange]).uppercased()
                 }
             }
         }
@@ -195,7 +195,7 @@ final class BookingParser {
         let arrivalDate = dates.count > 1 ? dates[1] : departureDate
 
         // Extract seat
-        let seatPattern = "seat[:\\s]+([0-9]{1,2}[A-F])"
+        let seatPattern = "seat[:\\s]+([0-9]{1,2}[a-f])"
         let seat = extractFirstMatch(pattern: seatPattern, from: body.lowercased())?.uppercased()
 
         return FlightDetails(

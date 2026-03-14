@@ -3,7 +3,7 @@ import SwiftData
 
 /// Manages project status tracking. Phase 1: manual updates only.
 /// Phase 3 will add iCloud-based auto-sync with Mac companion agent.
-@Observable
+@MainActor @Observable
 final class ProjectSyncService {
 
     /// Status payload format matching the Mac companion agent output.

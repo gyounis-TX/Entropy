@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 
 /// Cross-section full-text search across all entities.
+/// Uses SwiftData predicates to push filtering to the database layer.
 final class SearchService {
 
     struct SearchResult: Identifiable {
@@ -30,15 +31,22 @@ final class SearchService {
         }
     }
 
-    func search(query: String, context: ModelContext) -> [SearchResult] {
+    /// Search across all sections. Vault results only included if `includeVault` is true
+    /// (caller must verify biometric authentication first).
+    func search(query: String, context: ModelContext, includeVault: Bool = false) -> [SearchResult] {
         guard !query.isEmpty else { return [] }
-        let lowered = query.lowercased()
 
         var results: [SearchResult] = []
 
-        // Search trips
-        if let trips = try? context.fetch(FetchDescriptor<Trip>()) {
-            for trip in trips where trip.name.lowercased().contains(lowered) || trip.notes.lowercased().contains(lowered) {
+        // Search trips — use predicate for DB-level filtering
+        let tripDescriptor = FetchDescriptor<Trip>(
+            predicate: #Predicate<Trip> { trip in
+                trip.name.localizedStandardContains(query) ||
+                trip.notes.localizedStandardContains(query)
+            }
+        )
+        if let trips = try? context.fetch(tripDescriptor) {
+            for trip in trips {
                 results.append(SearchResult(
                     title: trip.name,
                     subtitle: "Trip · \(trip.status.rawValue)",
@@ -49,8 +57,14 @@ final class SearchService {
         }
 
         // Search notes
-        if let notes = try? context.fetch(FetchDescriptor<Note>()) {
-            for note in notes where note.title.lowercased().contains(lowered) || note.body.lowercased().contains(lowered) {
+        let noteDescriptor = FetchDescriptor<Note>(
+            predicate: #Predicate<Note> { note in
+                note.title.localizedStandardContains(query) ||
+                note.body.localizedStandardContains(query)
+            }
+        )
+        if let notes = try? context.fetch(noteDescriptor) {
+            for note in notes {
                 results.append(SearchResult(
                     title: note.title,
                     subtitle: "Note · \(note.category?.name ?? "Uncategorized")",
@@ -60,26 +74,39 @@ final class SearchService {
             }
         }
 
-        // Search vault items
-        if let items = try? context.fetch(FetchDescriptor<VaultItem>()) {
-            for item in items where item.label.lowercased().contains(lowered) || item.notes.lowercased().contains(lowered) {
-                results.append(SearchResult(
-                    title: item.label,
-                    subtitle: "Vault · \(item.type.displayName)",
-                    section: .vault,
-                    entityID: item.id
-                ))
+        // Search vault items — only if authenticated
+        if includeVault {
+            let vaultDescriptor = FetchDescriptor<VaultItem>(
+                predicate: #Predicate<VaultItem> { item in
+                    item.label.localizedStandardContains(query) ||
+                    item.notes.localizedStandardContains(query)
+                }
+            )
+            if let items = try? context.fetch(vaultDescriptor) {
+                for item in items {
+                    results.append(SearchResult(
+                        title: item.label,
+                        subtitle: "Vault · \(item.type.rawValue)",
+                        section: .vault,
+                        entityID: item.id
+                    ))
+                }
             }
         }
 
         // Search projects
-        if let projects = try? context.fetch(FetchDescriptor<Project>()) {
-            for project in projects where project.name.lowercased().contains(lowered) ||
-                project.currentStatus.lowercased().contains(lowered) ||
-                project.projectDescription.lowercased().contains(lowered) {
+        let projectDescriptor = FetchDescriptor<Project>(
+            predicate: #Predicate<Project> { project in
+                project.name.localizedStandardContains(query) ||
+                project.currentStatus.localizedStandardContains(query) ||
+                project.projectDescription.localizedStandardContains(query)
+            }
+        )
+        if let projects = try? context.fetch(projectDescriptor) {
+            for project in projects {
                 results.append(SearchResult(
                     title: project.name,
-                    subtitle: "Project · \(project.status.displayName)",
+                    subtitle: "Project · \(project.status.rawValue)",
                     section: .projects,
                     entityID: project.id
                 ))
@@ -87,11 +114,16 @@ final class SearchService {
         }
 
         // Search reminders
-        if let reminders = try? context.fetch(FetchDescriptor<Reminder>()) {
-            for reminder in reminders where reminder.title.lowercased().contains(lowered) {
+        let reminderDescriptor = FetchDescriptor<Reminder>(
+            predicate: #Predicate<Reminder> { reminder in
+                reminder.title.localizedStandardContains(query)
+            }
+        )
+        if let reminders = try? context.fetch(reminderDescriptor) {
+            for reminder in reminders {
                 results.append(SearchResult(
                     title: reminder.title,
-                    subtitle: "Reminder · \(reminder.sourceDescription)",
+                    subtitle: "Reminder · \(reminder.sourceType.rawValue)",
                     section: .reminders,
                     entityID: reminder.id
                 ))

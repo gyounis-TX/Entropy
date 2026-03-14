@@ -30,7 +30,12 @@ final class ShareSheetParser {
                     GmailHeader(name: "Subject", value: content.subject ?? "")
                 ],
                 body: GmailBody(
-                    data: content.body.data(using: .utf8)?.base64EncodedString(),
+                    data: content.body.data(using: .utf8)
+                        .map { $0.base64EncodedString()
+                            .replacingOccurrences(of: "+", with: "-")
+                            .replacingOccurrences(of: "/", with: "_")
+                            .replacingOccurrences(of: "=", with: "")
+                        },
                     size: content.body.count
                 ),
                 parts: nil
@@ -87,14 +92,52 @@ final class ShareSheetParser {
         // Decode common HTML entities
         let entities: [(String, String)] = [
             ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
-            ("&quot;", "\""), ("&#39;", "'"), ("&nbsp;", " ")
+            ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"),
+            ("&nbsp;", " "), ("&ndash;", "–"), ("&mdash;", "—"),
+            ("&lsquo;", "\u{2018}"), ("&rsquo;", "\u{2019}"),
+            ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"),
+            ("&bull;", "•"), ("&hellip;", "…"), ("&trade;", "™"),
+            ("&copy;", "©"), ("&reg;", "®")
         ]
         for (entity, char) in entities {
             text = text.replacingOccurrences(of: entity, with: char)
         }
+        // Decode numeric HTML entities (&#123; and &#x1F;)
+        text = decodeNumericEntities(text)
         // Collapse whitespace
         text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func decodeNumericEntities(_ text: String) -> String {
+        var result = text
+        // Decode hex entities: &#x1F4A8;
+        if let hexRegex = try? NSRegularExpression(pattern: "&#x([0-9A-Fa-f]+);") {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = hexRegex.matches(in: result, range: range).reversed()
+            for match in matches {
+                if let codeRange = Range(match.range(at: 1), in: result),
+                   let codePoint = UInt32(result[codeRange], radix: 16),
+                   let scalar = Unicode.Scalar(codePoint) {
+                    let charRange = Range(match.range, in: result)!
+                    result.replaceSubrange(charRange, with: String(scalar))
+                }
+            }
+        }
+        // Decode decimal entities: &#8217;
+        if let decRegex = try? NSRegularExpression(pattern: "&#([0-9]+);") {
+            let range = NSRange(result.startIndex..., in: result)
+            let matches = decRegex.matches(in: result, range: range).reversed()
+            for match in matches {
+                if let codeRange = Range(match.range(at: 1), in: result),
+                   let codePoint = UInt32(result[codeRange]),
+                   let scalar = Unicode.Scalar(codePoint) {
+                    let charRange = Range(match.range, in: result)!
+                    result.replaceSubrange(charRange, with: String(scalar))
+                }
+            }
+        }
+        return result
     }
 
     // MARK: - Heuristic Extraction

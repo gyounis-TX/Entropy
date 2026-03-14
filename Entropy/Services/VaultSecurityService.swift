@@ -6,8 +6,6 @@ import Security
 final class VaultSecurityService {
     static let shared = VaultSecurityService()
 
-    private let context = LAContext()
-
     private init() {}
 
     // MARK: - Biometric Authentication
@@ -17,6 +15,7 @@ final class VaultSecurityService {
     }
 
     var availableBiometric: BiometricType {
+        let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
             return .none

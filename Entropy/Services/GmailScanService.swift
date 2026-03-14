@@ -3,7 +3,7 @@ import AuthenticationServices
 import SwiftData
 
 /// Manages Gmail OAuth2 connection and periodic scanning for travel-related emails.
-@Observable
+@MainActor @Observable
 final class GmailScanService {
     private(set) var isConnected = false
     private(set) var isScanning = false
@@ -60,14 +60,7 @@ final class GmailScanService {
     /// Initiates Google OAuth2 sign-in flow for Gmail read-only access.
     /// In production, this would use ASWebAuthenticationSession or GoogleSignIn SDK.
     func connect(clientID: String, presentingWindow: Any? = nil) async throws {
-        // Build OAuth2 authorization URL
         let authURL = buildAuthURL(clientID: clientID)
-
-        // In a real implementation:
-        // 1. Present ASWebAuthenticationSession with authURL
-        // 2. Handle the callback to extract the authorization code
-        // 3. Exchange the code for access + refresh tokens
-        // 4. Store tokens securely in Keychain
 
         // Placeholder for OAuth flow — actual implementation requires
         // ASWebAuthenticationSession which needs a UI context
@@ -80,7 +73,6 @@ final class GmailScanService {
         self.accessToken = access
         self.refreshToken = refresh
         self.isConnected = true
-        // In production: store in Keychain via VaultSecurityService
     }
 
     func disconnect() {
@@ -123,7 +115,7 @@ final class GmailScanService {
     }
 
     /// Checks for cancellation emails and matches them to existing bookings.
-    func checkForCancellations(existingBookings: [ParsedBooking]) async throws -> [ParsedBooking] {
+    func checkForCancellations() async throws -> [ParsedBooking] {
         let allBookings = try await scanForBookings()
         return allBookings.filter { $0.isCancellation }
     }
@@ -223,12 +215,12 @@ final class GmailScanService {
             return
         }
 
-        // Check accommodations
+        // Check accommodations — mark the accommodation's notes, not the entire trip
         let accDescriptor = FetchDescriptor<Accommodation>(
             predicate: #Predicate { $0.confirmationNumber == confirmNum }
         )
         if let acc = try context.fetch(accDescriptor).first {
-            acc.trip?.status = .cancelled
+            acc.notes = "[CANCELLED] \(acc.notes)"
             try context.save()
             return
         }
@@ -249,16 +241,21 @@ final class GmailScanService {
     // MARK: - Gmail API
 
     private func fetchTravelEmails(token: String) async throws -> [GmailMessage] {
-        let query = gmailSearchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let afterDate = lastScanDate.map { ISO8601DateFormatter().string(from: $0) }
-
-        var urlString = "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=\(query)"
-        if let after = afterDate {
-            urlString += "%20after:\(after)"
+        // Build URL using URLComponents for safe encoding
+        var components = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages")!
+        var query = gmailSearchQuery
+        if let lastScan = lastScanDate {
+            // Gmail after: expects YYYY/MM/DD format
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy/MM/dd"
+            query += " after:\(formatter.string(from: lastScan))"
         }
-        urlString += "&maxResults=50"
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "maxResults", value: "50")
+        ]
 
-        guard let url = URL(string: urlString) else {
+        guard let url = components.url else {
             throw GmailError.invalidURL
         }
 
@@ -300,13 +297,21 @@ final class GmailScanService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            if httpResponse.statusCode == 401 {
+                throw GmailError.tokenExpired
+            }
+            throw GmailError.networkError("HTTP \(httpResponse.statusCode) fetching message \(id)")
+        }
+
         return try JSONDecoder().decode(GmailMessage.self, from: data)
     }
 
-    private func buildAuthURL(clientID: String) -> URL {
-        var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")!
-        components.queryItems = [
+    private func buildAuthURL(clientID: String) -> URL? {
+        var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")
+        components?.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: "com.entropy.app:/oauth2callback"),
             URLQueryItem(name: "response_type", value: "code"),
@@ -314,7 +319,7 @@ final class GmailScanService {
             URLQueryItem(name: "access_type", value: "offline"),
             URLQueryItem(name: "prompt", value: "consent")
         ]
-        return components.url!
+        return components?.url
     }
 }
 
@@ -346,15 +351,10 @@ struct GmailMessage: Codable {
     }
 
     var bodyText: String? {
-        // Try to get plain text body, fall back to HTML
+        // Recursively search for text content in MIME parts
         if let parts = payload?.parts {
-            let textPart = parts.first(where: { $0.mimeType == "text/plain" })
-            if let encoded = textPart?.body?.data {
-                return decodeBase64URL(encoded)
-            }
-            let htmlPart = parts.first(where: { $0.mimeType == "text/html" })
-            if let encoded = htmlPart?.body?.data {
-                return decodeBase64URL(encoded)
+            if let text = findTextInParts(parts) {
+                return text
             }
         }
         // Single-part message
@@ -362,6 +362,28 @@ struct GmailMessage: Codable {
             return decodeBase64URL(encoded)
         }
         return snippet
+    }
+
+    private func findTextInParts(_ parts: [GmailPart]) -> String? {
+        // Prefer text/plain, fall back to text/html
+        for part in parts {
+            if part.mimeType == "text/plain", let encoded = part.body?.data {
+                return decodeBase64URL(encoded)
+            }
+            // Recurse into nested parts
+            if let nested = part.parts, let text = findTextInParts(nested) {
+                return text
+            }
+        }
+        for part in parts {
+            if part.mimeType == "text/html", let encoded = part.body?.data {
+                return decodeBase64URL(encoded)
+            }
+            if let nested = part.parts, let text = findTextInParts(nested) {
+                return text
+            }
+        }
+        return nil
     }
 
     private func decodeBase64URL(_ input: String) -> String? {
