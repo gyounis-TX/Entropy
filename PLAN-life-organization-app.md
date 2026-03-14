@@ -1,8 +1,8 @@
-# Life Organization App — Product Plan
+# Entropy — Product Plan
 
 ## Vision
 
-A single iOS app to replace the chaos of Apple Notes, scattered reminders, and mental bookkeeping. Five core pillars:
+**Entropy** — a single iOS app to tame the chaos of Apple Notes, scattered reminders, and mental bookkeeping. Five core pillars:
 
 1. **Vacations** — TripIt-style trip planning with email ingestion
 2. **Notes** — Categorized, folder-based notes with per-note reminders
@@ -164,7 +164,7 @@ VaultItem
 
 ```
 Project
-├── name: String                    // "Procedus App", "Life Org App"
+├── name: String                    // "Procedus App", "Entropy"
 ├── description: String
 ├── status: ProjectStatus           // .active, .paused, .completed, .archived
 ├── createdAt / updatedAt: Date
@@ -311,9 +311,9 @@ Reminder
 ### App Structure
 
 ```
-LifeOrgApp/
+Entropy/
 ├── App/
-│   ├── LifeOrgApp.swift            // entry point, SwiftData schema
+│   ├── Entropy.swift            // entry point, SwiftData schema
 │   └── AppState.swift              // central state management
 │
 ├── Models/
