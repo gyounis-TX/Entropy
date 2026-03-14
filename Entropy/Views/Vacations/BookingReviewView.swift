@@ -10,6 +10,7 @@ struct BookingReviewView: View {
     @Query(sort: \Trip.startDate) private var trips: [Trip]
     @State private var selectedTrip: Trip?
     @State private var showingNewTrip = false
+    @State private var errorMessage: String?
 
     var body: some View {
         List {
@@ -147,9 +148,18 @@ struct BookingReviewView: View {
 
     private var cancellationActions: some View {
         Section("Actions") {
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             Button("Match & Cancel Booking", role: .destructive) {
-                try? gmailService.applyCancellation(booking, context: context)
-                dismiss()
+                do {
+                    try gmailService.applyCancellation(booking, context: context)
+                    dismiss()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
             }
             Button("Keep for Records") {
                 dismiss()

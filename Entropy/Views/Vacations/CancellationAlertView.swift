@@ -7,6 +7,7 @@ struct CancellationAlertView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -37,10 +38,20 @@ struct CancellationAlertView: View {
                 }
             }
 
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
             VStack(spacing: 12) {
                 Button {
-                    try? gmailService.applyCancellation(booking, context: context)
-                    dismiss()
+                    do {
+                        try gmailService.applyCancellation(booking, context: context)
+                        dismiss()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
                 } label: {
                     Text("Remove from Trip")
                         .frame(maxWidth: .infinity)

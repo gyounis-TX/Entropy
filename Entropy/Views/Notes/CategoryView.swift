@@ -55,8 +55,9 @@ struct CategoryView: View {
                 }
             }
             .onDelete { offsets in
-                for index in offsets {
-                    context.delete(filteredNotes[index])
+                let notesToDelete = offsets.map { filteredNotes[$0] }
+                for note in notesToDelete {
+                    context.delete(note)
                 }
             }
         }

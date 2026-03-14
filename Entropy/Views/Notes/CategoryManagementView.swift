@@ -20,8 +20,9 @@ struct CategoryManagementView: View {
                 }
             }
             .onDelete { offsets in
-                for index in offsets {
-                    context.delete(categories[index])
+                let toDelete = offsets.map { categories[$0] }
+                for item in toDelete {
+                    context.delete(item)
                 }
             }
             .onMove { source, destination in
