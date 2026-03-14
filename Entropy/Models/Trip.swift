@@ -205,7 +205,7 @@ final class TripTodo {
     var dueDate: Date?
 
     @Relationship var trip: Trip?
-    @Relationship var reminder: Reminder?
+    @Relationship(inverse: \Reminder.tripTodo) var reminder: Reminder?
 
     init(title: String, dueDate: Date? = nil) {
         self.id = UUID()

@@ -9,7 +9,6 @@ final class Attachment {
     var mimeType: String
     var createdAt: Date
 
-    @Relationship var trip: Trip?
     @Relationship var flight: Flight?
     @Relationship var accommodation: Accommodation?
     @Relationship var note: Note?

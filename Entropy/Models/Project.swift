@@ -97,7 +97,7 @@ final class ProjectStep {
     var sortOrder: Int
 
     @Relationship var project: Project?
-    @Relationship var reminder: Reminder?
+    @Relationship(inverse: \Reminder.projectStep) var reminder: Reminder?
 
     init(description: String, sortOrder: Int = 0) {
         self.id = UUID()
