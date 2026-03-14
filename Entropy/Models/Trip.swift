@@ -3,6 +3,16 @@ import SwiftData
 
 enum TripStatus: String, Codable, CaseIterable {
     case planning, booked, inProgress, completed, cancelled
+
+    var displayName: String {
+        switch self {
+        case .planning: return "Planning"
+        case .booked: return "Booked"
+        case .inProgress: return "In Progress"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
 }
 
 @Model

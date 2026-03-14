@@ -5,6 +5,7 @@ import SwiftData
 struct EntropyApp: App {
     let modelContainer: ModelContainer
     @State private var appState = AppState()
+    @State private var gmailService = GmailScanService()
 
     init() {
         let schema = Schema([
@@ -44,6 +45,7 @@ struct EntropyApp: App {
         WindowGroup {
             MainTabView()
                 .environment(appState)
+                .environment(gmailService)
                 .onOpenURL { url in
                     handleDeepLink(url)
                 }

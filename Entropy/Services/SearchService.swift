@@ -49,7 +49,7 @@ final class SearchService {
             for trip in trips {
                 results.append(SearchResult(
                     title: trip.name,
-                    subtitle: "Trip · \(trip.status.rawValue)",
+                    subtitle: "Trip · \(trip.status.displayName)",
                     section: .vacations,
                     entityID: trip.id
                 ))
@@ -106,7 +106,7 @@ final class SearchService {
             for project in projects {
                 results.append(SearchResult(
                     title: project.name,
-                    subtitle: "Project · \(project.status.rawValue)",
+                    subtitle: "Project · \(project.status.displayName)",
                     section: .projects,
                     entityID: project.id
                 ))

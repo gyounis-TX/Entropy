@@ -21,7 +21,7 @@ struct AddTripView: View {
             Section("Status") {
                 Picker("Status", selection: $status) {
                     ForEach(TripStatus.allCases, id: \.self) { s in
-                        Text(s.rawValue.capitalized).tag(s)
+                        Text(s.displayName).tag(s)
                     }
                 }
                 .pickerStyle(.segmented)

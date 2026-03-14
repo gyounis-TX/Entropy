@@ -61,7 +61,7 @@ struct TripDetailView: View {
                 Menu {
                     Picker("Status", selection: $trip.status) {
                         ForEach(TripStatus.allCases, id: \.self) { status in
-                            Text(status.rawValue.capitalized).tag(status)
+                            Text(status.displayName).tag(status)
                         }
                     }
                 } label: {
@@ -82,7 +82,7 @@ struct TripDetailView: View {
                         Text(dateRange)
                     }
                     LabeledContent("Status") {
-                        Text(trip.status.rawValue.capitalized)
+                        Text(trip.status.displayName)
                     }
                     if trip.isUpcoming && trip.daysUntilStart > 0 {
                         LabeledContent("Countdown") {

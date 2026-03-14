@@ -27,6 +27,11 @@ struct AddDocumentView: View {
                 TextField("Label (e.g., \"George Passport\")", text: $label)
 
                 Toggle("Has Expiration Date", isOn: $hasExpiration)
+                    .onChange(of: hasExpiration) {
+                        if hasExpiration && expirationDate == nil {
+                            expirationDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())
+                        }
+                    }
                 if hasExpiration {
                     DatePicker("Expires", selection: Binding(
                         get: { expirationDate ?? Date() },

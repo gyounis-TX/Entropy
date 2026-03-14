@@ -57,10 +57,21 @@ struct NotesHomeView: View {
         }
     }
 
+    private var filteredCategories: [NoteCategory] {
+        if searchText.isEmpty { return categories }
+        return categories.filter { category in
+            category.name.localizedCaseInsensitiveContains(searchText) ||
+            category.notes.contains { note in
+                note.title.localizedCaseInsensitiveContains(searchText) ||
+                note.body.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+
     private var categoryGrid: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(categories) { category in
+                ForEach(filteredCategories) { category in
                     NavigationLink(value: category) {
                         CategoryCard(category: category)
                     }

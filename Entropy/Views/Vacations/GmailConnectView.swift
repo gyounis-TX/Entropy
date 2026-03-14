@@ -3,7 +3,7 @@ import SwiftUI
 struct GmailConnectView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    @State private var gmailService = GmailScanService()
+    @Environment(GmailScanService.self) private var gmailService
     @State private var isConnecting = false
     @State private var errorMessage: String?
     @State private var scanResults: [ParsedBooking] = []
@@ -151,7 +151,6 @@ struct GmailConnectView: View {
                     Text("\(suggestion.bookings.count) bookings detected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    let fmt = DateFormatter()
                     Text("\(formatted(suggestion.startDate)) – \(formatted(suggestion.endDate))")
                         .font(.caption)
                         .foregroundStyle(.secondary)

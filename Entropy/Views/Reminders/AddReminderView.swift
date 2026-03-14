@@ -7,12 +7,12 @@ struct AddReminderView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
-    @State private var body = ""
+    @State private var details = ""
     @State private var triggerMode: TriggerMode = .absolute
     @State private var absoluteDate = Date()
     @State private var relativeDays = 7
     @State private var anchorDate = Date()
-    @State private var recurrence: RecurrenceOption = .none
+    @State private var recurrence: RecurrenceOption = .daily
 
     enum TriggerMode: String, CaseIterable {
         case absolute = "Specific Date"
@@ -21,7 +21,6 @@ struct AddReminderView: View {
     }
 
     enum RecurrenceOption: String, CaseIterable {
-        case none = "None"
         case daily = "Daily"
         case weekly = "Weekly"
         case monthly = "Monthly"
@@ -31,7 +30,7 @@ struct AddReminderView: View {
         Form {
             Section("Reminder") {
                 TextField("Title", text: $title)
-                TextField("Details (optional)", text: $body)
+                TextField("Details (optional)", text: $details)
             }
 
             Section("When") {
@@ -95,8 +94,8 @@ struct AddReminderView: View {
             triggerType = .absolute(absoluteDate)
 
         case .relative:
-            let interval = TimeInterval(-relativeDays * 86400)
-            triggerDate = anchorDate.addingTimeInterval(interval)
+            triggerDate = Calendar.current.date(byAdding: .day, value: -relativeDays, to: anchorDate) ?? anchorDate
+            let interval = triggerDate.timeIntervalSince(anchorDate)
             triggerType = .relative(interval, anchorDate: anchorDate)
 
         case .recurring:
@@ -105,7 +104,6 @@ struct AddReminderView: View {
             case .daily: .daily
             case .weekly: .weekly(weekday: Calendar.current.component(.weekday, from: absoluteDate))
             case .monthly: .monthly(day: Calendar.current.component(.day, from: absoluteDate))
-            case .none: .daily
             }
             triggerType = .recurring(rule)
         }
@@ -116,8 +114,8 @@ struct AddReminderView: View {
             triggerType: triggerType,
             sourceType: sourceType
         )
-        if !body.isEmpty {
-            reminder.body = body
+        if !details.isEmpty {
+            reminder.body = details
         }
         return reminder
     }

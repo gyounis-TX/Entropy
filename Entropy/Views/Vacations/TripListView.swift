@@ -10,17 +10,17 @@ struct TripListView: View {
     @State private var showingGmailConnect = false
     @State private var searchText = ""
 
-    private var upcomingTrips: [Trip] {
-        trips.filter(\.isUpcoming)
-    }
-
-    private var pastTrips: [Trip] {
-        trips.filter(\.isPast)
-    }
-
     private var filteredTrips: [Trip] {
         if searchText.isEmpty { return trips }
         return trips.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var upcomingTrips: [Trip] {
+        filteredTrips.filter(\.isUpcoming)
+    }
+
+    private var pastTrips: [Trip] {
+        filteredTrips.filter(\.isPast)
     }
 
     var body: some View {
