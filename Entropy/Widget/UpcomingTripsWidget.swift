@@ -54,16 +54,24 @@ struct UpcomingTripsProvider: TimelineProvider {
 
         let context = ModelContext(container)
         let now = Date()
+        let startOfToday = Calendar.current.startOfDay(for: now)
         let descriptor = FetchDescriptor<Trip>(
-            predicate: #Predicate { $0.startDate > now },
+            predicate: #Predicate { $0.startDate >= startOfToday },
             sortBy: [SortDescriptor(\.startDate)]
         )
 
-        guard let trips = try? context.fetch(descriptor), let trip = trips.first else {
+        guard let allTrips = try? context.fetch(descriptor) else {
             return emptyEntry
         }
 
-        let daysUntil = Calendar.current.dateComponents([.day], from: now, to: trip.startDate).day ?? 0
+        // Filter out cancelled and completed trips (post-fetch since #Predicate
+        // doesn't support complex enum comparisons)
+        let eligibleTrips = allTrips.filter { $0.status != .cancelled && $0.status != .completed }
+        guard let trip = eligibleTrips.first else {
+            return emptyEntry
+        }
+
+        let daysUntil = Calendar.current.dateComponents([.day], from: startOfToday, to: trip.startDate).day ?? 0
         let firstHotel = trip.accommodations.sorted(by: { $0.checkIn < $1.checkIn }).first?.hotelName
 
         return UpcomingTripEntry(

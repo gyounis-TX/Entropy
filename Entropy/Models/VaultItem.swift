@@ -34,8 +34,8 @@ final class VaultItem {
     var id: UUID
     var type: VaultItemType
     var label: String
-    var imagesFront: Data?
-    var imagesBack: Data?
+    @Attribute(.externalStorage) var imagesFront: Data?
+    @Attribute(.externalStorage) var imagesBack: Data?
     var expirationDate: Date?
     var notes: String
     var createdAt: Date

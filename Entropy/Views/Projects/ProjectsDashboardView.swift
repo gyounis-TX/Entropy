@@ -3,9 +3,12 @@ import SwiftData
 
 struct ProjectsDashboardView: View {
     @Environment(\.modelContext) private var context
+    @Environment(AppState.self) private var appState
     @Query(sort: \Project.updatedAt, order: .reverse) private var projects: [Project]
     @State private var showingAddProject = false
     @State private var filterStatus: ProjectStatus? = nil
+    @State private var projectToDelete: Project?
+    @State private var deepLinkedProject: Project?
 
     private var filteredProjects: [Project] {
         guard let filter = filterStatus else { return projects }
@@ -16,6 +19,15 @@ struct ProjectsDashboardView: View {
         Group {
             if projects.isEmpty {
                 emptyState
+            } else if filteredProjects.isEmpty {
+                ContentUnavailableView {
+                    Label("No Results", systemImage: "magnifyingglass")
+                } description: {
+                    Text("No projects match the selected filter.")
+                } actions: {
+                    Button("Clear Filter") { filterStatus = nil }
+                        .buttonStyle(.bordered)
+                }
             } else {
                 projectList
             }
@@ -46,6 +58,43 @@ struct ProjectsDashboardView: View {
                 AddProjectView()
             }
         }
+        .alert("Delete Project?", isPresented: Binding(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let project = projectToDelete {
+                    context.delete(project)
+                    projectToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                projectToDelete = nil
+            }
+        } message: {
+            if let project = projectToDelete {
+                Text("This will permanently delete \"\(project.name)\" and all its steps, notes, and reminders.")
+            }
+        }
+        .onAppear { handleDeepLink() }
+        .onChange(of: appState.deepLinkAction) { handleDeepLink() }
+        .sheet(item: $deepLinkedProject) { project in
+            NavigationStack {
+                ProjectDetailView(project: project)
+            }
+        }
+    }
+
+    private func handleDeepLink() {
+        guard case .viewProject(let id) = appState.deepLinkAction else { return }
+        appState.consumeDeepLink()
+        guard let uuid = UUID(uuidString: id) else { return }
+        let descriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { $0.id == uuid }
+        )
+        if let project = try? context.fetch(descriptor).first {
+            deepLinkedProject = project
+        }
     }
 
     private var emptyState: some View {
@@ -67,6 +116,11 @@ struct ProjectsDashboardView: View {
                         ProjectCard(project: project)
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Delete Project", systemImage: "trash", role: .destructive) {
+                            projectToDelete = project
+                        }
+                    }
                 }
             }
             .padding()

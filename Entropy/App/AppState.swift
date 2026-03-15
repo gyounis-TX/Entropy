@@ -34,12 +34,22 @@ final class AppState {
         case createNote(categoryID: String?)
         case createTrip
         case importEmail
+        case viewTrip(id: String)
+        case viewNote(id: String)
+        case viewVaultItem(id: String)
+        case viewProject(id: String)
+        case viewReminder(id: String)
 
         static func == (lhs: DeepLinkAction, rhs: DeepLinkAction) -> Bool {
             switch (lhs, rhs) {
             case (.createNote(let a), .createNote(let b)): return a == b
             case (.createTrip, .createTrip): return true
             case (.importEmail, .importEmail): return true
+            case (.viewTrip(let a), .viewTrip(let b)): return a == b
+            case (.viewNote(let a), .viewNote(let b)): return a == b
+            case (.viewVaultItem(let a), .viewVaultItem(let b)): return a == b
+            case (.viewProject(let a), .viewProject(let b)): return a == b
+            case (.viewReminder(let a), .viewReminder(let b)): return a == b
             default: return false
             }
         }

@@ -3,12 +3,18 @@ import SwiftData
 
 struct RemindersHubView: View {
     @Environment(\.modelContext) private var context
+    @Environment(AppState.self) private var appState
     @Query(sort: \Reminder.triggerDate) private var allReminders: [Reminder]
     @State private var showingAddReminder = false
     @State private var filterCompleted = false
+    @State private var highlightedReminderID: UUID?
 
     private var activeReminders: [Reminder] {
-        filterCompleted ? allReminders : allReminders.filter { !$0.isCompleted }
+        allReminders.filter { !$0.isCompleted }
+    }
+
+    private var completedReminders: [Reminder] {
+        allReminders.filter(\.isCompleted)
     }
 
     private var overdueReminders: [Reminder] {
@@ -29,7 +35,7 @@ struct RemindersHubView: View {
 
     var body: some View {
         Group {
-            if allReminders.isEmpty {
+            if activeReminders.isEmpty && (!filterCompleted || completedReminders.isEmpty) {
                 emptyState
             } else {
                 reminderList
@@ -55,6 +61,20 @@ struct RemindersHubView: View {
                 })
             }
         }
+        .onAppear { handleDeepLink() }
+        .onChange(of: appState.deepLinkAction) { handleDeepLink() }
+    }
+
+    private func handleDeepLink() {
+        guard case .viewReminder(let id) = appState.deepLinkAction else { return }
+        appState.consumeDeepLink()
+        guard let uuid = UUID(uuidString: id) else { return }
+        // Scroll to the reminder by setting the highlighted ID
+        highlightedReminderID = uuid
+        // If the reminder is completed and we're not showing completed, toggle the filter
+        if let reminder = allReminders.first(where: { $0.id == uuid }), reminder.isCompleted {
+            filterCompleted = true
+        }
     }
 
     private var emptyState: some View {
@@ -66,38 +86,67 @@ struct RemindersHubView: View {
     }
 
     private var reminderList: some View {
-        List {
-            if !overdueReminders.isEmpty {
-                Section {
-                    ForEach(overdueReminders) { reminder in
-                        ReminderRow(reminder: reminder)
-                    }
-                } header: {
-                    Label("Overdue", systemImage: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                }
-            }
-
-            if !todayReminders.isEmpty {
-                Section("Today") {
-                    ForEach(todayReminders) { reminder in
-                        ReminderRow(reminder: reminder)
+        ScrollViewReader { proxy in
+            List {
+                if !overdueReminders.isEmpty {
+                    Section {
+                        ForEach(overdueReminders) { reminder in
+                            ReminderRow(reminder: reminder)
+                                .id(reminder.id)
+                        }
+                    } header: {
+                        Label("Overdue", systemImage: "exclamationmark.circle.fill")
+                            .foregroundStyle(.red)
                     }
                 }
-            }
 
-            if !thisWeekReminders.isEmpty {
-                Section("This Week") {
-                    ForEach(thisWeekReminders) { reminder in
-                        ReminderRow(reminder: reminder)
+                if !todayReminders.isEmpty {
+                    Section("Today") {
+                        ForEach(todayReminders) { reminder in
+                            ReminderRow(reminder: reminder)
+                                .id(reminder.id)
+                        }
+                    }
+                }
+
+                if !thisWeekReminders.isEmpty {
+                    Section("This Week") {
+                        ForEach(thisWeekReminders) { reminder in
+                            ReminderRow(reminder: reminder)
+                                .id(reminder.id)
+                        }
+                    }
+                }
+
+                if !laterReminders.isEmpty {
+                    Section("Later") {
+                        ForEach(laterReminders) { reminder in
+                            ReminderRow(reminder: reminder)
+                                .id(reminder.id)
+                        }
+                    }
+                }
+
+                if filterCompleted && !completedReminders.isEmpty {
+                    Section {
+                        ForEach(completedReminders) { reminder in
+                            ReminderRow(reminder: reminder)
+                                .id(reminder.id)
+                        }
+                    } header: {
+                        Label("Completed", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
                     }
                 }
             }
-
-            if !laterReminders.isEmpty {
-                Section("Later") {
-                    ForEach(laterReminders) { reminder in
-                        ReminderRow(reminder: reminder)
+            .onChange(of: highlightedReminderID) {
+                if let id = highlightedReminderID {
+                    withAnimation {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                    // Clear after scrolling
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        highlightedReminderID = nil
                     }
                 }
             }
@@ -132,7 +181,7 @@ struct ReminderRow: View {
 
                     Text(reminder.triggerDate, style: .date)
                         .font(.caption2)
-                        .foregroundStyle(reminder.isOverdue ? .red : .tertiary)
+                        .foregroundStyle(reminder.isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.tertiary))
                 }
             }
 

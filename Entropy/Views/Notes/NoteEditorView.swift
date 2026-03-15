@@ -137,8 +137,10 @@ struct NoteEditorView: View {
         }
         .onChange(of: selectedPhoto) {
             guard let item = selectedPhoto else { return }
+            let capturedItem = item
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) {
+                if let data = try? await capturedItem.loadTransferable(type: Data.self) {
+                    guard selectedPhoto == capturedItem else { return }
                     let attachment = Attachment(
                         fileName: "Photo \(Date().formatted(date: .abbreviated, time: .shortened))",
                         data: data,

@@ -3,6 +3,7 @@ import SwiftData
 
 /// Cross-section full-text search across all entities.
 /// Uses SwiftData predicates to push filtering to the database layer.
+@MainActor
 final class SearchService {
 
     struct SearchResult: Identifiable {

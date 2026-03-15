@@ -8,6 +8,8 @@ struct ProjectDetailView: View {
     @State private var showingAddReminder = false
     @State private var newStepText = ""
     @State private var newNoteText = ""
+    @State private var newTagText = ""
+    @State private var lastSavedStatus: String = ""
 
     enum ProjectTab: String, CaseIterable {
         case status = "Status"
@@ -26,13 +28,15 @@ struct ProjectDetailView: View {
             .pickerStyle(.segmented)
             .padding()
 
-            ScrollView {
-                switch selectedTab {
-                case .status: statusTab
-                case .steps: stepsTab
-                case .notes: notesTab
-                case .settings: settingsTab
-                }
+            switch selectedTab {
+            case .status:
+                ScrollView { statusTab }
+            case .steps:
+                stepsTab
+            case .notes:
+                notesTab
+            case .settings:
+                ScrollView { settingsTab }
             }
         }
         .navigationTitle(project.name)
@@ -52,6 +56,15 @@ struct ProjectDetailView: View {
                 }
             }
         }
+        .onAppear { lastSavedStatus = project.currentStatus }
+        .onDisappear {
+            if project.currentStatus != lastSavedStatus {
+                project.updatedAt = Date()
+            }
+        }
+        .onChange(of: project.status) { project.updatedAt = Date() }
+        .onChange(of: project.name) { project.updatedAt = Date() }
+        .onChange(of: project.projectDescription) { project.updatedAt = Date() }
         .sheet(isPresented: $showingAddReminder) {
             NavigationStack {
                 AddReminderView(sourceType: .project, onSave: { reminder in
@@ -125,10 +138,26 @@ struct ProjectDetailView: View {
     // MARK: - Steps Tab
 
     private var stepsTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        List {
             let sortedSteps = project.nextSteps.sorted { $0.sortOrder < $1.sortOrder }
             ForEach(sortedSteps) { step in
-                ProjectStepRow(step: step)
+                ProjectStepRow(step: step, onToggle: {
+                    project.updatedAt = Date()
+                })
+                .contextMenu {
+                    Button("Delete Step", role: .destructive) {
+                        context.delete(step)
+                        project.updatedAt = Date()
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        context.delete(step)
+                        project.updatedAt = Date()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
 
             // Add new step
@@ -137,7 +166,7 @@ struct ProjectDetailView: View {
                     .textFieldStyle(.roundedBorder)
                 Button("Add", systemImage: "plus.circle.fill") {
                     guard !newStepText.isEmpty else { return }
-                    let step = ProjectStep(description: newStepText, sortOrder: project.nextSteps.count)
+                    let step = ProjectStep(description: newStepText, sortOrder: (project.nextSteps.map(\.sortOrder).max() ?? -1) + 1)
                     step.project = project
                     context.insert(step)
                     project.updatedAt = Date()
@@ -146,25 +175,35 @@ struct ProjectDetailView: View {
                 .disabled(newStepText.isEmpty)
             }
         }
-        .padding()
     }
 
     // MARK: - Notes Tab
 
     private var notesTab: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        List {
             let sortedNotes = project.notes.sorted { $0.timestamp > $1.timestamp }
             ForEach(sortedNotes) { note in
                 ProjectNoteRow(note: note)
+                    .contextMenu {
+                        Button("Delete Note", role: .destructive) {
+                            context.delete(note)
+                            project.updatedAt = Date()
+                        }
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            context.delete(note)
+                            project.updatedAt = Date()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
             }
 
             // Add new note
-            VStack(alignment: .leading, spacing: 8) {
+            Section {
                 TextEditor(text: $newNoteText)
                     .frame(minHeight: 60)
-                    .scrollContentBackground(.hidden)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 Button("Add Note") {
                     guard !newNoteText.isEmpty else { return }
@@ -178,7 +217,6 @@ struct ProjectDetailView: View {
                 .disabled(newNoteText.isEmpty)
             }
         }
-        .padding()
     }
 
     // MARK: - Settings Tab
@@ -198,14 +236,39 @@ struct ProjectDetailView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
                             ForEach(project.tags, id: \.self) { tag in
-                                Text("#\(tag)")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.blue.opacity(0.1))
-                                    .clipShape(Capsule())
+                                HStack(spacing: 4) {
+                                    Text("#\(tag)")
+                                        .font(.caption)
+                                    Button {
+                                        project.tags.removeAll { $0 == tag }
+                                        project.updatedAt = Date()
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(Capsule())
                             }
                         }
+                    }
+                    HStack {
+                        TextField("Add tag...", text: $newTagText)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.caption)
+                        Button("Add", systemImage: "plus.circle.fill") {
+                            let trimmed = newTagText.trimmingCharacters(in: .whitespaces)
+                            if !trimmed.isEmpty && !project.tags.contains(trimmed) {
+                                project.tags.append(trimmed)
+                                project.updatedAt = Date()
+                            }
+                            newTagText = ""
+                        }
+                        .disabled(newTagText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                     Text("Tags help organize and filter projects.")
                         .font(.caption)
@@ -229,11 +292,13 @@ struct ProjectDetailView: View {
 
 struct ProjectStepRow: View {
     @Bindable var step: ProjectStep
+    var onToggle: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top) {
             Button {
                 step.isCompleted.toggle()
+                onToggle?()
             } label: {
                 Image(systemName: step.isCompleted ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(step.isCompleted ? .green : .secondary)

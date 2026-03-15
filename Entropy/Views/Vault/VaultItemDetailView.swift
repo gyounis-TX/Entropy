@@ -60,12 +60,6 @@ struct VaultItemDetailView: View {
                     TextField("Label", text: $item.label)
                         .multilineTextAlignment(.trailing)
                 }
-                if let exp = item.expirationDate {
-                    LabeledContent("Expires") {
-                        Text(exp, style: .date)
-                            .foregroundStyle(item.isExpired ? .red : item.isExpiringSoon ? .orange : .primary)
-                    }
-                }
             }
 
             // Custom fields
@@ -88,12 +82,19 @@ struct VaultItemDetailView: View {
             }
 
             // Expiration
-            if item.expirationDate != nil {
-                Section("Expiration") {
+            Section("Expiration") {
+                if item.expirationDate != nil {
                     DatePicker("Expires", selection: Binding(
                         get: { item.expirationDate ?? Date() },
                         set: { item.expirationDate = $0 }
                     ), displayedComponents: .date)
+                    Button("Remove Expiration Date", role: .destructive) {
+                        item.expirationDate = nil
+                    }
+                } else {
+                    Button("Add Expiration Date", systemImage: "calendar.badge.plus") {
+                        item.expirationDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())
+                    }
                 }
             }
 
@@ -115,6 +116,14 @@ struct VaultItemDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            ReminderEngine.shared.cancel(reminder)
+                            context.delete(reminder)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
                 Button("Add Reminder", systemImage: "bell.badge.fill") {
                     showingAddReminder = true
@@ -127,6 +136,7 @@ struct VaultItemDetailView: View {
         .onChange(of: item.notes) { item.updatedAt = Date() }
         .onChange(of: item.imagesFront) { item.updatedAt = Date() }
         .onChange(of: item.imagesBack) { item.updatedAt = Date() }
+        .onChange(of: item.expirationDate) { item.updatedAt = Date() }
         .sheet(isPresented: $showingAddReminder) {
             NavigationStack {
                 AddReminderView(sourceType: .vault, onSave: { reminder in

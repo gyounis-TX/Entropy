@@ -166,6 +166,7 @@ struct GmailConnectView: View {
             Button("Disconnect Gmail", role: .destructive) {
                 gmailService.disconnect()
                 appState.isGmailConnected = false
+                appState.gmailScanStatus = .idle
                 VaultSecurityService.shared.clearGmailTokens()
                 scanResults = []
                 suggestedTrips = []
@@ -192,7 +193,7 @@ struct GmailConnectView: View {
             let tokens = try await gmailService.connect(clientID: Self.clientID)
             appState.isGmailConnected = true
             // Store tokens securely
-            VaultSecurityService.shared.saveGmailTokens(access: tokens.access, refresh: tokens.refresh)
+            VaultSecurityService.shared.saveGmailTokens(access: tokens.access, refresh: tokens.refresh ?? "")
             // Auto-scan after connecting
             await performScan()
         } catch {
@@ -201,6 +202,7 @@ struct GmailConnectView: View {
     }
 
     private func performScan() async {
+        appState.gmailScanStatus = .scanning
         do {
             scanResults = try await gmailService.scanForBookings()
             suggestedTrips = gmailService.suggestTrips()

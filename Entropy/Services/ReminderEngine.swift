@@ -2,6 +2,7 @@ import Foundation
 import UserNotifications
 import SwiftData
 
+@MainActor
 final class ReminderEngine {
     static let shared = ReminderEngine()
 
@@ -23,13 +24,27 @@ final class ReminderEngine {
     // MARK: - Scheduling
 
     func schedule(_ reminder: Reminder) async {
+        // Ensure notification permission is granted before scheduling
+        let granted = await requestPermission()
+        guard granted else {
+            print("Notification permission not granted; cannot schedule reminder.")
+            return
+        }
+
         let content = UNMutableNotificationContent()
         content.title = reminder.title
         content.body = reminder.body ?? ""
         content.sound = .default
+        // Derive sourceID from the parent entity's relationship, falling back to the reminder's own ID
+        let parentID: UUID = reminder.trip?.id
+            ?? reminder.note?.id
+            ?? reminder.vaultItem?.id
+            ?? reminder.project?.id
+            ?? reminder.id
         content.userInfo = [
             "reminderID": reminder.id.uuidString,
-            "sourceType": reminder.sourceType.rawValue
+            "sourceType": reminder.sourceType.rawValue,
+            "sourceID": parentID.uuidString
         ]
 
         let trigger = makeTrigger(for: reminder)
@@ -56,9 +71,8 @@ final class ReminderEngine {
         let requests = await notificationCenter.pendingNotificationRequests()
         let matching = requests.filter { req in
             req.content.userInfo["sourceType"] as? String == sourceType.rawValue &&
-            req.content.userInfo["reminderID"] as? String != nil
+            req.content.userInfo["sourceID"] as? String == sourceID.uuidString
         }
-        // Filter by sourceID via the reminder IDs associated with this source
         notificationCenter.removePendingNotificationRequests(
             withIdentifiers: matching.map(\.identifier)
         )
@@ -73,7 +87,6 @@ final class ReminderEngine {
 
     func snooze(_ reminder: Reminder, until date: Date, context: ModelContext) async {
         reminder.snoozedUntil = date
-        reminder.triggerDate = date
         try? context.save()
         await reschedule(reminder)
     }
@@ -83,6 +96,7 @@ final class ReminderEngine {
             // For recurring reminders, advance to the next occurrence instead of completing
             let nextDate = nextOccurrence(from: reminder.triggerDate, rule: rule)
             reminder.triggerDate = nextDate
+            reminder.snoozedUntil = nil  // Clear snooze when advancing to next occurrence
             try? context.save()
             Task { await reschedule(reminder) }
         } else {
@@ -98,10 +112,10 @@ final class ReminderEngine {
         switch rule {
         case .daily:
             return calendar.date(byAdding: .day, value: 1, to: date) ?? date
-        case .weekly:
-            return calendar.date(byAdding: .weekOfYear, value: 1, to: date) ?? date
-        case .monthly:
-            return calendar.date(byAdding: .month, value: 1, to: date) ?? date
+        case .weekly(let weekday):
+            return calendar.nextDate(after: date, matching: DateComponents(weekday: weekday), matchingPolicy: .nextTime) ?? calendar.date(byAdding: .weekOfYear, value: 1, to: date) ?? date
+        case .monthly(let day):
+            return calendar.nextDate(after: date, matching: DateComponents(day: day), matchingPolicy: .nextTime) ?? calendar.date(byAdding: .month, value: 1, to: date) ?? date
         case .custom(let intervalSeconds):
             return date.addingTimeInterval(intervalSeconds)
         }
@@ -110,11 +124,11 @@ final class ReminderEngine {
     // MARK: - Badge
 
     func updateBadgeCount(context: ModelContext) {
-        let now = Date()
         let descriptor = FetchDescriptor<Reminder>(
-            predicate: #Predicate { !$0.isCompleted && $0.triggerDate <= now }
+            predicate: #Predicate { !$0.isCompleted }
         )
-        let count = (try? context.fetchCount(descriptor)) ?? 0
+        let reminders = (try? context.fetch(descriptor)) ?? []
+        let count = reminders.filter(\.isOverdue).count
         Task { @MainActor in
             UNUserNotificationCenter.current().setBadgeCount(count)
         }
@@ -153,6 +167,14 @@ final class ReminderEngine {
     }
 
     private func makeTrigger(for reminder: Reminder) -> UNNotificationTrigger {
+        // If the reminder is snoozed, schedule for the snooze date instead
+        if let snoozedUntil = reminder.snoozedUntil, snoozedUntil > Date() {
+            let comps = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute], from: snoozedUntil
+            )
+            return UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        }
+
         switch reminder.triggerType {
         case .absolute(let date):
             let comps = Calendar.current.dateComponents(
@@ -167,8 +189,14 @@ final class ReminderEngine {
             return UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
 
         case .recurring(let rule):
-            let comps = recurrenceComponents(for: rule, from: reminder.triggerDate)
-            return UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+            if case .custom(let interval) = rule {
+                // Custom intervals cannot be expressed with UNCalendarNotificationTrigger;
+                // use a time-interval trigger instead and re-schedule after each completion.
+                return UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            } else {
+                let comps = recurrenceComponents(for: rule, from: reminder.triggerDate)
+                return UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+            }
         }
     }
 

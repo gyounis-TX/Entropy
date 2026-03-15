@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 /// On-device email parsing for non-Gmail users via the iOS Share sheet.
 /// When a user shares an email from Mail.app (or any email client), this service
 /// extracts the text content and runs it through BookingParser to detect travel bookings.
-final class ShareSheetParser {
+final class ShareSheetParser: Sendable {
     private let bookingParser = BookingParser()
 
     /// Content types we accept from the Share sheet.
@@ -148,7 +148,7 @@ final class ShareSheetParser {
             "From:\\s*.*?<([\\w.+-]+@[\\w.-]+)>"
         ]
         for pattern in patterns {
-            if let match = text.range(of: pattern, options: .regularExpression) {
+            if let match = text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
                 let matched = String(text[match])
                 if let emailRange = matched.range(of: "[\\w.+-]+@[\\w.-]+", options: .regularExpression) {
                     return String(matched[emailRange])

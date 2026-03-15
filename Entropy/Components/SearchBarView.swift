@@ -50,17 +50,23 @@ struct GlobalSearchView: View {
     }
 
     private func navigateToResult(_ result: SearchService.SearchResult) {
+        let entityID = result.entityID.uuidString
         switch result.section {
         case .vacations:
             appState.selectedTab = .vacations
+            appState.deepLinkAction = .viewTrip(id: entityID)
         case .notes:
             appState.selectedTab = .notes
+            appState.deepLinkAction = .viewNote(id: entityID)
         case .vault:
             appState.selectedTab = .vault
+            appState.deepLinkAction = .viewVaultItem(id: entityID)
         case .projects:
             appState.selectedTab = .projects
+            appState.deepLinkAction = .viewProject(id: entityID)
         case .reminders:
             appState.selectedTab = .reminders
+            appState.deepLinkAction = .viewReminder(id: entityID)
         }
     }
 }

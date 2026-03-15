@@ -6,6 +6,7 @@ import UIKit
 struct MarkdownEditorView: View {
     @Binding var text: String
     @FocusState.Binding var isFocused: Bool
+    @State private var activeTextView: UITextView?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,7 +17,9 @@ struct MarkdownEditorView: View {
             }
 
             // Editor
-            MarkdownTextView(text: $text, isFocused: $isFocused)
+            MarkdownTextView(text: $text, isFocused: $isFocused, onTextViewReady: { tv in
+                activeTextView = tv
+            })
         }
     }
 
@@ -24,49 +27,49 @@ struct MarkdownEditorView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
                 FormatButton(icon: "bold", label: "Bold") {
-                    MarkdownTextView.applyFormatting(.wrap("**"))
+                    MarkdownTextView.applyFormatting(.wrap("**"), for: activeTextView)
                 }
                 FormatButton(icon: "italic", label: "Italic") {
-                    MarkdownTextView.applyFormatting(.wrap("_"))
+                    MarkdownTextView.applyFormatting(.wrap("_"), for: activeTextView)
                 }
                 FormatButton(icon: "strikethrough", label: "Strikethrough") {
-                    MarkdownTextView.applyFormatting(.wrap("~~"))
+                    MarkdownTextView.applyFormatting(.wrap("~~"), for: activeTextView)
                 }
 
                 Divider().frame(height: 20)
 
                 FormatButton(icon: "number", label: "H1") {
-                    MarkdownTextView.applyFormatting(.prefix("# "))
+                    MarkdownTextView.applyFormatting(.prefix("# "), for: activeTextView)
                 }
                 FormatButton(icon: "textformat.size.smaller", label: "H2") {
-                    MarkdownTextView.applyFormatting(.prefix("## "))
+                    MarkdownTextView.applyFormatting(.prefix("## "), for: activeTextView)
                 }
                 FormatButton(icon: "textformat.size.smaller", label: "H3") {
-                    MarkdownTextView.applyFormatting(.prefix("### "))
+                    MarkdownTextView.applyFormatting(.prefix("### "), for: activeTextView)
                 }
 
                 Divider().frame(height: 20)
 
                 FormatButton(icon: "list.bullet", label: "Bullet") {
-                    MarkdownTextView.applyFormatting(.prefix("- "))
+                    MarkdownTextView.applyFormatting(.prefix("- "), for: activeTextView)
                 }
                 FormatButton(icon: "list.number", label: "Numbered") {
-                    MarkdownTextView.applyFormatting(.prefix("1. "))
+                    MarkdownTextView.applyFormatting(.prefix("1. "), for: activeTextView)
                 }
                 FormatButton(icon: "checklist", label: "Checklist") {
-                    MarkdownTextView.applyFormatting(.prefix("- [ ] "))
+                    MarkdownTextView.applyFormatting(.prefix("- [ ] "), for: activeTextView)
                 }
 
                 Divider().frame(height: 20)
 
                 FormatButton(icon: "link", label: "Link") {
-                    MarkdownTextView.applyFormatting(.insert("[link text](url)"))
+                    MarkdownTextView.applyFormatting(.insert("[link text](url)"), for: activeTextView)
                 }
                 FormatButton(icon: "chevron.left.forwardslash.chevron.right", label: "Code") {
-                    MarkdownTextView.applyFormatting(.wrap("`"))
+                    MarkdownTextView.applyFormatting(.wrap("`"), for: activeTextView)
                 }
                 FormatButton(icon: "text.quote", label: "Quote") {
-                    MarkdownTextView.applyFormatting(.prefix("> "))
+                    MarkdownTextView.applyFormatting(.prefix("> "), for: activeTextView)
                 }
             }
             .padding(.horizontal, 8)
@@ -81,6 +84,7 @@ struct MarkdownEditorView: View {
 struct MarkdownTextView: UIViewRepresentable {
     @Binding var text: String
     @FocusState.Binding var isFocused: Bool
+    var onTextViewReady: ((UITextView) -> Void)?
 
     enum FormattingAction {
         case wrap(String)      // Wrap selection: **selected** or insert **text**
@@ -91,8 +95,8 @@ struct MarkdownTextView: UIViewRepresentable {
     // Static notification for toolbar actions
     static let formattingNotification = Notification.Name("MarkdownFormatting")
 
-    static func applyFormatting(_ action: FormattingAction) {
-        NotificationCenter.default.post(name: formattingNotification, object: action)
+    static func applyFormatting(_ action: FormattingAction, for textView: UITextView? = nil) {
+        NotificationCenter.default.post(name: formattingNotification, object: textView, userInfo: ["action": action])
     }
 
     func makeUIView(context: Context) -> UITextView {
@@ -103,12 +107,20 @@ struct MarkdownTextView: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.backgroundColor = .clear
         context.coordinator.textView = textView
+        DispatchQueue.main.async {
+            onTextViewReady?(textView)
+        }
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
         if textView.text != text {
             textView.text = text
+        }
+        if isFocused && !textView.isFirstResponder {
+            textView.becomeFirstResponder()
+        } else if !isFocused && textView.isFirstResponder {
+            textView.resignFirstResponder()
         }
     }
 
@@ -120,7 +132,7 @@ struct MarkdownTextView: UIViewRepresentable {
         @Binding var text: String
         @FocusState.Binding var isFocused: Bool
         weak var textView: UITextView?
-        private var observer: NSObjectProtocol?
+        nonisolated(unsafe) private var observer: NSObjectProtocol?
 
         init(text: Binding<String>, isFocused: FocusState<Bool>.Binding) {
             _text = text
@@ -132,8 +144,13 @@ struct MarkdownTextView: UIViewRepresentable {
                 object: nil,
                 queue: .main
             ) { [weak self] notification in
-                guard let action = notification.object as? FormattingAction else { return }
-                self?.handleFormatting(action)
+                guard let self,
+                      let action = notification.userInfo?["action"] as? FormattingAction else { return }
+                // Only handle if the notification is for our textView (or broadcast)
+                if let sender = notification.object as? UITextView, sender !== self.textView {
+                    return
+                }
+                self.handleFormatting(action)
             }
         }
 

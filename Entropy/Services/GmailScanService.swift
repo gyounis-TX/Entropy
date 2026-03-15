@@ -12,6 +12,7 @@ final class GmailScanService {
 
     private var accessToken: String?
     private var refreshToken: String?
+    private var authSession: ASWebAuthenticationSession?
     private let bookingParser = BookingParser()
     private let tripGrouper = TripGroupingService()
 
@@ -61,7 +62,7 @@ final class GmailScanService {
     /// using ASWebAuthenticationSession.
     @MainActor
     @discardableResult
-    func connect(clientID: String) async throws -> (access: String, refresh: String) {
+    func connect(clientID: String) async throws -> (access: String, refresh: String?) {
         guard let authURL = buildAuthURL(clientID: clientID) else {
             throw GmailError.invalidURL
         }
@@ -70,7 +71,8 @@ final class GmailScanService {
             let session = ASWebAuthenticationSession(
                 url: authURL,
                 callback: .customScheme("com.entropy.app")
-            ) { url, error in
+            ) { [weak self] url, error in
+                self?.authSession = nil
                 if let error {
                     continuation.resume(throwing: error)
                 } else if let url {
@@ -79,6 +81,7 @@ final class GmailScanService {
                     continuation.resume(throwing: GmailError.notConnected)
                 }
             }
+            self.authSession = session
             session.prefersEphemeralWebBrowserSession = false
             session.start()
         }
@@ -105,8 +108,9 @@ final class GmailScanService {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
+        let encodedCode = code.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? code
         let body = [
-            "code=\(code)",
+            "code=\(encodedCode)",
             "client_id=\(clientID)",
             "redirect_uri=com.entropy.app:/oauth2callback",
             "grant_type=authorization_code"
@@ -136,8 +140,9 @@ final class GmailScanService {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
+        let encodedRefreshToken = refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? refreshToken
         let body = [
-            "refresh_token=\(refreshToken)",
+            "refresh_token=\(encodedRefreshToken)",
             "client_id=\(clientID)",
             "grant_type=refresh_token"
         ].joined(separator: "&")
@@ -154,9 +159,11 @@ final class GmailScanService {
     }
 
     /// Stores tokens after successful OAuth2 flow.
-    func setTokens(access: String, refresh: String) {
+    func setTokens(access: String, refresh: String?) {
         self.accessToken = access
-        self.refreshToken = refresh
+        if let refresh, !refresh.isEmpty {
+            self.refreshToken = refresh
+        }
         self.isConnected = true
     }
 
@@ -289,38 +296,38 @@ final class GmailScanService {
     /// Marks an existing booking as cancelled by matching confirmation number.
     func applyCancellation(_ cancellation: ParsedBooking, context: ModelContext) throws {
         let confirmNum = cancellation.confirmationNumber
+        var foundAny = false
 
         // Check flights
         let flightDescriptor = FetchDescriptor<Flight>(
             predicate: #Predicate { $0.confirmationCode == confirmNum }
         )
-        if let flight = try context.fetch(flightDescriptor).first {
+        for flight in try context.fetch(flightDescriptor) {
             flight.isCancelled = true
-            try context.save()
-            return
+            foundAny = true
         }
 
-        // Check accommodations — mark the accommodation's notes, not the entire trip
+        // Check accommodations
         let accDescriptor = FetchDescriptor<Accommodation>(
             predicate: #Predicate { $0.confirmationNumber == confirmNum }
         )
-        if let acc = try context.fetch(accDescriptor).first {
-            acc.notes = "[CANCELLED] \(acc.notes)"
-            try context.save()
-            return
+        for acc in try context.fetch(accDescriptor) {
+            acc.isCancelled = true
+            foundAny = true
         }
 
-        // Check reservations
-        let resDescriptor = FetchDescriptor<Reservation>(
-            predicate: #Predicate { $0.confirmationNumber == confirmNum }
-        )
-        if let res = try context.fetch(resDescriptor).first {
+        // Check reservations (confirmationNumber is optional, so fetch all and filter in memory)
+        let resDescriptor = FetchDescriptor<Reservation>()
+        for res in try context.fetch(resDescriptor).filter({ $0.confirmationNumber != nil && $0.confirmationNumber == confirmNum }) {
             res.isCancelled = true
-            try context.save()
-            return
+            foundAny = true
         }
 
-        throw GmailError.bookingNotFound(confirmNum)
+        if foundAny {
+            try context.save()
+        } else {
+            throw GmailError.bookingNotFound(confirmNum)
+        }
     }
 
     // MARK: - Gmail API
@@ -332,6 +339,8 @@ final class GmailScanService {
         if let lastScan = lastScanDate {
             // Gmail after: expects YYYY/MM/DD format
             let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "UTC")
             formatter.dateFormat = "yyyy/MM/dd"
             query += " after:\(formatter.string(from: lastScan))"
         }
@@ -375,7 +384,12 @@ final class GmailScanService {
     }
 
     private func fetchFullMessage(id: String, token: String) async throws -> GmailMessage {
-        guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/\(id)?format=full") else {
+        let encodedID = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        var components = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/\(encodedID)")!
+        components.queryItems = [
+            URLQueryItem(name: "format", value: "full")
+        ]
+        guard let url = components.url else {
             throw GmailError.invalidURL
         }
 
@@ -416,12 +430,12 @@ struct GmailListResponse: Codable {
     let resultSizeEstimate: Int?
 }
 
-struct GmailMessageRef: Codable {
+struct GmailMessageRef: Codable, Sendable {
     let id: String
     let threadId: String
 }
 
-struct GmailMessage: Codable {
+struct GmailMessage: Codable, Sendable {
     let id: String
     let threadId: String
     let snippet: String?
@@ -484,24 +498,24 @@ struct GmailMessage: Codable {
     }
 }
 
-struct GmailPayload: Codable {
+struct GmailPayload: Codable, Sendable {
     let mimeType: String?
     let headers: [GmailHeader]?
     let body: GmailBody?
     let parts: [GmailPart]?
 }
 
-struct GmailHeader: Codable {
+struct GmailHeader: Codable, Sendable {
     let name: String
     let value: String
 }
 
-struct GmailBody: Codable {
+struct GmailBody: Codable, Sendable {
     let data: String?
     let size: Int?
 }
 
-struct GmailPart: Codable {
+struct GmailPart: Codable, Sendable {
     let mimeType: String?
     let body: GmailBody?
     let parts: [GmailPart]?
@@ -511,7 +525,7 @@ struct GmailPart: Codable {
 
 struct TokenResponse: Codable {
     let accessToken: String
-    let refreshToken: String
+    let refreshToken: String?
     let expiresIn: Int?
     let tokenType: String?
 
@@ -526,7 +540,7 @@ struct TokenResponse: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.accessToken = try container.decode(String.self, forKey: .accessToken)
         // refresh_token may not be present on token refresh (only on initial exchange)
-        self.refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken) ?? ""
+        self.refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
         self.expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn)
         self.tokenType = try container.decodeIfPresent(String.self, forKey: .tokenType)
     }

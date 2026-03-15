@@ -3,7 +3,7 @@ import LocalAuthentication
 import Security
 
 /// Manages biometric authentication and secure storage for the Personal Vault.
-final class VaultSecurityService {
+final class VaultSecurityService: Sendable {
     static let shared = VaultSecurityService()
 
     private init() {}

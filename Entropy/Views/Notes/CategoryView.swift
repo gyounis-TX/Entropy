@@ -57,6 +57,9 @@ struct CategoryView: View {
             .onDelete { offsets in
                 let notesToDelete = offsets.map { filteredNotes[$0] }
                 for note in notesToDelete {
+                    for reminder in note.reminders {
+                        ReminderEngine.shared.cancel(reminder)
+                    }
                     context.delete(note)
                 }
             }

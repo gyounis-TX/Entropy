@@ -75,6 +75,10 @@ struct AddDocumentView: View {
                             anchorDate: exp,
                             sourceType: .vault
                         )
+                        // Clamp trigger date to today if expiration is less than 90 days away
+                        if reminder.triggerDate < Date() {
+                            reminder.triggerDate = Date()
+                        }
                         reminder.vaultItem = item
                         context.insert(reminder)
                         Task { await ReminderEngine.shared.schedule(reminder) }

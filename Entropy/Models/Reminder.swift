@@ -50,27 +50,39 @@ final class Reminder {
     }
 
     var isOverdue: Bool {
-        !isCompleted && triggerDate < Date()
+        !isCompleted && triggerDate < Date() && (snoozedUntil == nil || snoozedUntil! < Date())
+    }
+
+    var effectiveDate: Date {
+        snoozedUntil ?? triggerDate
     }
 
     var isToday: Bool {
-        Calendar.current.isDateInToday(triggerDate)
+        !isCompleted && Calendar.current.isDateInToday(effectiveDate)
     }
 
     var isThisWeek: Bool {
+        guard !isCompleted else { return false }
         let calendar = Calendar.current
         guard let weekEnd = calendar.date(byAdding: .day, value: 7, to: calendar.startOfDay(for: Date())) else {
             return false
         }
-        return triggerDate >= calendar.startOfDay(for: Date()) && triggerDate < weekEnd
+        return !isOverdue && effectiveDate >= calendar.startOfDay(for: Date()) && effectiveDate < weekEnd
     }
 
     var sourceDescription: String {
+        // Check actual relationships first; fall back to sourceType label
+        // in case the relationship was cascade-deleted
+        if let name = trip?.name { return name }
+        if let title = note?.title { return title }
+        if let label = vaultItem?.label { return label }
+        if let name = project?.name { return name }
+
         switch sourceType {
-        case .trip: return trip?.name ?? "Trip"
-        case .note: return note?.title ?? "Note"
-        case .vault: return vaultItem?.label ?? "Vault"
-        case .project: return project?.name ?? "Project"
+        case .trip: return "Trip"
+        case .note: return "Note"
+        case .vault: return "Vault"
+        case .project: return "Project"
         case .standalone: return "Reminder"
         }
     }

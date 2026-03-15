@@ -3,10 +3,12 @@ import SwiftData
 
 struct VaultHomeView: View {
     @Environment(\.modelContext) private var context
+    @Environment(AppState.self) private var appState
     @Query(sort: \VaultItem.createdAt, order: .reverse) private var items: [VaultItem]
     @State private var isUnlocked = false
     @State private var showingAddDocument = false
     @State private var searchText = ""
+    @State private var navigationPath = NavigationPath()
 
     private var groupedItems: [(VaultItemType, [VaultItem])] {
         let filtered = searchText.isEmpty ? items : items.filter {
@@ -20,14 +22,35 @@ struct VaultHomeView: View {
     }
 
     var body: some View {
-        Group {
+        NavigationStack(path: $navigationPath) {
+            Group {
+                if isUnlocked {
+                    unlockedView
+                } else {
+                    lockedView
+                }
+            }
+            .navigationTitle("Vault")
+            .onAppear { handleDeepLink() }
+            .onChange(of: appState.deepLinkAction) { handleDeepLink() }
+        }
+    }
+
+    private func handleDeepLink() {
+        guard case .viewVaultItem(let id) = appState.deepLinkAction else { return }
+        appState.consumeDeepLink()
+        guard let uuid = UUID(uuidString: id) else { return }
+        let descriptor = FetchDescriptor<VaultItem>(
+            predicate: #Predicate { $0.id == uuid }
+        )
+        guard let item = try? context.fetch(descriptor).first else { return }
+        // Auto-unlock and navigate
+        Task {
+            isUnlocked = await VaultSecurityService.shared.authenticate()
             if isUnlocked {
-                unlockedView
-            } else {
-                lockedView
+                navigationPath.append(item)
             }
         }
-        .navigationTitle("Vault")
     }
 
     private var lockedView: some View {
@@ -69,6 +92,12 @@ struct VaultHomeView: View {
                     Button("Add Document") { showingAddDocument = true }
                         .buttonStyle(.borderedProminent)
                 }
+            } else if groupedItems.isEmpty {
+                ContentUnavailableView {
+                    Label("No Results", systemImage: "magnifyingglass")
+                } description: {
+                    Text("No documents match your search.")
+                }
             } else {
                 List {
                     ForEach(groupedItems, id: \.0) { type, typeItems in
@@ -86,12 +115,12 @@ struct VaultHomeView: View {
                         }
                     }
                 }
-                .searchable(text: $searchText, prompt: "Search vault")
                 .navigationDestination(for: VaultItem.self) { item in
                     VaultItemDetailView(item: item)
                 }
             }
         }
+        .searchable(text: $searchText, prompt: "Search vault")
         .toolbar {
             if isUnlocked {
                 ToolbarItem(placement: .primaryAction) {
@@ -101,6 +130,8 @@ struct VaultHomeView: View {
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Lock", systemImage: "lock.fill") {
+                        navigationPath = NavigationPath()
+                        showingAddDocument = false
                         isUnlocked = false
                     }
                 }

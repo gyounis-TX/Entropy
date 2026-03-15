@@ -8,6 +8,7 @@ struct NotesHomeView: View {
     @State private var showingAddCategory = false
     @State private var showingManageCategories = false
     @State private var showingNewNoteForCategory: NoteCategory?
+    @State private var deepLinkedNote: Note?
     @State private var searchText = ""
     @State private var hasSeeded = false
 
@@ -55,6 +56,11 @@ struct NotesHomeView: View {
                 CategoryManagementView()
             }
         }
+        .sheet(item: $deepLinkedNote) { note in
+            NavigationStack {
+                NoteEditorView(note: note)
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -97,27 +103,45 @@ struct NotesHomeView: View {
     }
 
     private func handleDeepLink() {
-        guard case .createNote(let categoryID) = appState.deepLinkAction else { return }
-        appState.consumeDeepLink()
-        if let categoryID,
-           let category = categories.first(where: { $0.id.uuidString == categoryID }) {
-            showingNewNoteForCategory = category
-        } else if let first = categories.first {
-            showingNewNoteForCategory = first
-        } else {
-            showingAddCategory = true
+        guard let action = appState.deepLinkAction else { return }
+        switch action {
+        case .createNote(let categoryID):
+            appState.consumeDeepLink()
+            if let categoryID,
+               let category = categories.first(where: { $0.id.uuidString == categoryID }) {
+                showingNewNoteForCategory = category
+            } else if let first = categories.first {
+                showingNewNoteForCategory = first
+            } else {
+                showingAddCategory = true
+            }
+        case .viewNote(let id):
+            appState.consumeDeepLink()
+            guard let uuid = UUID(uuidString: id) else { return }
+            let descriptor = FetchDescriptor<Note>(
+                predicate: #Predicate { $0.id == uuid }
+            )
+            if let note = try? context.fetch(descriptor).first {
+                deepLinkedNote = note
+            }
+        default:
+            break
         }
     }
 
     private func seedDefaultsIfNeeded() {
-        guard categories.isEmpty else {
-            hasSeeded = true
-            return
-        }
-        for cat in NoteCategory.defaultCategories {
-            context.insert(cat)
-        }
         hasSeeded = true
+        let defaults = NoteCategory.defaultCategories
+        for cat in defaults {
+            let name = cat.name
+            let descriptor = FetchDescriptor<NoteCategory>(
+                predicate: #Predicate { $0.name == name }
+            )
+            let existing = (try? context.fetchCount(descriptor)) ?? 0
+            if existing == 0 {
+                context.insert(cat)
+            }
+        }
     }
 }
 

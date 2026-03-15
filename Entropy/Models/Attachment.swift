@@ -5,7 +5,7 @@ import SwiftData
 final class Attachment {
     var id: UUID
     var fileName: String
-    var data: Data
+    @Attribute(.externalStorage) var data: Data
     var mimeType: String
     var createdAt: Date
 

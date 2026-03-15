@@ -47,7 +47,23 @@ struct RemindersWidgetProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ReminderWidgetEntry>) -> Void) {
         let entry = loadReminders()
-        let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(1800)))
+
+        // Create timeline entries at each pending reminder's trigger time so the
+        // widget refreshes when reminders become overdue.
+        let now = Date()
+        let futureTriggerDates = entry.reminders
+            .filter { !$0.isOverdue && $0.time > now }
+            .map { $0.time }
+
+        let nextRefresh: Date
+        if let earliestTrigger = futureTriggerDates.min() {
+            nextRefresh = earliestTrigger
+        } else {
+            // No pending reminders with future trigger times; fall back to 30 minutes.
+            nextRefresh = now.addingTimeInterval(1800)
+        }
+
+        let timeline = Timeline(entries: [entry], policy: .after(nextRefresh))
         completion(timeline)
     }
 
@@ -70,17 +86,23 @@ struct RemindersWidgetProvider: TimelineProvider {
             return ReminderWidgetEntry(date: now, reminders: [], overdueCount: 0)
         }
 
-        let widgetReminders = reminders.map { reminder in
+        // Filter out snoozed reminders whose snooze period hasn't elapsed yet
+        let activeReminders = reminders.filter { reminder in
+            guard let snoozedUntil = reminder.snoozedUntil else { return true }
+            return snoozedUntil <= now
+        }
+
+        let widgetReminders = activeReminders.map { reminder in
             WidgetReminder(
                 id: reminder.id.uuidString,
                 title: reminder.title,
                 time: reminder.triggerDate,
                 sourceIcon: sourceIcon(for: reminder.sourceType),
-                isOverdue: reminder.triggerDate < now
+                isOverdue: reminder.isOverdue
             )
         }
 
-        let overdueCount = reminders.filter { $0.triggerDate < now }.count
+        let overdueCount = activeReminders.filter { $0.isOverdue }.count
 
         return ReminderWidgetEntry(
             date: now,
@@ -106,11 +128,14 @@ struct RemindersWidgetView: View {
     @Environment(\.widgetFamily) var family
 
     var body: some View {
-        if entry.reminders.isEmpty {
-            emptyView
-        } else {
-            reminderListView
+        Group {
+            if entry.reminders.isEmpty {
+                emptyView
+            } else {
+                reminderListView
+            }
         }
+        .widgetURL(URL(string: "entropy://reminders"))
     }
 
     private var emptyView: some View {

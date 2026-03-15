@@ -54,6 +54,9 @@ struct TripDetailView: View {
                 }
             }
         }
+        .onChange(of: trip.status) { _, _ in
+            trip.updatedAt = Date()
+        }
         .navigationTitle(trip.name)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -141,7 +144,7 @@ struct TripDetailView: View {
                 let flight = Flight(
                     airline: "", flightNumber: "",
                     departureAirport: "", arrivalAirport: "",
-                    departureDateTime: trip.startDate, arrivalDateTime: trip.startDate
+                    departureDateTime: trip.startDate, arrivalDateTime: trip.startDate.addingTimeInterval(3 * 3600)
                 )
                 flight.trip = trip
                 context.insert(flight)
@@ -246,7 +249,7 @@ struct TripDetailView: View {
 
             Divider()
 
-            ForEach(trip.todoItems.sorted(by: { !$0.isCompleted && $1.isCompleted })) { todo in
+            ForEach(trip.todoItems.sorted(by: { ($0.isCompleted ? 1 : 0) < ($1.isCompleted ? 1 : 0) })) { todo in
                 TripTodoRow(todo: todo)
             }
 
@@ -328,8 +331,15 @@ struct AccommodationCard: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 6) {
-                Text(accommodation.hotelName.isEmpty ? "New Stay" : accommodation.hotelName)
-                    .font(.headline)
+                HStack {
+                    Text(accommodation.hotelName.isEmpty ? "New Stay" : accommodation.hotelName)
+                        .font(.headline)
+                    if accommodation.isCancelled {
+                        Text("CANCELLED")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
                 if !accommodation.address.isEmpty {
                     Label(accommodation.address, systemImage: "mappin")
                         .font(.caption)
@@ -390,6 +400,7 @@ struct ReservationCard: View {
         case .activity: return "figure.hiking"
         case .carRental: return "car.fill"
         case .train: return "tram.fill"
+        case .shortTermRental: return "house.fill"
         case .other: return "star.fill"
         }
     }

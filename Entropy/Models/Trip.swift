@@ -21,7 +21,7 @@ final class Trip {
     var name: String
     var startDate: Date
     var endDate: Date
-    var coverImageData: Data?
+    @Attribute(.externalStorage) var coverImageData: Data?
     var status: TripStatus
     var notes: String
     var createdAt: Date
@@ -67,7 +67,7 @@ final class Trip {
     }
 
     var daysUntilStart: Int {
-        Calendar.current.dateComponents([.day], from: Date(), to: startDate).day ?? 0
+        max(0, Calendar.current.dateComponents([.day], from: Date(), to: startDate).day ?? 0)
     }
 
     var isUpcoming: Bool {
@@ -75,7 +75,15 @@ final class Trip {
     }
 
     var isPast: Bool {
-        endDate < Date()
+        endDate < Date() && status != .cancelled
+    }
+
+    var isInProgress: Bool {
+        startDate <= Date() && endDate >= Date() && status != .cancelled && status != .completed
+    }
+
+    var isCancelled: Bool {
+        status == .cancelled
     }
 }
 
@@ -88,6 +96,7 @@ final class Accommodation {
     var checkOut: Date
     var confirmationNumber: String
     var notes: String
+    var isCancelled: Bool
     var sourceEmail: String?
 
     @Relationship var trip: Trip?
@@ -102,6 +111,7 @@ final class Accommodation {
         self.checkOut = checkOut
         self.confirmationNumber = confirmationNumber
         self.notes = ""
+        self.isCancelled = false
         self.attachments = []
     }
 }
@@ -144,7 +154,7 @@ final class Flight {
 }
 
 enum ReservationType: String, Codable, CaseIterable {
-    case restaurant, tour, activity, carRental, train, other
+    case restaurant, tour, activity, carRental, train, shortTermRental, other
 }
 
 @Model
@@ -219,7 +229,7 @@ final class TripTodo {
     var dueDate: Date?
 
     @Relationship var trip: Trip?
-    @Relationship(inverse: \Reminder.tripTodo) var reminder: Reminder?
+    @Relationship(deleteRule: .cascade, inverse: \Reminder.tripTodo) var reminder: Reminder?
 
     init(title: String, dueDate: Date? = nil) {
         self.id = UUID()

@@ -1,11 +1,16 @@
 import SwiftUI
 import SwiftData
 
+struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State private var isExporting = false
-    @State private var exportURL: URL?
+    @State private var exportResult: IdentifiableURL?
     @State private var exportError: String?
 
     private let exportService = ExportService()
@@ -14,7 +19,7 @@ struct SettingsView: View {
         List {
             Section("Data") {
                 Button {
-                    exportData()
+                    Task { await exportData() }
                 } label: {
                     Label("Export Backup", systemImage: "square.and.arrow.up")
                 }
@@ -44,29 +49,26 @@ struct SettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .sheet(item: $exportURL) { url in
-            ShareSheet(activityItems: [url])
+        .sheet(item: $exportResult) { item in
+            ShareSheet(activityItems: [item.url])
         }
     }
 
-    private func exportData() {
+    @MainActor
+    private func exportData() async {
         isExporting = true
         exportError = nil
 
         do {
             let data = try exportService.exportAll(context: context)
             let url = try exportService.exportFileURL(data: data)
-            exportURL = url
+            exportResult = IdentifiableURL(url: url)
         } catch {
             exportError = error.localizedDescription
         }
 
         isExporting = false
     }
-}
-
-extension URL: @retroactive Identifiable {
-    public var id: String { absoluteString }
 }
 
 struct ShareSheet: UIViewControllerRepresentable {

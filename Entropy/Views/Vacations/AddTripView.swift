@@ -24,7 +24,12 @@ struct AddTripView: View {
                         Text(s.displayName).tag(s)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
+            }
+        }
+        .onChange(of: startDate) { _, newStart in
+            if endDate < newStart {
+                endDate = newStart
             }
         }
         .navigationTitle("New Trip")

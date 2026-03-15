@@ -3,7 +3,7 @@ import Foundation
 /// Parses Gmail messages into structured ParsedBooking objects.
 /// Uses pattern matching and heuristics to extract booking data from email content.
 /// In production, this would integrate with an LLM for more robust parsing.
-final class BookingParser {
+final class BookingParser: Sendable {
 
     // MARK: - Provider Detection
 
@@ -156,8 +156,15 @@ final class BookingParser {
         for pattern in patterns {
             if let match = body.range(of: pattern, options: [.regularExpression, .caseInsensitive], range: body.startIndex..<body.endIndex) {
                 let matched = String(body[match])
-                if let codeRange = matched.range(of: "[A-Za-z0-9]{5,12}", options: .regularExpression) {
-                    return String(matched[codeRange]).uppercased()
+                // Extract only the portion after the colon/separator to avoid matching keyword text
+                let afterSeparator: String
+                if let separatorRange = matched.range(of: "[:\\s#]+", options: .regularExpression) {
+                    afterSeparator = String(matched[separatorRange.upperBound...])
+                } else {
+                    afterSeparator = matched
+                }
+                if let codeRange = afterSeparator.range(of: "[A-Za-z0-9]{5,12}", options: .regularExpression) {
+                    return String(afterSeparator[codeRange]).uppercased()
                 }
             }
         }
@@ -197,6 +204,11 @@ final class BookingParser {
         // Extract seat
         let seatPattern = "seat[:\\s]+([0-9]{1,2}[a-f])"
         let seat = extractFirstMatch(pattern: seatPattern, from: body.lowercased())?.uppercased()
+
+        // Require at least one extracted date to avoid returning junk data
+        if dates.isEmpty && flightNumber == "Unknown" {
+            return nil
+        }
 
         return FlightDetails(
             airline: airline,
@@ -250,7 +262,7 @@ final class BookingParser {
         let departure = extractAfterKeyword(["departs", "from", "departure"], in: body) ?? "Origin"
         let arrival = extractAfterKeyword(["arrives", "to", "arrival", "destination"], in: body) ?? "Destination"
 
-        let seatPattern = "seat[:\\s]+([0-9]+[A-Z]?)"
+        let seatPattern = "seat[:\\s]+([0-9]+[a-zA-Z]?)"
         let seat = extractFirstMatch(pattern: seatPattern, from: body.lowercased())
         let carPattern = "car[:\\s]+([0-9]+)"
         let car = extractFirstMatch(pattern: carPattern, from: body.lowercased())
@@ -302,9 +314,8 @@ final class BookingParser {
     }
 
     private func extractAfterKeyword(_ keywords: [String], in text: String) -> String? {
-        let lowered = text.lowercased()
         for keyword in keywords {
-            guard let range = lowered.range(of: keyword) else { continue }
+            guard let range = text.range(of: keyword, options: .caseInsensitive) else { continue }
             let after = text[range.upperBound...]
                 .trimmingCharacters(in: .whitespaces.union(.punctuationCharacters))
             // Take the rest of the line

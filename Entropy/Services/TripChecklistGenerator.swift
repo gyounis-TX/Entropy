@@ -3,6 +3,7 @@ import SwiftData
 
 /// Auto-generates pre-trip checklist items with relative reminders
 /// based on the trip's bookings (flights, hotels, etc.).
+@MainActor
 final class TripChecklistGenerator {
 
     struct ChecklistTemplate {

@@ -8,7 +8,9 @@ struct TripListView: View {
     @Query(sort: \Trip.startDate, order: .forward) private var trips: [Trip]
     @State private var showingAddTrip = false
     @State private var showingGmailConnect = false
+    @State private var showingSettings = false
     @State private var searchText = ""
+    @State private var navigationPath = NavigationPath()
 
     private var filteredTrips: [Trip] {
         if searchText.isEmpty { return trips }
@@ -19,37 +21,57 @@ struct TripListView: View {
         filteredTrips.filter(\.isUpcoming)
     }
 
+    private var inProgressTrips: [Trip] {
+        filteredTrips.filter(\.isInProgress)
+    }
+
     private var pastTrips: [Trip] {
         filteredTrips.filter(\.isPast)
     }
 
+    private var cancelledTrips: [Trip] {
+        filteredTrips.filter(\.isCancelled)
+    }
+
     var body: some View {
-        Group {
-            if trips.isEmpty {
-                emptyState
-            } else {
-                tripList
-            }
-        }
-        .navigationTitle("Trips")
-        .searchable(text: $searchText, prompt: "Search trips")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("New Trip", systemImage: "plus") {
-                        showingAddTrip = true
-                    }
-                    Button("Connect Gmail", systemImage: "envelope.badge") {
-                        showingGmailConnect = true
-                    }
-                } label: {
-                    Image(systemName: "plus")
+        NavigationStack(path: $navigationPath) {
+            Group {
+                if trips.isEmpty {
+                    emptyState
+                } else {
+                    tripList
                 }
             }
-            ToolbarItem(placement: .topBarLeading) {
-                if appState.isGmailConnected {
-                    gmailStatusBadge
+            .navigationTitle("Trips")
+            .searchable(text: $searchText, prompt: "Search trips")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("New Trip", systemImage: "plus") {
+                            showingAddTrip = true
+                        }
+                        Button("Connect Gmail", systemImage: "envelope.badge") {
+                            showingGmailConnect = true
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                    }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 8) {
+                        Button {
+                            showingSettings = true
+                        } label: {
+                            Image(systemName: "gear")
+                        }
+                        if appState.isGmailConnected {
+                            gmailStatusBadge
+                        }
+                    }
+                }
+            }
+            .navigationDestination(for: Trip.self) { trip in
+                TripDetailView(trip: trip)
             }
         }
         .onAppear { handleDeepLink() }
@@ -64,6 +86,11 @@ struct TripListView: View {
                 GmailConnectView()
             }
         }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+            }
+        }
     }
 
     private func handleDeepLink() {
@@ -75,6 +102,11 @@ struct TripListView: View {
         case .importEmail:
             appState.consumeDeepLink()
             showingGmailConnect = true
+        case .viewTrip(let id):
+            appState.consumeDeepLink()
+            if let trip = trips.first(where: { $0.id.uuidString == id }) {
+                navigationPath.append(trip)
+            }
         default:
             break
         }
@@ -108,6 +140,19 @@ struct TripListView: View {
                 }
             }
 
+            if !inProgressTrips.isEmpty {
+                Section("In Progress") {
+                    ForEach(inProgressTrips) { trip in
+                        NavigationLink(value: trip) {
+                            TripRowView(trip: trip)
+                        }
+                    }
+                    .onDelete { offsets in
+                        deleteTrips(at: offsets, from: inProgressTrips)
+                    }
+                }
+            }
+
             if !pastTrips.isEmpty {
                 Section("Past") {
                     ForEach(pastTrips) { trip in
@@ -120,9 +165,23 @@ struct TripListView: View {
                     }
                 }
             }
-        }
-        .navigationDestination(for: Trip.self) { trip in
-            TripDetailView(trip: trip)
+
+            if !cancelledTrips.isEmpty {
+                Section {
+                    ForEach(cancelledTrips) { trip in
+                        NavigationLink(value: trip) {
+                            TripRowView(trip: trip)
+                                .opacity(0.6)
+                        }
+                    }
+                    .onDelete { offsets in
+                        deleteTrips(at: offsets, from: cancelledTrips)
+                    }
+                } header: {
+                    Text("Cancelled")
+                        .foregroundStyle(.gray)
+                }
+            }
         }
     }
 

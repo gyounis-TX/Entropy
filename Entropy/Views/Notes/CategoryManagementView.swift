@@ -5,6 +5,7 @@ struct CategoryManagementView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \NoteCategory.sortOrder) private var categories: [NoteCategory]
+    @State private var categoryToDelete: NoteCategory?
 
     var body: some View {
         List {
@@ -20,9 +21,8 @@ struct CategoryManagementView: View {
                 }
             }
             .onDelete { offsets in
-                let toDelete = offsets.map { categories[$0] }
-                for item in toDelete {
-                    context.delete(item)
+                if let first = offsets.first {
+                    categoryToDelete = categories[first]
                 }
             }
             .onMove { source, destination in
@@ -41,6 +41,29 @@ struct CategoryManagementView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
+            }
+        }
+        .alert("Delete Category?", isPresented: Binding(
+            get: { categoryToDelete != nil },
+            set: { if !$0 { categoryToDelete = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let category = categoryToDelete {
+                    for note in category.notes {
+                        for reminder in note.reminders {
+                            ReminderEngine.shared.cancel(reminder)
+                        }
+                    }
+                    context.delete(category)
+                    categoryToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                categoryToDelete = nil
+            }
+        } message: {
+            if let category = categoryToDelete {
+                Text("This will permanently delete \"\(category.name)\" and all \(category.noteCount) notes in it.")
             }
         }
     }
