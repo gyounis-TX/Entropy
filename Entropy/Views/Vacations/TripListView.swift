@@ -50,7 +50,8 @@ struct TripListView: View {
                         Button("New Trip", systemImage: "plus") {
                             showingAddTrip = true
                         }
-                        Button("Connect Gmail", systemImage: "envelope.badge") {
+                        Button(appState.isGmailConnected ? "Gmail Settings" : "Connect Gmail",
+                               systemImage: appState.isGmailConnected ? "envelope.open.fill" : "envelope.badge") {
                             showingGmailConnect = true
                         }
                     } label: {
@@ -120,8 +121,10 @@ struct TripListView: View {
         } actions: {
             Button("Create Trip") { showingAddTrip = true }
                 .buttonStyle(.borderedProminent)
-            Button("Connect Gmail") { showingGmailConnect = true }
-                .buttonStyle(.bordered)
+            if !appState.isGmailConnected {
+                Button("Connect Gmail") { showingGmailConnect = true }
+                    .buttonStyle(.bordered)
+            }
         }
     }
 

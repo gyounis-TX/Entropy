@@ -114,7 +114,9 @@ struct MarkdownTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
-        if textView.text != text {
+        // Only update text if it changed externally (not from user typing).
+        // Check isFirstResponder to avoid resetting cursor while user is actively typing.
+        if textView.text != text && !textView.isFirstResponder {
             textView.text = text
         }
         if isFocused && !textView.isFirstResponder {

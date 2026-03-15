@@ -9,3 +9,7 @@ DerivedData/
 # Swift Package Manager
 .build/
 Package.resolved
+
+# Secrets
+Entropy/Secrets.xcconfig
+Entropy/Info.plist

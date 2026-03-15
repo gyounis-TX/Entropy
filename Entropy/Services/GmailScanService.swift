@@ -1,6 +1,17 @@
 import Foundation
 import AuthenticationServices
 import SwiftData
+import UIKit
+
+/// Provides a presentation anchor for ASWebAuthenticationSession.
+private class AuthPresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first(where: { $0.isKeyWindow }) ?? ASPresentationAnchor()
+    }
+}
 
 /// Manages Gmail OAuth2 connection and periodic scanning for travel-related emails.
 @MainActor @Observable
@@ -13,6 +24,7 @@ final class GmailScanService {
     private var accessToken: String?
     private var refreshToken: String?
     private var authSession: ASWebAuthenticationSession?
+    private var authContextProvider: AuthPresentationContextProvider?
     private let bookingParser = BookingParser()
     private let tripGrouper = TripGroupingService()
 
@@ -70,7 +82,7 @@ final class GmailScanService {
         let callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
             let session = ASWebAuthenticationSession(
                 url: authURL,
-                callback: .customScheme("com.entropy.app")
+                callback: .customScheme(Self.reversedClientID(clientID: clientID))
             ) { [weak self] url, error in
                 self?.authSession = nil
                 if let error {
@@ -82,6 +94,8 @@ final class GmailScanService {
                 }
             }
             self.authSession = session
+            self.authContextProvider = AuthPresentationContextProvider()
+            session.presentationContextProvider = self.authContextProvider
             session.prefersEphemeralWebBrowserSession = false
             session.start()
         }
@@ -112,7 +126,7 @@ final class GmailScanService {
         let body = [
             "code=\(encodedCode)",
             "client_id=\(clientID)",
-            "redirect_uri=com.entropy.app:/oauth2callback",
+            "redirect_uri=\(Self.reversedClientID(clientID: clientID)):/oauth2callback",
             "grant_type=authorization_code"
         ].joined(separator: "&")
         request.httpBody = body.data(using: .utf8)
@@ -412,13 +426,19 @@ final class GmailScanService {
         var components = URLComponents(string: "https://accounts.google.com/o/oauth2/v2/auth")
         components?.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: "com.entropy.app:/oauth2callback"),
+            URLQueryItem(name: "redirect_uri", value: "\(Self.reversedClientID(clientID: clientID)):/oauth2callback"),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "scope", value: Self.gmailReadOnlyScope),
             URLQueryItem(name: "access_type", value: "offline"),
             URLQueryItem(name: "prompt", value: "consent")
         ]
         return components?.url
+    }
+
+    /// Derives the reversed client ID used as the OAuth redirect URI scheme.
+    /// e.g., "123-abc.apps.googleusercontent.com" → "com.googleusercontent.apps.123-abc"
+    private static func reversedClientID(clientID: String) -> String {
+        clientID.components(separatedBy: ".").reversed().joined(separator: ".")
     }
 }
 

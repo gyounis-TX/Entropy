@@ -4,7 +4,10 @@ import SwiftData
 @Observable
 final class AppState {
     var selectedTab: AppTab = .vacations
-    var isGmailConnected: Bool = false
+    var isGmailConnected: Bool {
+        get { UserDefaults.standard.bool(forKey: "isGmailConnected") }
+        set { UserDefaults.standard.set(newValue, forKey: "isGmailConnected") }
+    }
     var gmailScanStatus: GmailScanStatus = .idle
     var searchQuery: String = ""
     var deepLinkAction: DeepLinkAction?
