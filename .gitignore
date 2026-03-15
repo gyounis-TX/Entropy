@@ -1,13 +1,11 @@
 # Xcode build output
 build/
+DerivedData/
 
-# Firebase / Node (Cloud Functions)
-Procedus/.firebase/
-Procedus/**/node_modules/
-Procedus/**/*.local
-Procedus/**/firebase-debug.log*
-Procedus/**/firebase-debug.*.log*
-Procedus/**/npm-debug.log*
-Procedus/**/yarn-debug.log*
-Procedus/**/yarn-error.log*
-Procedus/**/.env
+# macOS
+.DS_Store
+*.xcuserdata
+
+# Swift Package Manager
+.build/
+Package.resolved

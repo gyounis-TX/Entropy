@@ -37,7 +37,7 @@ struct RemindersWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> ReminderWidgetEntry {
         ReminderWidgetEntry(date: Date(), reminders: [
             WidgetReminder(id: "1", title: "Check in for flight", time: Date(), sourceIcon: "airplane", isOverdue: false),
-            WidgetReminder(id: "2", title: "Review Procedus PR", time: Date(), sourceIcon: "folder.fill", isOverdue: false)
+            WidgetReminder(id: "2", title: "Review project PR", time: Date(), sourceIcon: "folder.fill", isOverdue: false)
         ], overdueCount: 0)
     }
 
