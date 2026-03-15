@@ -1,0 +1,809 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* EntropyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* EntropyApp.swift */; };
+		A10000000000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* AppState.swift */; };
+		A10000000000000000000003 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* Note.swift */; };
+		A10000000000000000000004 /* VaultItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* VaultItem.swift */; };
+		A10000000000000000000005 /* BookingData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* BookingData.swift */; };
+		A10000000000000000000006 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* Project.swift */; };
+		A10000000000000000000007 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* Reminder.swift */; };
+		A10000000000000000000008 /* Attachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* Attachment.swift */; };
+		A10000000000000000000009 /* Trip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* Trip.swift */; };
+		A1000000000000000000000A /* TripGroupingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* TripGroupingService.swift */; };
+		A1000000000000000000000B /* BookingParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* BookingParser.swift */; };
+		A1000000000000000000000C /* VaultSecurityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* VaultSecurityService.swift */; };
+		A1000000000000000000000D /* ProjectSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* ProjectSyncService.swift */; };
+		A1000000000000000000000E /* ShareSheetParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* ShareSheetParser.swift */; };
+		A1000000000000000000000F /* TripChecklistGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* TripChecklistGenerator.swift */; };
+		A10000000000000000000010 /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SearchService.swift */; };
+		A10000000000000000000011 /* ReminderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* ReminderEngine.swift */; };
+		A10000000000000000000012 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* ExportService.swift */; };
+		A10000000000000000000013 /* GmailScanService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* GmailScanService.swift */; };
+		A10000000000000000000014 /* ReminderPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* ReminderPickerView.swift */; };
+		A10000000000000000000015 /* AttachmentViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* AttachmentViewer.swift */; };
+		A10000000000000000000016 /* DocumentScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* DocumentScannerView.swift */; };
+		A10000000000000000000017 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* SearchBarView.swift */; };
+		A10000000000000000000018 /* MarkdownEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* MarkdownEditorView.swift */; };
+		A10000000000000000000019 /* AttachmentPickerSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* AttachmentPickerSection.swift */; };
+		A1000000000000000000001A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* SettingsView.swift */; };
+		A1000000000000000000001B /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* MainTabView.swift */; };
+		A1000000000000000000001C /* CategoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001C /* CategoryView.swift */; };
+		A1000000000000000000001D /* NotesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* NotesHomeView.swift */; };
+		A1000000000000000000001E /* NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001E /* NoteEditorView.swift */; };
+		A1000000000000000000001F /* CategoryManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001F /* CategoryManagementView.swift */; };
+		A10000000000000000000020 /* VaultHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* VaultHomeView.swift */; };
+		A10000000000000000000021 /* AddDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* AddDocumentView.swift */; };
+		A10000000000000000000022 /* VaultItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* VaultItemDetailView.swift */; };
+		A10000000000000000000023 /* ProjectsDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000023 /* ProjectsDashboardView.swift */; };
+		A10000000000000000000024 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000024 /* ProjectDetailView.swift */; };
+		A10000000000000000000025 /* AddProjectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* AddProjectView.swift */; };
+		A10000000000000000000026 /* CancellationAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* CancellationAlertView.swift */; };
+		A10000000000000000000027 /* BookingReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000027 /* BookingReviewView.swift */; };
+		A10000000000000000000028 /* TripDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000028 /* TripDetailView.swift */; };
+		A10000000000000000000029 /* AddTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000029 /* AddTripView.swift */; };
+		A1000000000000000000002A /* ShareSheetImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002A /* ShareSheetImportView.swift */; };
+		A1000000000000000000002B /* TripListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002B /* TripListView.swift */; };
+		A1000000000000000000002C /* GmailConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002C /* GmailConnectView.swift */; };
+		A1000000000000000000002D /* AddReminderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002D /* AddReminderView.swift */; };
+		A1000000000000000000002E /* RemindersHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002E /* RemindersHubView.swift */; };
+		A1000000000000000000002F /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002F /* AuthenticationServices.framework */; };
+		A10000000000000000000030 /* AppIcon.svg in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* AppIcon.svg */; };
+		A10000000000000000000040 /* EntropyWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000040 /* EntropyWidgetBundle.swift */; };
+		A10000000000000000000041 /* SharedModelContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000041 /* SharedModelContainer.swift */; };
+		A10000000000000000000042 /* QuickCaptureWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000042 /* QuickCaptureWidget.swift */; };
+		A10000000000000000000043 /* UpcomingTripsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000043 /* UpcomingTripsWidget.swift */; };
+		A10000000000000000000044 /* RemindersWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000044 /* RemindersWidget.swift */; };
+		A10000000000000000000050 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* Note.swift */; };
+		A10000000000000000000051 /* Trip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* Trip.swift */; };
+		A10000000000000000000052 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* Reminder.swift */; };
+		A10000000000000000000053 /* VaultItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* VaultItem.swift */; };
+		A10000000000000000000054 /* Project.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* Project.swift */; };
+		A10000000000000000000055 /* Attachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* Attachment.swift */; };
+		A10000000000000000000056 /* BookingData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* BookingData.swift */; };
+		A10000000000000000000060 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000060 /* WidgetKit.framework */; };
+		A10000000000000000000061 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000061 /* SwiftUI.framework */; };
+		A10000000000000000000070 /* EntropyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D10000000000000000000002 /* EntropyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C10000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E10000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D10000000000000000000002;
+			remoteInfo = EntropyWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F10000000000000000000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A10000000000000000000070 /* EntropyWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000001 /* EntropyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntropyApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		B10000000000000000000003 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* VaultItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultItem.swift; sourceTree = "<group>"; };
+		B10000000000000000000005 /* BookingData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingData.swift; sourceTree = "<group>"; };
+		B10000000000000000000006 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* Reminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reminder.swift; sourceTree = "<group>"; };
+		B10000000000000000000008 /* Attachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachment.swift; sourceTree = "<group>"; };
+		B10000000000000000000009 /* Trip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trip.swift; sourceTree = "<group>"; };
+		B1000000000000000000000A /* TripGroupingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripGroupingService.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* BookingParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingParser.swift; sourceTree = "<group>"; };
+		B1000000000000000000000C /* VaultSecurityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultSecurityService.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* ProjectSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSyncService.swift; sourceTree = "<group>"; };
+		B1000000000000000000000E /* ShareSheetParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetParser.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* TripChecklistGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripChecklistGenerator.swift; sourceTree = "<group>"; };
+		B10000000000000000000010 /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* ReminderEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderEngine.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* GmailScanService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailScanService.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* ReminderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderPickerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* AttachmentViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentViewer.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* DocumentScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentScannerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* SearchBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBarView.swift; sourceTree = "<group>"; };
+		B10000000000000000000018 /* MarkdownEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownEditorView.swift; sourceTree = "<group>"; };
+		B10000000000000000000019 /* AttachmentPickerSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentPickerSection.swift; sourceTree = "<group>"; };
+		B1000000000000000000001A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001B /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001C /* CategoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001D /* NotesHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesHomeView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001E /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
+		B1000000000000000000001F /* CategoryManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryManagementView.swift; sourceTree = "<group>"; };
+		B10000000000000000000020 /* VaultHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultHomeView.swift; sourceTree = "<group>"; };
+		B10000000000000000000021 /* AddDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDocumentView.swift; sourceTree = "<group>"; };
+		B10000000000000000000022 /* VaultItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultItemDetailView.swift; sourceTree = "<group>"; };
+		B10000000000000000000023 /* ProjectsDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsDashboardView.swift; sourceTree = "<group>"; };
+		B10000000000000000000024 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		B10000000000000000000025 /* AddProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProjectView.swift; sourceTree = "<group>"; };
+		B10000000000000000000026 /* CancellationAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CancellationAlertView.swift; sourceTree = "<group>"; };
+		B10000000000000000000027 /* BookingReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingReviewView.swift; sourceTree = "<group>"; };
+		B10000000000000000000028 /* TripDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripDetailView.swift; sourceTree = "<group>"; };
+		B10000000000000000000029 /* AddTripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddTripView.swift; sourceTree = "<group>"; };
+		B1000000000000000000002A /* ShareSheetImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetImportView.swift; sourceTree = "<group>"; };
+		B1000000000000000000002B /* TripListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripListView.swift; sourceTree = "<group>"; };
+		B1000000000000000000002C /* GmailConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailConnectView.swift; sourceTree = "<group>"; };
+		B1000000000000000000002D /* AddReminderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddReminderView.swift; sourceTree = "<group>"; };
+		B1000000000000000000002E /* RemindersHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersHubView.swift; sourceTree = "<group>"; };
+		B1000000000000000000002F /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
+		B10000000000000000000030 /* AppIcon.svg */ = {isa = PBXFileReference; lastKnownFileType = image.svg; path = AppIcon.svg; sourceTree = "<group>"; };
+		B10000000000000000000040 /* EntropyWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntropyWidgetBundle.swift; sourceTree = "<group>"; };
+		B10000000000000000000041 /* SharedModelContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModelContainer.swift; sourceTree = "<group>"; };
+		B10000000000000000000042 /* QuickCaptureWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureWidget.swift; sourceTree = "<group>"; };
+		B10000000000000000000043 /* UpcomingTripsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingTripsWidget.swift; sourceTree = "<group>"; };
+		B10000000000000000000044 /* RemindersWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersWidget.swift; sourceTree = "<group>"; };
+		B10000000000000000000060 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		B10000000000000000000061 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		D10000000000000000000001 /* Entropy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Entropy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D10000000000000000000002 /* EntropyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EntropyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F20000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000002F /* AuthenticationServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F20000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000060 /* WidgetKit.framework in Frameworks */,
+				A10000000000000000000061 /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G10000000000000000000001 /* root */ = {
+			isa = PBXGroup;
+			children = (
+				G10000000000000000000002 /* Entropy */,
+				G10000000000000000000099 /* Frameworks */,
+				G10000000000000000000098 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G10000000000000000000098 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000001 /* Entropy.app */,
+				D10000000000000000000002 /* EntropyWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000099 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000002F /* AuthenticationServices.framework */,
+				B10000000000000000000060 /* WidgetKit.framework */,
+				B10000000000000000000061 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000002 /* Entropy */ = {
+			isa = PBXGroup;
+			children = (
+				G10000000000000000000003 /* App */,
+				G10000000000000000000004 /* Models */,
+				G10000000000000000000005 /* Services */,
+				G10000000000000000000006 /* Components */,
+				G10000000000000000000007 /* Views */,
+				G1000000000000000000000E /* Widget */,
+				G1000000000000000000000F /* Assets */,
+			);
+			path = Entropy;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000001 /* EntropyApp.swift */,
+				B10000000000000000000002 /* AppState.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000003 /* Note.swift */,
+				B10000000000000000000004 /* VaultItem.swift */,
+				B10000000000000000000005 /* BookingData.swift */,
+				B10000000000000000000006 /* Project.swift */,
+				B10000000000000000000007 /* Reminder.swift */,
+				B10000000000000000000008 /* Attachment.swift */,
+				B10000000000000000000009 /* Trip.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000000A /* TripGroupingService.swift */,
+				B1000000000000000000000B /* BookingParser.swift */,
+				B1000000000000000000000C /* VaultSecurityService.swift */,
+				B1000000000000000000000D /* ProjectSyncService.swift */,
+				B1000000000000000000000E /* ShareSheetParser.swift */,
+				B1000000000000000000000F /* TripChecklistGenerator.swift */,
+				B10000000000000000000010 /* SearchService.swift */,
+				B10000000000000000000011 /* ReminderEngine.swift */,
+				B10000000000000000000012 /* ExportService.swift */,
+				B10000000000000000000013 /* GmailScanService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000006 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000014 /* ReminderPickerView.swift */,
+				B10000000000000000000015 /* AttachmentViewer.swift */,
+				B10000000000000000000016 /* DocumentScannerView.swift */,
+				B10000000000000000000017 /* SearchBarView.swift */,
+				B10000000000000000000018 /* MarkdownEditorView.swift */,
+				B10000000000000000000019 /* AttachmentPickerSection.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000007 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				G10000000000000000000008 /* Root */,
+				G10000000000000000000009 /* Notes */,
+				G1000000000000000000000A /* Vault */,
+				G1000000000000000000000B /* Projects */,
+				G1000000000000000000000C /* Vacations */,
+				G1000000000000000000000D /* Reminders */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000008 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000001A /* SettingsView.swift */,
+				B1000000000000000000001B /* MainTabView.swift */,
+			);
+			path = Root;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000009 /* Notes */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000001C /* CategoryView.swift */,
+				B1000000000000000000001D /* NotesHomeView.swift */,
+				B1000000000000000000001E /* NoteEditorView.swift */,
+				B1000000000000000000001F /* CategoryManagementView.swift */,
+			);
+			path = Notes;
+			sourceTree = "<group>";
+		};
+		G1000000000000000000000A /* Vault */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000020 /* VaultHomeView.swift */,
+				B10000000000000000000021 /* AddDocumentView.swift */,
+				B10000000000000000000022 /* VaultItemDetailView.swift */,
+			);
+			path = Vault;
+			sourceTree = "<group>";
+		};
+		G1000000000000000000000B /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000023 /* ProjectsDashboardView.swift */,
+				B10000000000000000000024 /* ProjectDetailView.swift */,
+				B10000000000000000000025 /* AddProjectView.swift */,
+			);
+			path = Projects;
+			sourceTree = "<group>";
+		};
+		G1000000000000000000000C /* Vacations */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000026 /* CancellationAlertView.swift */,
+				B10000000000000000000027 /* BookingReviewView.swift */,
+				B10000000000000000000028 /* TripDetailView.swift */,
+				B10000000000000000000029 /* AddTripView.swift */,
+				B1000000000000000000002A /* ShareSheetImportView.swift */,
+				B1000000000000000000002B /* TripListView.swift */,
+				B1000000000000000000002C /* GmailConnectView.swift */,
+			);
+			path = Vacations;
+			sourceTree = "<group>";
+		};
+		G1000000000000000000000D /* Reminders */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000002D /* AddReminderView.swift */,
+				B1000000000000000000002E /* RemindersHubView.swift */,
+			);
+			path = Reminders;
+			sourceTree = "<group>";
+		};
+		G1000000000000000000000E /* Widget */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000040 /* EntropyWidgetBundle.swift */,
+				B10000000000000000000041 /* SharedModelContainer.swift */,
+				B10000000000000000000042 /* QuickCaptureWidget.swift */,
+				B10000000000000000000043 /* UpcomingTripsWidget.swift */,
+				B10000000000000000000044 /* RemindersWidget.swift */,
+			);
+			path = Widget;
+			sourceTree = "<group>";
+		};
+		G1000000000000000000000F /* Assets */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000030 /* AppIcon.svg */,
+			);
+			path = Assets;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D20000000000000000000001 /* Entropy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D30000000000000000000001 /* Build configuration list for PBXNativeTarget "Entropy" */;
+			buildPhases = (
+				F30000000000000000000001 /* Sources */,
+				F20000000000000000000001 /* Frameworks */,
+				F40000000000000000000001 /* Resources */,
+				F10000000000000000000001 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C20000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = Entropy;
+			productName = Entropy;
+			productReference = D10000000000000000000001 /* Entropy.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D20000000000000000000002 /* EntropyWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D30000000000000000000002 /* Build configuration list for PBXNativeTarget "EntropyWidgets" */;
+			buildPhases = (
+				F30000000000000000000002 /* Sources */,
+				F20000000000000000000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EntropyWidgets;
+			productName = EntropyWidgets;
+			productReference = D10000000000000000000002 /* EntropyWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					D20000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					D20000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = D30000000000000000000003 /* Build configuration list for PBXProject "Entropy" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G10000000000000000000001 /* root */;
+			productRefGroup = G10000000000000000000098 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D20000000000000000000001 /* Entropy */,
+				D20000000000000000000002 /* EntropyWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F40000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000030 /* AppIcon.svg in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F30000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* EntropyApp.swift in Sources */,
+				A10000000000000000000002 /* AppState.swift in Sources */,
+				A10000000000000000000003 /* Note.swift in Sources */,
+				A10000000000000000000004 /* VaultItem.swift in Sources */,
+				A10000000000000000000005 /* BookingData.swift in Sources */,
+				A10000000000000000000006 /* Project.swift in Sources */,
+				A10000000000000000000007 /* Reminder.swift in Sources */,
+				A10000000000000000000008 /* Attachment.swift in Sources */,
+				A10000000000000000000009 /* Trip.swift in Sources */,
+				A1000000000000000000000A /* TripGroupingService.swift in Sources */,
+				A1000000000000000000000B /* BookingParser.swift in Sources */,
+				A1000000000000000000000C /* VaultSecurityService.swift in Sources */,
+				A1000000000000000000000D /* ProjectSyncService.swift in Sources */,
+				A1000000000000000000000E /* ShareSheetParser.swift in Sources */,
+				A1000000000000000000000F /* TripChecklistGenerator.swift in Sources */,
+				A10000000000000000000010 /* SearchService.swift in Sources */,
+				A10000000000000000000011 /* ReminderEngine.swift in Sources */,
+				A10000000000000000000012 /* ExportService.swift in Sources */,
+				A10000000000000000000013 /* GmailScanService.swift in Sources */,
+				A10000000000000000000014 /* ReminderPickerView.swift in Sources */,
+				A10000000000000000000015 /* AttachmentViewer.swift in Sources */,
+				A10000000000000000000016 /* DocumentScannerView.swift in Sources */,
+				A10000000000000000000017 /* SearchBarView.swift in Sources */,
+				A10000000000000000000018 /* MarkdownEditorView.swift in Sources */,
+				A10000000000000000000019 /* AttachmentPickerSection.swift in Sources */,
+				A1000000000000000000001A /* SettingsView.swift in Sources */,
+				A1000000000000000000001B /* MainTabView.swift in Sources */,
+				A1000000000000000000001C /* CategoryView.swift in Sources */,
+				A1000000000000000000001D /* NotesHomeView.swift in Sources */,
+				A1000000000000000000001E /* NoteEditorView.swift in Sources */,
+				A1000000000000000000001F /* CategoryManagementView.swift in Sources */,
+				A10000000000000000000020 /* VaultHomeView.swift in Sources */,
+				A10000000000000000000021 /* AddDocumentView.swift in Sources */,
+				A10000000000000000000022 /* VaultItemDetailView.swift in Sources */,
+				A10000000000000000000023 /* ProjectsDashboardView.swift in Sources */,
+				A10000000000000000000024 /* ProjectDetailView.swift in Sources */,
+				A10000000000000000000025 /* AddProjectView.swift in Sources */,
+				A10000000000000000000026 /* CancellationAlertView.swift in Sources */,
+				A10000000000000000000027 /* BookingReviewView.swift in Sources */,
+				A10000000000000000000028 /* TripDetailView.swift in Sources */,
+				A10000000000000000000029 /* AddTripView.swift in Sources */,
+				A1000000000000000000002A /* ShareSheetImportView.swift in Sources */,
+				A1000000000000000000002B /* TripListView.swift in Sources */,
+				A1000000000000000000002C /* GmailConnectView.swift in Sources */,
+				A1000000000000000000002D /* AddReminderView.swift in Sources */,
+				A1000000000000000000002E /* RemindersHubView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F30000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000040 /* EntropyWidgetBundle.swift in Sources */,
+				A10000000000000000000041 /* SharedModelContainer.swift in Sources */,
+				A10000000000000000000042 /* QuickCaptureWidget.swift in Sources */,
+				A10000000000000000000043 /* UpcomingTripsWidget.swift in Sources */,
+				A10000000000000000000044 /* RemindersWidget.swift in Sources */,
+				A10000000000000000000050 /* Note.swift in Sources */,
+				A10000000000000000000051 /* Trip.swift in Sources */,
+				A10000000000000000000052 /* Reminder.swift in Sources */,
+				A10000000000000000000053 /* VaultItem.swift in Sources */,
+				A10000000000000000000054 /* Project.swift in Sources */,
+				A10000000000000000000055 /* Attachment.swift in Sources */,
+				A10000000000000000000056 /* BookingData.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C20000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D20000000000000000000002 /* EntropyWidgets */;
+			targetProxy = C10000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E20000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E20000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E20000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Entropy/Entropy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Entropy;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lumeninnovations.Entropy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E20000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Entropy/Entropy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Entropy;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lumeninnovations.Entropy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E20000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = Entropy/EntropyWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = EntropyWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lumeninnovations.Entropy.EntropyWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E20000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = Entropy/EntropyWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = EntropyWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lumeninnovations.Entropy.EntropyWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D30000000000000000000001 /* Build configuration list for PBXNativeTarget "Entropy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E20000000000000000000003 /* Debug */,
+				E20000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D30000000000000000000002 /* Build configuration list for PBXNativeTarget "EntropyWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E20000000000000000000005 /* Debug */,
+				E20000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D30000000000000000000003 /* Build configuration list for PBXProject "Entropy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E20000000000000000000001 /* Debug */,
+				E20000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E10000000000000000000001 /* Project object */;
+}
