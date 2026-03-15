@@ -1,6 +1,6 @@
 import WidgetKit
 import SwiftUI
-import AppIntents
+import SwiftData
 
 // MARK: - Quick Capture Widget
 
@@ -44,16 +44,34 @@ struct QuickCaptureProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<QuickCaptureEntry>) -> Void) {
-        // In production, read from shared App Group container via SwiftData
         let entry = QuickCaptureEntry(date: Date(), categories: loadCategories())
         let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(3600)))
         completion(timeline)
     }
 
     private func loadCategories() -> [WidgetCategory] {
-        // In production: use ModelContainer with App Group shared container
-        // For now, return defaults that match the seeded categories
-        placeholderCategories
+        guard let container = SharedModelContainer.create() else {
+            return placeholderCategories
+        }
+
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<NoteCategory>(
+            sortBy: [SortDescriptor(\.sortOrder)]
+        )
+
+        guard let categories = try? context.fetch(descriptor), !categories.isEmpty else {
+            return placeholderCategories
+        }
+
+        return categories.prefix(3).map { cat in
+            WidgetCategory(
+                id: cat.id.uuidString,
+                name: cat.name,
+                icon: cat.icon ?? "folder.fill",
+                color: cat.color ?? "blue",
+                noteCount: cat.noteCount
+            )
+        }
     }
 
     private var placeholderCategories: [WidgetCategory] {
@@ -171,6 +189,8 @@ struct QuickCaptureWidgetView: View {
         case "orange": return .orange
         case "red": return .red
         case "purple": return .purple
+        case "pink": return .pink
+        case "yellow": return .yellow
         default: return .blue
         }
     }

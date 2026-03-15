@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import SwiftData
 
 // MARK: - Reminders Widget
 
@@ -45,10 +46,57 @@ struct RemindersWidgetProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ReminderWidgetEntry>) -> Void) {
-        // In production: read from shared SwiftData container
-        let entry = ReminderWidgetEntry(date: Date(), reminders: [], overdueCount: 0)
+        let entry = loadReminders()
         let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(1800)))
         completion(timeline)
+    }
+
+    private func loadReminders() -> ReminderWidgetEntry {
+        guard let container = SharedModelContainer.create() else {
+            return ReminderWidgetEntry(date: Date(), reminders: [], overdueCount: 0)
+        }
+
+        let context = ModelContext(container)
+        let now = Date()
+        let calendar = Calendar.current
+        let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+
+        let descriptor = FetchDescriptor<Reminder>(
+            predicate: #Predicate { !$0.isCompleted && $0.triggerDate <= endOfDay },
+            sortBy: [SortDescriptor(\.triggerDate)]
+        )
+
+        guard let reminders = try? context.fetch(descriptor) else {
+            return ReminderWidgetEntry(date: now, reminders: [], overdueCount: 0)
+        }
+
+        let widgetReminders = reminders.map { reminder in
+            WidgetReminder(
+                id: reminder.id.uuidString,
+                title: reminder.title,
+                time: reminder.triggerDate,
+                sourceIcon: sourceIcon(for: reminder.sourceType),
+                isOverdue: reminder.triggerDate < now
+            )
+        }
+
+        let overdueCount = reminders.filter { $0.triggerDate < now }.count
+
+        return ReminderWidgetEntry(
+            date: now,
+            reminders: widgetReminders,
+            overdueCount: overdueCount
+        )
+    }
+
+    private func sourceIcon(for source: ReminderSource) -> String {
+        switch source {
+        case .trip: return "airplane"
+        case .note: return "note.text"
+        case .vault: return "lock.shield.fill"
+        case .project: return "folder.fill"
+        case .standalone: return "bell.fill"
+        }
     }
 }
 

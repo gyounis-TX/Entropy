@@ -52,6 +52,8 @@ struct CategoryManagementView: View {
         case "orange": return .orange
         case "red": return .red
         case "purple": return .purple
+        case "pink": return .pink
+        case "yellow": return .yellow
         default: return .blue
         }
     }

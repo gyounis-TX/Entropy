@@ -79,9 +79,32 @@ final class ReminderEngine {
     }
 
     func complete(_ reminder: Reminder, context: ModelContext) {
-        reminder.isCompleted = true
-        cancel(reminder)
-        try? context.save()
+        if case .recurring(let rule) = reminder.triggerType {
+            // For recurring reminders, advance to the next occurrence instead of completing
+            let nextDate = nextOccurrence(from: reminder.triggerDate, rule: rule)
+            reminder.triggerDate = nextDate
+            try? context.save()
+            Task { await reschedule(reminder) }
+        } else {
+            reminder.isCompleted = true
+            cancel(reminder)
+            try? context.save()
+        }
+    }
+
+    /// Calculate the next occurrence date for a recurring reminder.
+    private func nextOccurrence(from date: Date, rule: RecurrenceRule) -> Date {
+        let calendar = Calendar.current
+        switch rule {
+        case .daily:
+            return calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        case .weekly:
+            return calendar.date(byAdding: .weekOfYear, value: 1, to: date) ?? date
+        case .monthly:
+            return calendar.date(byAdding: .month, value: 1, to: date) ?? date
+        case .custom(let intervalSeconds):
+            return date.addingTimeInterval(intervalSeconds)
+        }
     }
 
     // MARK: - Badge

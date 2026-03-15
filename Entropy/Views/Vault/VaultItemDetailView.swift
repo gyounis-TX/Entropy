@@ -71,9 +71,12 @@ struct VaultItemDetailView: View {
             // Custom fields
             Section("Fields") {
                 ForEach(item.fields.sorted(by: { $0.sortOrder < $1.sortOrder })) { field in
-                    LabeledContent(field.key) {
-                        Text(field.value)
-                            .textSelection(.enabled)
+                    VaultFieldRow(field: field)
+                }
+                .onDelete { offsets in
+                    let sorted = item.fields.sorted(by: { $0.sortOrder < $1.sortOrder })
+                    for index in offsets {
+                        context.delete(sorted[index])
                     }
                 }
 
@@ -81,6 +84,16 @@ struct VaultItemDetailView: View {
                     let field = VaultField(key: "New Field", value: "", sortOrder: item.fields.count)
                     field.vaultItem = item
                     context.insert(field)
+                }
+            }
+
+            // Expiration
+            if item.expirationDate != nil {
+                Section("Expiration") {
+                    DatePicker("Expires", selection: Binding(
+                        get: { item.expirationDate ?? Date() },
+                        set: { item.expirationDate = $0 }
+                    ), displayedComponents: .date)
                 }
             }
 
@@ -121,6 +134,20 @@ struct VaultItemDetailView: View {
                     context.insert(reminder)
                 })
             }
+        }
+    }
+}
+
+struct VaultFieldRow: View {
+    @Bindable var field: VaultField
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("Field Name", text: $field.key)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Value", text: $field.value)
+                .textSelection(.enabled)
         }
     }
 }

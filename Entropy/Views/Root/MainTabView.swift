@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
+    @State private var showingSettings = false
 
     var body: some View {
         @Bindable var state = appState
@@ -35,6 +36,20 @@ struct MainTabView: View {
                 NavigationStack {
                     RemindersHubView()
                 }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gear")
+                }
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
             }
         }
     }

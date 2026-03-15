@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 struct NoteEditorView: View {
     @Bindable var note: Note
@@ -7,6 +8,7 @@ struct NoteEditorView: View {
     @State private var showingAddReminder = false
     @State private var showingTagEditor = false
     @State private var isPreviewMode = false
+    @State private var selectedPhoto: PhotosPickerItem?
     @FocusState private var bodyFocused: Bool
 
     var body: some View {
@@ -65,6 +67,13 @@ struct NoteEditorView: View {
                     }
                 }
 
+                // Attachments
+                if !note.attachments.isEmpty {
+                    AttachmentViewer(attachments: note.attachments) { attachment in
+                        context.delete(attachment)
+                    }
+                }
+
                 // Edit/Preview toggle
                 Picker("Mode", selection: $isPreviewMode) {
                     Label("Edit", systemImage: "pencil").tag(false)
@@ -93,6 +102,9 @@ struct NoteEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                    Image(systemName: "paperclip")
+                }
                 Button("Tag", systemImage: "tag") {
                     showingTagEditor = true
                 }
@@ -121,6 +133,21 @@ struct NoteEditorView: View {
                     reminder.note = note
                     context.insert(reminder)
                 })
+            }
+        }
+        .onChange(of: selectedPhoto) {
+            guard let item = selectedPhoto else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    let attachment = Attachment(
+                        fileName: "Photo \(Date().formatted(date: .abbreviated, time: .shortened))",
+                        data: data,
+                        mimeType: "image/jpeg"
+                    )
+                    attachment.note = note
+                    context.insert(attachment)
+                }
+                selectedPhoto = nil
             }
         }
         .alert("Add Tag", isPresented: $showingTagEditor) {

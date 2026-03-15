@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import SwiftData
 
 // MARK: - Upcoming Trips Widget
 
@@ -41,12 +42,44 @@ struct UpcomingTripsProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<UpcomingTripEntry>) -> Void) {
-        // In production: read from shared SwiftData container
-        let entry = UpcomingTripEntry(date: Date(), tripName: nil,
-                                       tripStart: nil, tripEnd: nil,
-                                       daysUntil: nil, flightCount: 0, hotelName: nil)
+        let entry = loadUpcomingTrip()
         let timeline = Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(3600)))
         completion(timeline)
+    }
+
+    private func loadUpcomingTrip() -> UpcomingTripEntry {
+        guard let container = SharedModelContainer.create() else {
+            return emptyEntry
+        }
+
+        let context = ModelContext(container)
+        let now = Date()
+        let descriptor = FetchDescriptor<Trip>(
+            predicate: #Predicate { $0.startDate > now },
+            sortBy: [SortDescriptor(\.startDate)]
+        )
+
+        guard let trips = try? context.fetch(descriptor), let trip = trips.first else {
+            return emptyEntry
+        }
+
+        let daysUntil = Calendar.current.dateComponents([.day], from: now, to: trip.startDate).day ?? 0
+        let firstHotel = trip.accommodations.sorted(by: { $0.checkIn < $1.checkIn }).first?.hotelName
+
+        return UpcomingTripEntry(
+            date: now,
+            tripName: trip.name,
+            tripStart: trip.startDate,
+            tripEnd: trip.endDate,
+            daysUntil: daysUntil,
+            flightCount: trip.flights.count,
+            hotelName: firstHotel
+        )
+    }
+
+    private var emptyEntry: UpcomingTripEntry {
+        UpcomingTripEntry(date: Date(), tripName: nil, tripStart: nil, tripEnd: nil,
+                          daysUntil: nil, flightCount: 0, hotelName: nil)
     }
 }
 

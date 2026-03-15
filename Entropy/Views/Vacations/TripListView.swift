@@ -52,6 +52,8 @@ struct TripListView: View {
                 }
             }
         }
+        .onAppear { handleDeepLink() }
+        .onChange(of: appState.deepLinkAction) { handleDeepLink() }
         .sheet(isPresented: $showingAddTrip) {
             NavigationStack {
                 AddTripView()
@@ -61,6 +63,20 @@ struct TripListView: View {
             NavigationStack {
                 GmailConnectView()
             }
+        }
+    }
+
+    private func handleDeepLink() {
+        guard let action = appState.deepLinkAction else { return }
+        switch action {
+        case .createTrip:
+            appState.consumeDeepLink()
+            showingAddTrip = true
+        case .importEmail:
+            appState.consumeDeepLink()
+            showingGmailConnect = true
+        default:
+            break
         }
     }
 

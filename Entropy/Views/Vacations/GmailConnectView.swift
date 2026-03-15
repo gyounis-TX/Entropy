@@ -175,14 +175,29 @@ struct GmailConnectView: View {
 
     // MARK: - Actions
 
+    /// The Google OAuth client ID. In production, load from Info.plist or a config file.
+    private static let clientID = Bundle.main.infoDictionary?["GMAIL_CLIENT_ID"] as? String ?? ""
+
     private func connectGmail() async {
         isConnecting = true
         errorMessage = nil
         defer { isConnecting = false }
 
-        // In production, this opens the Google OAuth2 flow via ASWebAuthenticationSession.
-        // For now, set a placeholder state.
-        errorMessage = "OAuth flow requires a configured Google Cloud project. Set up your client ID in the app configuration."
+        guard !Self.clientID.isEmpty else {
+            errorMessage = "Gmail client ID not configured. Add GMAIL_CLIENT_ID to Info.plist."
+            return
+        }
+
+        do {
+            try await gmailService.connect(clientID: Self.clientID)
+            appState.isGmailConnected = true
+            // Store tokens securely
+            VaultSecurityService.shared.storeGmailTokens(service: gmailService)
+            // Auto-scan after connecting
+            await performScan()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func performScan() async {

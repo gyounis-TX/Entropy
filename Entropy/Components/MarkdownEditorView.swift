@@ -1,12 +1,11 @@
 import SwiftUI
+import UIKit
 
 /// A markdown-flavored text editor with a formatting toolbar.
 /// Supports headers, bold, italic, lists, links, and code.
 struct MarkdownEditorView: View {
     @Binding var text: String
     @FocusState.Binding var isFocused: Bool
-
-    @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,86 +15,197 @@ struct MarkdownEditorView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Editor with live preview interleaving
-            TextEditor(text: $text)
-                .focused($isFocused)
-                .scrollContentBackground(.hidden)
-                .font(.body)
+            // Editor
+            MarkdownTextView(text: $text, isFocused: $isFocused)
         }
     }
 
     private var formattingToolbar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
-                FormatButton(icon: "bold", label: "Bold") { wrapSelection(with: "**") }
-                FormatButton(icon: "italic", label: "Italic") { wrapSelection(with: "_") }
-                FormatButton(icon: "strikethrough", label: "Strikethrough") { wrapSelection(with: "~~") }
+                FormatButton(icon: "bold", label: "Bold") {
+                    MarkdownTextView.applyFormatting(.wrap("**"))
+                }
+                FormatButton(icon: "italic", label: "Italic") {
+                    MarkdownTextView.applyFormatting(.wrap("_"))
+                }
+                FormatButton(icon: "strikethrough", label: "Strikethrough") {
+                    MarkdownTextView.applyFormatting(.wrap("~~"))
+                }
 
                 Divider().frame(height: 20)
 
-                FormatButton(icon: "number", label: "H1") { prefixLine(with: "# ") }
-                FormatButton(icon: "textformat.size.smaller", label: "H2") { prefixLine(with: "## ") }
-                FormatButton(icon: "textformat.size.smaller", label: "H3") { prefixLine(with: "### ") }
+                FormatButton(icon: "number", label: "H1") {
+                    MarkdownTextView.applyFormatting(.prefix("# "))
+                }
+                FormatButton(icon: "textformat.size.smaller", label: "H2") {
+                    MarkdownTextView.applyFormatting(.prefix("## "))
+                }
+                FormatButton(icon: "textformat.size.smaller", label: "H3") {
+                    MarkdownTextView.applyFormatting(.prefix("### "))
+                }
 
                 Divider().frame(height: 20)
 
-                FormatButton(icon: "list.bullet", label: "Bullet") { prefixLine(with: "- ") }
-                FormatButton(icon: "list.number", label: "Numbered") { prefixNumberedList() }
-                FormatButton(icon: "checklist", label: "Checklist") { prefixLine(with: "- [ ] ") }
+                FormatButton(icon: "list.bullet", label: "Bullet") {
+                    MarkdownTextView.applyFormatting(.prefix("- "))
+                }
+                FormatButton(icon: "list.number", label: "Numbered") {
+                    MarkdownTextView.applyFormatting(.prefix("1. "))
+                }
+                FormatButton(icon: "checklist", label: "Checklist") {
+                    MarkdownTextView.applyFormatting(.prefix("- [ ] "))
+                }
 
                 Divider().frame(height: 20)
 
-                FormatButton(icon: "link", label: "Link") { insertLink() }
-                FormatButton(icon: "chevron.left.forwardslash.chevron.right", label: "Code") { wrapSelection(with: "`") }
-                FormatButton(icon: "text.quote", label: "Quote") { prefixLine(with: "> ") }
+                FormatButton(icon: "link", label: "Link") {
+                    MarkdownTextView.applyFormatting(.insert("[link text](url)"))
+                }
+                FormatButton(icon: "chevron.left.forwardslash.chevron.right", label: "Code") {
+                    MarkdownTextView.applyFormatting(.wrap("`"))
+                }
+                FormatButton(icon: "text.quote", label: "Quote") {
+                    MarkdownTextView.applyFormatting(.prefix("> "))
+                }
             }
             .padding(.horizontal, 8)
         }
         .padding(.vertical, 6)
         .background(Color(.secondarySystemBackground))
     }
+}
 
-    // MARK: - Formatting Actions
+// MARK: - UIKit-backed TextView with selection support
 
-    private func wrapSelection(with marker: String) {
-        // Insert markers around cursor position or wrap selected text
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        // Simple approach: append markers at cursor-like position (end of text if no selection)
-        text += "\(marker)text\(marker)"
+struct MarkdownTextView: UIViewRepresentable {
+    @Binding var text: String
+    @FocusState.Binding var isFocused: Bool
+
+    enum FormattingAction {
+        case wrap(String)      // Wrap selection: **selected** or insert **text**
+        case prefix(String)    // Prefix current line: # Header
+        case insert(String)    // Insert at cursor
     }
 
-    private func prefixLine(with prefix: String) {
-        if text.isEmpty || text.hasSuffix("\n") {
-            text += prefix
-        } else {
-            text += "\n\(prefix)"
+    // Static notification for toolbar actions
+    static let formattingNotification = Notification.Name("MarkdownFormatting")
+
+    static func applyFormatting(_ action: FormattingAction) {
+        NotificationCenter.default.post(name: formattingNotification, object: action)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.autocapitalizationType = .sentences
+        textView.autocorrectionType = .default
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .clear
+        context.coordinator.textView = textView
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        if textView.text != text {
+            textView.text = text
         }
     }
 
-    private func prefixNumberedList() {
-        // Count existing numbered items to determine next number
-        let lines = text.components(separatedBy: "\n")
-        let lastNumbered = lines.reversed().first { line in
-            line.range(of: "^\\d+\\.", options: .regularExpression) != nil
-        }
-        let nextNum: Int
-        if let last = lastNumbered,
-           let numStr = last.split(separator: ".").first,
-           let num = Int(numStr) {
-            nextNum = num + 1
-        } else {
-            nextNum = 1
-        }
-
-        if text.isEmpty || text.hasSuffix("\n") {
-            text += "\(nextNum). "
-        } else {
-            text += "\n\(nextNum). "
-        }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isFocused: $isFocused)
     }
 
-    private func insertLink() {
-        text += "[link text](url)"
+    class Coordinator: NSObject, UITextViewDelegate {
+        @Binding var text: String
+        @FocusState.Binding var isFocused: Bool
+        weak var textView: UITextView?
+        private var observer: NSObjectProtocol?
+
+        init(text: Binding<String>, isFocused: FocusState<Bool>.Binding) {
+            _text = text
+            _isFocused = isFocused
+            super.init()
+
+            observer = NotificationCenter.default.addObserver(
+                forName: MarkdownTextView.formattingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let action = notification.object as? FormattingAction else { return }
+                self?.handleFormatting(action)
+            }
+        }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            text = textView.text
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            isFocused = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            isFocused = false
+        }
+
+        private func handleFormatting(_ action: FormattingAction) {
+            guard let textView else { return }
+
+            let selectedRange = textView.selectedRange
+            let nsText = textView.text as NSString
+
+            switch action {
+            case .wrap(let marker):
+                let selectedText = nsText.substring(with: selectedRange)
+                if selectedText.isEmpty {
+                    // No selection: insert placeholder
+                    let insertion = "\(marker)text\(marker)"
+                    textView.textStorage.replaceCharacters(in: selectedRange, with: insertion)
+                    // Select the "text" part for easy replacement
+                    let selectStart = selectedRange.location + marker.count
+                    textView.selectedRange = NSRange(location: selectStart, length: 4)
+                } else {
+                    // Wrap the selection
+                    let wrapped = "\(marker)\(selectedText)\(marker)"
+                    textView.textStorage.replaceCharacters(in: selectedRange, with: wrapped)
+                    let newStart = selectedRange.location + marker.count
+                    textView.selectedRange = NSRange(location: newStart, length: selectedText.count)
+                }
+
+            case .prefix(let prefix):
+                // Find the start of the current line
+                let lineRange = nsText.lineRange(for: selectedRange)
+                let lineText = nsText.substring(with: lineRange)
+
+                // If line already has this prefix, remove it (toggle)
+                if lineText.hasPrefix(prefix) {
+                    let unprefixed = String(lineText.dropFirst(prefix.count))
+                    textView.textStorage.replaceCharacters(in: lineRange, with: unprefixed)
+                } else {
+                    // Add prefix at the start of the line
+                    let prefixed = prefix + lineText
+                    textView.textStorage.replaceCharacters(in: lineRange, with: prefixed)
+                    textView.selectedRange = NSRange(
+                        location: selectedRange.location + prefix.count,
+                        length: selectedRange.length
+                    )
+                }
+
+            case .insert(let insertText):
+                textView.textStorage.replaceCharacters(in: selectedRange, with: insertText)
+                textView.selectedRange = NSRange(
+                    location: selectedRange.location + insertText.count,
+                    length: 0
+                )
+            }
+
+            text = textView.text
+        }
     }
 }
 
@@ -124,11 +234,9 @@ struct MarkdownPreview: View {
 
     var body: some View {
         if #available(iOS 18.0, *) {
-            // Use native markdown rendering
             Text(attributedMarkdown)
                 .textSelection(.enabled)
         } else {
-            // Fallback: basic styled rendering
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(markdown.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
                     markdownLine(line)
@@ -194,7 +302,6 @@ struct MarkdownPreview: View {
         }
     }
 
-    /// Handles inline formatting: **bold**, _italic_, ~~strikethrough~~, `code`
     private func styledInline(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(
             interpretedSyntax: .inlineOnlyPreservingWhitespace

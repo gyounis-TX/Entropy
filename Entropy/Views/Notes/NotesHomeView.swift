@@ -3,9 +3,11 @@ import SwiftData
 
 struct NotesHomeView: View {
     @Environment(\.modelContext) private var context
+    @Environment(AppState.self) private var appState
     @Query(sort: \NoteCategory.sortOrder) private var categories: [NoteCategory]
     @State private var showingAddCategory = false
     @State private var showingManageCategories = false
+    @State private var showingNewNoteForCategory: NoteCategory?
     @State private var searchText = ""
     @State private var hasSeeded = false
 
@@ -33,7 +35,16 @@ struct NotesHomeView: View {
                 }
             }
         }
-        .onAppear { seedDefaultsIfNeeded() }
+        .onAppear {
+            seedDefaultsIfNeeded()
+            handleDeepLink()
+        }
+        .onChange(of: appState.deepLinkAction) { handleDeepLink() }
+        .sheet(item: $showingNewNoteForCategory) { category in
+            NavigationStack {
+                NewNoteSheet(category: category)
+            }
+        }
         .sheet(isPresented: $showingAddCategory) {
             NavigationStack {
                 AddCategorySheet(sortOrder: categories.count)
@@ -82,6 +93,19 @@ struct NotesHomeView: View {
         }
         .navigationDestination(for: NoteCategory.self) { category in
             CategoryView(category: category)
+        }
+    }
+
+    private func handleDeepLink() {
+        guard case .createNote(let categoryID) = appState.deepLinkAction else { return }
+        appState.consumeDeepLink()
+        if let categoryID,
+           let category = categories.first(where: { $0.id.uuidString == categoryID }) {
+            showingNewNoteForCategory = category
+        } else if let first = categories.first {
+            showingNewNoteForCategory = first
+        } else {
+            showingAddCategory = true
         }
     }
 

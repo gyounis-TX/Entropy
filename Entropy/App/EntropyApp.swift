@@ -27,12 +27,27 @@ struct EntropyApp: App {
             Attachment.self
         ])
 
-        let config = ModelConfiguration(
-            "Entropy",
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            allowsSave: true
-        )
+        // Use App Group container so widgets can read the same data
+        let containerURL = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: SharedModelContainer.appGroupID)?
+            .appendingPathComponent("Entropy.store")
+
+        let config: ModelConfiguration
+        if let containerURL {
+            config = ModelConfiguration(
+                "Entropy",
+                schema: schema,
+                url: containerURL,
+                allowsSave: true
+            )
+        } else {
+            config = ModelConfiguration(
+                "Entropy",
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                allowsSave: true
+            )
+        }
 
         do {
             modelContainer = try ModelContainer(for: schema, configurations: [config])

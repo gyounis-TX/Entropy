@@ -12,6 +12,7 @@ final class Attachment {
     @Relationship var flight: Flight?
     @Relationship var accommodation: Accommodation?
     @Relationship var note: Note?
+    @Relationship var trip: Trip?
 
     init(fileName: String, data: Data, mimeType: String) {
         self.id = UUID()
@@ -19,5 +20,13 @@ final class Attachment {
         self.data = data
         self.mimeType = mimeType
         self.createdAt = Date()
+    }
+
+    var isImage: Bool {
+        mimeType.hasPrefix("image/")
+    }
+
+    var isPDF: Bool {
+        mimeType == "application/pdf"
     }
 }

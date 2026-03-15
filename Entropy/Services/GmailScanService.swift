@@ -57,15 +57,98 @@ final class GmailScanService {
 
     // MARK: - OAuth2 Connection
 
-    /// Initiates Google OAuth2 sign-in flow for Gmail read-only access.
-    /// In production, this would use ASWebAuthenticationSession or GoogleSignIn SDK.
-    func connect(clientID: String, presentingWindow: Any? = nil) async throws {
-        let authURL = buildAuthURL(clientID: clientID)
+    /// Initiates Google OAuth2 sign-in flow for Gmail read-only access
+    /// using ASWebAuthenticationSession.
+    @MainActor
+    func connect(clientID: String) async throws {
+        guard let authURL = buildAuthURL(clientID: clientID) else {
+            throw GmailError.invalidURL
+        }
 
-        // Placeholder for OAuth flow — actual implementation requires
-        // ASWebAuthenticationSession which needs a UI context
-        _ = authURL
-        throw GmailError.notImplemented("OAuth flow requires UI presentation context")
+        let callbackURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+            let session = ASWebAuthenticationSession(
+                url: authURL,
+                callback: .customScheme("com.entropy.app")
+            ) { url, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let url {
+                    continuation.resume(returning: url)
+                } else {
+                    continuation.resume(throwing: GmailError.notConnected)
+                }
+            }
+            session.prefersEphemeralWebBrowserSession = false
+            session.start()
+        }
+
+        // Extract the authorization code from the callback URL
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+            throw GmailError.networkError("No authorization code in callback")
+        }
+
+        // Exchange the code for tokens
+        let tokens = try await exchangeCodeForTokens(code: code, clientID: clientID)
+        setTokens(access: tokens.accessToken, refresh: tokens.refreshToken)
+    }
+
+    /// Exchanges an authorization code for access and refresh tokens.
+    private func exchangeCodeForTokens(code: String, clientID: String) async throws -> TokenResponse {
+        guard let url = URL(string: "https://oauth2.googleapis.com/token") else {
+            throw GmailError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        let body = [
+            "code=\(code)",
+            "client_id=\(clientID)",
+            "redirect_uri=com.entropy.app:/oauth2callback",
+            "grant_type=authorization_code"
+        ].joined(separator: "&")
+        request.httpBody = body.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GmailError.networkError("Token exchange failed")
+        }
+
+        return try JSONDecoder().decode(TokenResponse.self, from: data)
+    }
+
+    /// Refreshes an expired access token using the refresh token.
+    func refreshAccessToken(clientID: String) async throws {
+        guard let refreshToken else {
+            throw GmailError.tokenExpired
+        }
+
+        guard let url = URL(string: "https://oauth2.googleapis.com/token") else {
+            throw GmailError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        let body = [
+            "refresh_token=\(refreshToken)",
+            "client_id=\(clientID)",
+            "grant_type=refresh_token"
+        ].joined(separator: "&")
+        request.httpBody = body.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw GmailError.tokenExpired
+        }
+
+        let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
+        self.accessToken = tokenResponse.accessToken
     }
 
     /// Stores tokens after successful OAuth2 flow.
@@ -420,6 +503,31 @@ struct GmailPart: Codable {
     let mimeType: String?
     let body: GmailBody?
     let parts: [GmailPart]?
+}
+
+// MARK: - Token Response
+
+struct TokenResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresIn: Int?
+    let tokenType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
+        case tokenType = "token_type"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.accessToken = try container.decode(String.self, forKey: .accessToken)
+        // refresh_token may not be present on token refresh (only on initial exchange)
+        self.refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken) ?? ""
+        self.expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn)
+        self.tokenType = try container.decodeIfPresent(String.self, forKey: .tokenType)
+    }
 }
 
 // MARK: - Errors

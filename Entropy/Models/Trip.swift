@@ -45,6 +45,9 @@ final class Trip {
     @Relationship(deleteRule: .cascade, inverse: \Reminder.trip)
     var reminders: [Reminder]
 
+    @Relationship(deleteRule: .cascade, inverse: \Attachment.trip)
+    var attachments: [Attachment]
+
     init(name: String, startDate: Date, endDate: Date, status: TripStatus = .planning) {
         self.id = UUID()
         self.name = name
@@ -60,6 +63,7 @@ final class Trip {
         self.itineraryDays = []
         self.todoItems = []
         self.reminders = []
+        self.attachments = []
     }
 
     var daysUntilStart: Int {
