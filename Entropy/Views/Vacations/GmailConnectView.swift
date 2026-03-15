@@ -189,10 +189,10 @@ struct GmailConnectView: View {
         }
 
         do {
-            try await gmailService.connect(clientID: Self.clientID)
+            let tokens = try await gmailService.connect(clientID: Self.clientID)
             appState.isGmailConnected = true
             // Store tokens securely
-            VaultSecurityService.shared.storeGmailTokens(service: gmailService)
+            VaultSecurityService.shared.saveGmailTokens(access: tokens.access, refresh: tokens.refresh)
             // Auto-scan after connecting
             await performScan()
         } catch {

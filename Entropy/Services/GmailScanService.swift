@@ -60,7 +60,8 @@ final class GmailScanService {
     /// Initiates Google OAuth2 sign-in flow for Gmail read-only access
     /// using ASWebAuthenticationSession.
     @MainActor
-    func connect(clientID: String) async throws {
+    @discardableResult
+    func connect(clientID: String) async throws -> (access: String, refresh: String) {
         guard let authURL = buildAuthURL(clientID: clientID) else {
             throw GmailError.invalidURL
         }
@@ -91,6 +92,7 @@ final class GmailScanService {
         // Exchange the code for tokens
         let tokens = try await exchangeCodeForTokens(code: code, clientID: clientID)
         setTokens(access: tokens.accessToken, refresh: tokens.refreshToken)
+        return (tokens.accessToken, tokens.refreshToken)
     }
 
     /// Exchanges an authorization code for access and refresh tokens.
