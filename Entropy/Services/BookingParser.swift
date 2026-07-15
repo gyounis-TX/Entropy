@@ -11,11 +11,40 @@ final class BookingParser: Sendable {
         let domains: [String]
         let category: BookingCategory
         let name: String
+        /// True when this sender also issues hotel and/or car-rental confirmations,
+        /// so the sender domain alone can't determine the booking category. Airline
+        /// loyalty travel portals — notably United MileagePlus (MileagePlus Hotels,
+        /// powered by Rocketmiles, and MileagePlus car rentals) — send flight, hotel,
+        /// and car emails from the same domains. For these the category is resolved
+        /// from the email content instead of the domain.
+        let isMultiService: Bool
+        /// Optional per-category display names for multi-service providers, e.g. a
+        /// United hotel booking should be attributed to "United MileagePlus Hotels"
+        /// rather than "United Airlines".
+        let categoryNames: [BookingCategory: String]
+
+        init(domains: [String], category: BookingCategory, name: String,
+             isMultiService: Bool = false, categoryNames: [BookingCategory: String] = [:]) {
+            self.domains = domains
+            self.category = category
+            self.name = name
+            self.isMultiService = isMultiService
+            self.categoryNames = categoryNames
+        }
     }
 
     private let providers: [ProviderPattern] = [
         // Airlines
-        ProviderPattern(domains: ["united.com"], category: .flight, name: "United Airlines"),
+        ProviderPattern(
+            domains: ["united.com", "mileageplus.com", "rocketmiles.com"],
+            category: .flight,
+            name: "United Airlines",
+            isMultiService: true,
+            categoryNames: [
+                .hotel: "United MileagePlus Hotels",
+                .carRental: "United MileagePlus Car Rentals"
+            ]
+        ),
         ProviderPattern(domains: ["delta.com"], category: .flight, name: "Delta Air Lines"),
         ProviderPattern(domains: ["aa.com", "americanairlines.com"], category: .flight, name: "American Airlines"),
         ProviderPattern(domains: ["southwest.com"], category: .flight, name: "Southwest Airlines"),
@@ -64,17 +93,24 @@ final class BookingParser: Sendable {
 
         let isCancellation = detectCancellation(subject: subject, body: body)
 
-        // Extract confirmation number
-        let confirmationNumber = extractConfirmationNumber(from: body, provider: provider.name) ?? "Unknown"
+        // Resolve the true booking category. For most senders this is the provider's
+        // domain-based category, but multi-service loyalty portals (e.g. United
+        // MileagePlus) send flight, hotel, and car emails from the same domain, so we
+        // inspect the content to catalog those hotel/car bookings correctly.
+        let category = resolveCategory(provider: provider, subject: subject, body: body)
+        let providerName = provider.categoryNames[category] ?? provider.name
 
-        // Parse based on category
+        // Extract confirmation number
+        let confirmationNumber = extractConfirmationNumber(from: body, provider: providerName) ?? "Unknown"
+
+        // Parse based on the resolved category
         let details: BookingDetails?
         let startDate: Date
         let endDate: Date?
 
-        switch provider.category {
+        switch category {
         case .flight:
-            guard let flight = parseFlightDetails(body: body, provider: provider.name) else { return nil }
+            guard let flight = parseFlightDetails(body: body, provider: providerName) else { return nil }
             details = .flight(flight)
             startDate = flight.departureDateTime
             endDate = flight.arrivalDateTime
@@ -98,7 +134,7 @@ final class BookingParser: Sendable {
             endDate = train.arrivalDateTime
 
         case .carRental:
-            guard let car = parseCarRentalDetails(body: body, provider: provider.name) else { return nil }
+            guard let car = parseCarRentalDetails(body: body, provider: providerName) else { return nil }
             details = .carRental(car)
             startDate = car.pickupDateTime
             endDate = car.dropoffDateTime
@@ -107,8 +143,8 @@ final class BookingParser: Sendable {
         guard let bookingDetails = details else { return nil }
 
         return ParsedBooking(
-            category: provider.category,
-            provider: provider.name,
+            category: category,
+            provider: providerName,
             confirmationNumber: confirmationNumber,
             startDate: startDate,
             endDate: endDate,
@@ -126,6 +162,60 @@ final class BookingParser: Sendable {
         return providers.first { provider in
             provider.domains.contains { lowered.contains($0) }
         }
+    }
+
+    // MARK: - Category Resolution
+
+    /// Content signals that a booking is a hotel stay. Chosen to be hotel-distinct
+    /// so they don't fire on flight emails (which often include "check in for your
+    /// flight"); ambiguous terms are disambiguated by comparing against flight signals.
+    private let hotelSignals = [
+        "check-out", "check out", "checkout", "nights", "night stay",
+        "room type", "guest room", "hotel reservation", "your stay",
+        "property", "hotel"
+    ]
+
+    /// Content signals that a booking is a rental car.
+    private let carSignals = [
+        "car rental", "rental car", "pick-up location", "pickup location",
+        "drop-off", "drop off", "dropoff", "vehicle", "car class",
+        "rental car company", "rental location"
+    ]
+
+    /// Content signals that a booking is a flight, used to keep genuine flight
+    /// emails from being reclassified when they happen to contain a stray hotel/car
+    /// term (e.g. "online check-in").
+    private let flightSignals = [
+        "flight", "departure", "boarding", "gate", "e-ticket", "eticket",
+        "nonstop", "layover", "airport", "flight number", "seat"
+    ]
+
+    /// Resolves the true booking category. For single-service senders this is just
+    /// the provider's domain-based category. For multi-service senders (airline
+    /// loyalty portals such as United MileagePlus) the domain can't distinguish a
+    /// flight from a hotel or car booking, so we score the content and override the
+    /// default only when hotel or car signals clearly dominate.
+    private func resolveCategory(provider: ProviderPattern, subject: String, body: String) -> BookingCategory {
+        guard provider.isMultiService else { return provider.category }
+
+        let haystack = (subject + "\n" + body).lowercased()
+        let score: ([String]) -> Int = { signals in
+            signals.reduce(0) { $0 + (haystack.contains($1) ? 1 : 0) }
+        }
+
+        let hotelScore = score(hotelSignals)
+        let carScore = score(carSignals)
+        let flightScore = score(flightSignals)
+
+        // Require a clear signal (>= 2) that also beats the flight signal before
+        // overriding, so a normal flight itinerary is never mis-cataloged.
+        if carScore >= 2 && carScore > flightScore && carScore >= hotelScore {
+            return .carRental
+        }
+        if hotelScore >= 2 && hotelScore > flightScore && hotelScore > carScore {
+            return .hotel
+        }
+        return provider.category
     }
 
     // MARK: - Cancellation Detection

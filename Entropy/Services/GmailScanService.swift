@@ -35,6 +35,8 @@ final class GmailScanService {
     static let travelProviderDomains: [String] = [
         // Airlines
         "united.com", "delta.com", "aa.com", "americanairlines.com",
+        // United MileagePlus travel portals (hotels via Rocketmiles, car rentals)
+        "mileageplus.com", "rocketmiles.com",
         "southwest.com", "jetblue.com", "spirit.com", "alaskaair.com",
         "hawaiianairlines.com", "frontier.com",
         // International airlines
