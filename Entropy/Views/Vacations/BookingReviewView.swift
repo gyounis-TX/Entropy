@@ -11,6 +11,8 @@ struct BookingReviewView: View {
     @State private var selectedTrip: Trip?
     @State private var showingNewTrip = false
     @State private var errorMessage: String?
+    /// The return flight the traveler picked among `booking.returnOptions` (nil = decide later).
+    @State private var selectedReturn: FlightDetails?
 
     var body: some View {
         List {
@@ -62,15 +64,53 @@ struct BookingReviewView: View {
     }
 
     @ViewBuilder
+    private func flightRows(_ d: FlightDetails) -> some View {
+        LabeledContent("Flight") { Text("\(d.airline) \(d.flightNumber)") }
+        LabeledContent("Route") { Text(d.route) }
+        LabeledContent("Departure") { Text(d.departureDateTime, style: .date) }
+        if let seat = d.seatAssignment {
+            LabeledContent("Seat") { Text(seat) }
+        }
+    }
+
+    private func returnOptionLabel(_ option: FlightDetails) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return "\(option.route) · \(formatter.string(from: option.departureDateTime))"
+    }
+
+    @ViewBuilder
     private var detailsSection: some View {
         switch booking.details {
         case .flight(let d):
-            Section("Flight Details") {
-                LabeledContent("Flight") { Text("\(d.airline) \(d.flightNumber)") }
-                LabeledContent("Route") { Text("\(d.departureAirport) → \(d.arrivalAirport)") }
-                LabeledContent("Departure") { Text(d.departureDateTime, style: .date) }
-                if let seat = d.seatAssignment {
-                    LabeledContent("Seat") { Text(seat) }
+            Section(booking.additionalLegs.isEmpty ? "Flight Details" : "Outbound Flight") {
+                flightRows(d)
+            }
+
+            if !booking.additionalLegs.isEmpty {
+                Section("Additional Legs") {
+                    ForEach(booking.additionalLegs, id: \.self) { leg in
+                        VStack(alignment: .leading, spacing: 4) {
+                            flightRows(leg)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            if !booking.returnOptions.isEmpty {
+                Section("Choose Return Flight") {
+                    Text("\(booking.returnOptions.count) return options were found. Pick the one you're taking — you can change it later.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("Return flight", selection: $selectedReturn) {
+                        Text("Decide later").tag(nil as FlightDetails?)
+                        ForEach(booking.returnOptions, id: \.self) { option in
+                            Text(returnOptionLabel(option)).tag(option as FlightDetails?)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
                 }
             }
         case .hotel(let d):
@@ -131,7 +171,8 @@ struct BookingReviewView: View {
 
                 if let trip = selectedTrip {
                     Button("Add to \(trip.name)") {
-                        gmailService.commitBooking(booking, to: trip, context: context)
+                        gmailService.commitBooking(booking, to: trip, context: context,
+                                                   selectedReturnOption: selectedReturn)
                         dismiss()
                     }
                     .buttonStyle(.borderedProminent)

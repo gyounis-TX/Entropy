@@ -234,22 +234,22 @@ final class GmailScanService {
     }
 
     /// Commits a parsed booking into SwiftData as a real Flight/Accommodation/Reservation.
-    func commitBooking(_ booking: ParsedBooking, to trip: Trip, context: ModelContext) {
+    ///
+    /// For flight bookings, the outbound leg and any additional confirmed legs are
+    /// always committed. `selectedReturnOption` is the return flight the traveler chose
+    /// among `booking.returnOptions` (nil = decide later); it's committed only when
+    /// non-nil.
+    func commitBooking(_ booking: ParsedBooking, to trip: Trip, context: ModelContext,
+                       selectedReturnOption: FlightDetails? = nil) {
         switch booking.details {
         case .flight(let details):
-            let flight = Flight(
-                airline: details.airline,
-                flightNumber: details.flightNumber,
-                departureAirport: details.departureAirport,
-                arrivalAirport: details.arrivalAirport,
-                departureDateTime: details.departureDateTime,
-                arrivalDateTime: details.arrivalDateTime,
-                confirmationCode: booking.confirmationNumber
-            )
-            flight.seatAssignment = details.seatAssignment
-            flight.sourceEmail = booking.sourceEmailID
-            flight.trip = trip
-            context.insert(flight)
+            insertFlight(details, booking: booking, trip: trip, context: context)
+            for leg in booking.additionalLegs {
+                insertFlight(leg, booking: booking, trip: trip, context: context)
+            }
+            if let selectedReturnOption {
+                insertFlight(selectedReturnOption, booking: booking, trip: trip, context: context)
+            }
 
         case .hotel(let details):
             let acc = Accommodation(
@@ -310,6 +310,24 @@ final class GmailScanService {
         trip.recalculateDateRange()
         trip.updatedAt = Date()
         try? context.save()
+    }
+
+    /// Inserts a single flight leg from parsed `FlightDetails` into the trip.
+    private func insertFlight(_ details: FlightDetails, booking: ParsedBooking,
+                              trip: Trip, context: ModelContext) {
+        let flight = Flight(
+            airline: details.airline,
+            flightNumber: details.flightNumber,
+            departureAirport: details.departureAirport,
+            arrivalAirport: details.arrivalAirport,
+            departureDateTime: details.departureDateTime,
+            arrivalDateTime: details.arrivalDateTime,
+            confirmationCode: booking.confirmationNumber
+        )
+        flight.seatAssignment = details.seatAssignment
+        flight.sourceEmail = booking.sourceEmailID
+        flight.trip = trip
+        context.insert(flight)
     }
 
     /// Marks an existing booking as cancelled by matching confirmation number.

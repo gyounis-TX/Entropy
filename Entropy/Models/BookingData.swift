@@ -18,9 +18,21 @@ struct ParsedBooking: Identifiable, Codable {
     let parsedAt: Date
     var isCancellation: Bool
 
+    /// Flight bookings only: confirmed legs beyond the primary outbound leg carried
+    /// in `details` — e.g. additional forward segments of a multi-city itinerary, or
+    /// a single (unambiguous) return leg. These are committed automatically alongside
+    /// the outbound leg.
+    let additionalLegs: [FlightDetails]
+
+    /// Flight bookings only: alternative return flights the traveler must choose
+    /// between (e.g. two candidate return dates on the same route). Present only when
+    /// there are 2+ candidates; the traveler picks at most one to commit.
+    let returnOptions: [FlightDetails]
+
     init(category: BookingCategory, provider: String, confirmationNumber: String,
          startDate: Date, endDate: Date? = nil, details: BookingDetails,
-         sourceEmailID: String, sourceEmailSubject: String, isCancellation: Bool = false) {
+         sourceEmailID: String, sourceEmailSubject: String, isCancellation: Bool = false,
+         additionalLegs: [FlightDetails] = [], returnOptions: [FlightDetails] = []) {
         self.id = UUID()
         self.category = category
         self.provider = provider
@@ -32,6 +44,8 @@ struct ParsedBooking: Identifiable, Codable {
         self.sourceEmailSubject = sourceEmailSubject
         self.parsedAt = Date()
         self.isCancellation = isCancellation
+        self.additionalLegs = additionalLegs
+        self.returnOptions = returnOptions
     }
 }
 
@@ -43,7 +57,7 @@ enum BookingDetails: Codable {
     case carRental(CarRentalDetails)
 }
 
-struct FlightDetails: Codable {
+struct FlightDetails: Codable, Hashable {
     let airline: String
     let flightNumber: String
     let departureAirport: String
@@ -51,6 +65,8 @@ struct FlightDetails: Codable {
     let departureDateTime: Date
     let arrivalDateTime: Date
     let seatAssignment: String?
+
+    var route: String { "\(departureAirport) → \(arrivalAirport)" }
 }
 
 struct HotelDetails: Codable {

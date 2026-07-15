@@ -107,13 +107,19 @@ final class BookingParser: Sendable {
         let details: BookingDetails?
         let startDate: Date
         let endDate: Date?
+        var additionalLegs: [FlightDetails] = []
+        var returnOptions: [FlightDetails] = []
 
         switch category {
         case .flight:
-            guard let flight = parseFlightDetails(body: body, provider: providerName) else { return nil }
-            details = .flight(flight)
-            startDate = flight.departureDateTime
-            endDate = flight.arrivalDateTime
+            guard let itinerary = parseFlightItinerary(body: body, provider: providerName) else { return nil }
+            details = .flight(itinerary.outbound)
+            additionalLegs = itinerary.additionalLegs
+            returnOptions = itinerary.returnOptions
+            startDate = itinerary.outbound.departureDateTime
+            // Span only the auto-committed legs; a chosen return widens the trip later.
+            endDate = ([itinerary.outbound] + itinerary.additionalLegs)
+                .map(\.arrivalDateTime).max() ?? itinerary.outbound.arrivalDateTime
 
         case .hotel:
             guard let hotel = parseHotelDetails(body: body) else { return nil }
@@ -151,7 +157,9 @@ final class BookingParser: Sendable {
             details: bookingDetails,
             sourceEmailID: email.id,
             sourceEmailSubject: subject,
-            isCancellation: isCancellation
+            isCancellation: isCancellation,
+            additionalLegs: additionalLegs,
+            returnOptions: returnOptions
         )
     }
 
@@ -260,6 +268,130 @@ final class BookingParser: Sendable {
         }
 
         return nil
+    }
+
+    // MARK: - Flight Itinerary Parsing
+
+    /// The legs extracted from a flight email, split into what's committed
+    /// automatically and what the traveler still has to choose between.
+    private struct FlightItinerary {
+        /// Primary outbound leg — always committed.
+        let outbound: FlightDetails
+        /// Other confirmed legs (multi-city forward segments, or a lone return) —
+        /// committed automatically alongside the outbound.
+        let additionalLegs: [FlightDetails]
+        /// Alternative return flights (2+ candidates on the reverse route) that the
+        /// traveler must pick between. Empty when there's no ambiguity.
+        let returnOptions: [FlightDetails]
+    }
+
+    /// Parses a flight email into an itinerary. For a genuine multi-leg email it
+    /// segments each leg individually; for a simple single-leg email it falls back to
+    /// the single-flight heuristic so existing behavior is preserved.
+    ///
+    /// Classification: the earliest leg is the outbound. Legs flying the reverse route
+    /// (back to the outbound's origin) are return candidates — a single one is treated
+    /// as confirmed, but two or more become options the traveler chooses among (e.g.
+    /// booking a return date you haven't committed to yet). Any remaining legs are
+    /// treated as additional confirmed forward segments.
+    private func parseFlightItinerary(body: String, provider: String) -> FlightItinerary? {
+        let legs = extractFlightLegs(body: body, provider: provider)
+
+        // Fewer than two structured legs → keep the proven single-flight path.
+        guard legs.count >= 2 else {
+            guard let single = parseFlightDetails(body: body, provider: provider) else { return nil }
+            return FlightItinerary(outbound: single, additionalLegs: [], returnOptions: [])
+        }
+
+        let sorted = legs.sorted { $0.departureDateTime < $1.departureDateTime }
+        let outbound = sorted[0]
+
+        var additional: [FlightDetails] = []
+        var returns: [FlightDetails] = []
+        for leg in sorted.dropFirst() {
+            let isReverseOfOutbound = leg.departureAirport == outbound.arrivalAirport
+                && leg.arrivalAirport == outbound.departureAirport
+            if isReverseOfOutbound {
+                returns.append(leg)
+            } else {
+                additional.append(leg)
+            }
+        }
+
+        // A single return isn't a real choice — commit it like any other leg.
+        if returns.count == 1 {
+            additional.append(returns.removeFirst())
+        }
+
+        additional.sort { $0.departureDateTime < $1.departureDateTime }
+        returns.sort { $0.departureDateTime < $1.departureDateTime }
+        return FlightItinerary(outbound: outbound, additionalLegs: additional, returnOptions: returns)
+    }
+
+    /// Extracts one `FlightDetails` per leg from a structured itinerary email.
+    ///
+    /// Legs are located by pairing consecutive airport codes in order of appearance
+    /// (leg 1 = codes 0→1, leg 2 = codes 2→3, …). Each leg's flight number, dates, and
+    /// seat are extracted from the text window between that leg's origin code and the
+    /// next leg's origin code, which localizes extraction and avoids the single-flight
+    /// parser's habit of globally grabbing "the first two dates in the whole email."
+    /// Returns `[]` when the email isn't structured enough to segment (caller falls
+    /// back to the single-leg heuristic).
+    private func extractFlightLegs(body: String, provider: String) -> [FlightDetails] {
+        let codes = airportCodeRanges(in: body)
+        guard codes.count >= 2 else { return [] }
+
+        var legs: [FlightDetails] = []
+        var index = 0
+        while index + 1 < codes.count {
+            let dep = codes[index]
+            let arr = codes[index + 1]
+            let windowEnd = index + 2 < codes.count ? codes[index + 2].range.lowerBound : body.endIndex
+            let window = String(body[dep.range.lowerBound..<windowEnd])
+
+            let dates = extractDates(from: window)
+            // Require a date to treat this as a real leg; skip malformed pairs.
+            guard let departureDate = dates.first else { index += 2; continue }
+            let arrivalDate = dates.count > 1 ? dates[1] : departureDate
+
+            let flightNumber = extractFlightNumber(from: window) ?? "Unknown"
+            let seat = extractFirstMatch(pattern: "seat[:\\s]+([0-9]{1,2}[a-f])", from: window.lowercased())?.uppercased()
+
+            legs.append(FlightDetails(
+                airline: provider,
+                flightNumber: flightNumber,
+                departureAirport: dep.code,
+                arrivalAirport: arr.code,
+                departureDateTime: departureDate,
+                arrivalDateTime: arrivalDate,
+                seatAssignment: seat
+            ))
+            index += 2
+        }
+        return legs
+    }
+
+    /// Finds likely IATA airport codes and their positions, in order of appearance.
+    private func airportCodeRanges(in text: String) -> [(code: String, range: Range<String.Index>)] {
+        guard let regex = try? NSRegularExpression(pattern: "\\b([A-Z]{3})\\b") else { return [] }
+        let nsRange = NSRange(text.startIndex..., in: text)
+        var result: [(code: String, range: Range<String.Index>)] = []
+        for match in regex.matches(in: text, range: nsRange) {
+            guard let range = Range(match.range(at: 1), in: text) else { continue }
+            let code = String(text[range])
+            if isLikelyAirportCode(code) {
+                result.append((code, range))
+            }
+        }
+        return result
+    }
+
+    /// Extracts a flight number like "UA 1234" / "DL567", normalized without spaces.
+    private func extractFlightNumber(from text: String) -> String? {
+        guard let match = text.range(of: "([A-Z]{2})\\s*(\\d{1,4})", options: .regularExpression) else {
+            return nil
+        }
+        return String(text[match]).replacingOccurrences(of: " ", with: "")
     }
 
     // MARK: - Detail Parsers
