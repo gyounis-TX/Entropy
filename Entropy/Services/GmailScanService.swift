@@ -305,6 +305,9 @@ final class GmailScanService {
 
         // Remove from pending
         pendingBookings.removeAll { $0.id == booking.id }
+        // Keep the trip's date range in sync with its bookings so the trip card
+        // reflects the real itinerary (e.g. the earliest flight's departure date).
+        trip.recalculateDateRange()
         trip.updatedAt = Date()
         try? context.save()
     }
