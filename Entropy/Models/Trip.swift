@@ -85,6 +85,39 @@ final class Trip {
     var isCancelled: Bool {
         status == .cancelled
     }
+
+    /// Widens `startDate`/`endDate` to span every (non-cancelled) booking attached to
+    /// the trip — flights, accommodations, and reservations. Called after importing a
+    /// booking so the trip card reflects the real itinerary regardless of the order
+    /// legs were added: e.g. importing a return leg on Aug 4 first and then the
+    /// outbound on Aug 2 leaves the card starting Aug 2, not Aug 4.
+    ///
+    /// The range is only ever widened, never narrowed, so a manually-entered buffer
+    /// (e.g. arriving a day early) is preserved.
+    func recalculateDateRange() {
+        var starts: [Date] = []
+        var ends: [Date] = []
+
+        for flight in flights where !flight.isCancelled {
+            starts.append(flight.departureDateTime)
+            ends.append(flight.arrivalDateTime)
+        }
+        for accommodation in accommodations where !accommodation.isCancelled {
+            starts.append(accommodation.checkIn)
+            ends.append(accommodation.checkOut)
+        }
+        for reservation in reservations where !reservation.isCancelled {
+            starts.append(reservation.dateTime)
+            ends.append(reservation.endDateTime ?? reservation.dateTime)
+        }
+
+        if let earliest = starts.min() {
+            startDate = Swift.min(startDate, earliest)
+        }
+        if let latest = ends.max() {
+            endDate = Swift.max(endDate, latest)
+        }
+    }
 }
 
 @Model
